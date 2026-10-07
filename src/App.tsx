@@ -113,4 +113,21 @@ function AdminPage(){
     <div className="admin-table">{events.map(e=><div className="admin-row" key={e.id}><span><strong>{e.city}</strong><small>{e.title}</small></span><span>{fmtShortDate(e.date)} · {e.time_label||e.time||'—'}</span><span className="admin-status">{e.status}{e.image_url&&<span title="Com pôster"><ImageIcon size={14}/></span>}<button onClick={()=>editFrom(e)}>Editar</button>{e.db_id&&<button onClick={()=>remove(e)} title="Excluir"><Trash2 size={13}/></button>}</span></div>)}</div></div>
 }
 
-export default function App(){const[events,setEvents]=useState<MobilizationEvent[]>([]),[sources,setSources]=useState<EventSource[]>([]),[loading,setLoading]=useState(true);const reload=()=>Promise.all([getEvents(),getSources()]).then(([e,s])=>{setEvents(e);setSources(s);setLoading(false)});useEffect(()=>{reload()},[]);if(loading)return <div className="loading"><div className="spinner"/>Carregando radar…</div>;return <Layout><Routes><Route path="/" element={<Home events={events}/>}/><Route path="/evento/:id" element={<EventPage events={events} sources={sources}/>}/><Route path="/calendario" element={<CalendarPage events={events}/>}/><Route path="/mapa" element={<MapPage events={events}/>}/><Route path="/sobre" element={<AboutPage/>}/><Route path="/chat" element={<ChatPage/>}/><Route path="/entrar" element={<AuthPage/>}/><Route path="/admin" element={<AdminPage/>}/></Routes></Layout>}
+export default function App(){
+  const[events,setEvents]=useState<MobilizationEvent[]>([]);
+  const[sources,setSources]=useState<EventSource[]>([]);
+  const[loading,setLoading]=useState(true);
+  const[loadError,setLoadError]=useState<string|null>(null);
+
+  const reload=()=>Promise.all([getEvents(),getSources()])
+    .then(([e,s])=>{setEvents(e);setSources(s);setLoadError(null);setLoading(false)})
+    .catch((error)=>{setLoadError(error instanceof Error?error.message:'Não foi possível carregar o radar.');setLoading(false)});
+
+  useEffect(()=>{reload()},[]);
+
+  if(loading)return <div className="loading"><div className="spinner"/>Carregando radar…</div>;
+
+  if(loadError)return <div className="loading"><div className="empty"><Info/><h3>Não foi possível carregar os dados</h3><p>{loadError}</p><button className="button primary" onClick={()=>{setLoading(true);reload()}}><RefreshCw size={16}/>Tentar novamente</button></div></div>;
+
+  return <Layout><Routes><Route path="/" element={<Home events={events}/>}/><Route path="/evento/:id" element={<EventPage events={events} sources={sources}/>}/><Route path="/calendario" element={<CalendarPage events={events}/>}/><Route path="/mapa" element={<MapPage events={events}/>}/><Route path="/sobre" element={<AboutPage/>}/><Route path="/chat" element={<ChatPage/>}/><Route path="/entrar" element={<AuthPage/>}/><Route path="/admin" element={<AdminPage/>}/></Routes></Layout>
+}

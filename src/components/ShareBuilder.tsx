@@ -8,6 +8,15 @@ function formatDate(date:string){
   return new Date(date+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'long'});
 }
 
+function panelDate(events:MobilizationEvent[]){
+  const dates=[...new Set(events.map(event=>event.date))].sort();
+  if(!dates.length)return '';
+  if(dates.length===1)return formatDate(dates[0]).toUpperCase();
+  const first=new Date(dates[0]+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit'});
+  const last=formatDate(dates[dates.length-1]).replace(/^\d{2} de /,'');
+  return first+'–'+last.toUpperCase();
+}
+
 function formatTime(event:MobilizationEvent){
   return event.time_label||event.time||'horário não informado';
 }
@@ -48,7 +57,7 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[]){
   ctx.fillText('AGENDA DE MOBILIZAÇÕES',70,78);
   ctx.fillStyle='#b51f38';
   ctx.font='900 64px Inter, Arial, sans-serif';
-  ctx.fillText('18 DE OUTUBRO',70,145);
+  ctx.fillText(panelDate(events),70,145);
   ctx.fillStyle='#5f6368';
   ctx.font='500 25px Inter, Arial, sans-serif';
   ctx.fillText(events.length+' mobilizaç'+(events.length===1?'ão':'ões')+' selecionada'+(events.length===1?'':'s'),70,190);

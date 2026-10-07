@@ -1,13 +1,13 @@
 import {useEffect,useMemo,useState} from 'react';
 import type {ChangeEvent,FormEvent,ReactNode} from 'react';
 import {Link,Navigate,Route,Routes,useLocation,useNavigate,useParams} from 'react-router-dom';
-import {CalendarDays,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search} from 'lucide-react';
+import {CalendarDays,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search,BarChart3,Eye,KeyRound} from 'lucide-react';
 import './App.css';
 import EventCard from './components/EventCard';
 import Filters,{type FiltersState} from './components/Filters';
 import MapView from './components/MapView';
 import PosterActions from './components/PosterActions';
-import {getEvents,getAdminEvents,getSources,resolveImageUrl,mapDbEvent,getAttendanceStatus,toggleEventAttendance} from './lib/data';
+import {getEvents,getAdminEvents,getSources,resolveImageUrl,mapDbEvent,getAttendanceStatus,toggleEventAttendance,recordPageView} from './lib/data';
 import {supabase} from './lib/supabase';
 import type {EventSource,MobilizationEvent} from './types';
 
@@ -21,6 +21,7 @@ type Submission={
   admin_note:string|null; created_at:string; reviewed_at:string|null; reviewed_by:string|null; poster_url?:string|null;
 };
 type ChatMessage={id:string;user_id:string;display_name:string;content:string;attachment_path:string|null;status:string;created_at:string;reviewed_at:string|null;reviewed_by:string|null};
+type PageViewRow={path:string;event_id:string|null;visitor_id:string;created_at:string};
 
 function slugify(value:string){return value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')}
 function fmtDate(date?:string|null){if(!date)return 'Data não informada';return new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'})}
@@ -59,9 +60,68 @@ function Home({events}:{events:MobilizationEvent[]}){
 }
 
 function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSource[]}){
-  const{id}=useParams();const event=events.find(e=>e.id===id);if(!event)return <Navigate to="/"/>;
+  const{id}=useParams();
+  const event=events.find(e=>e.id===id);
+  if(!event)return <Navigate to="/"/>;
   const ss=sources.filter(s=>event.source_ids.includes(s.id));
-  return <div className="container detail-page"><Link to="/" className="back-link">← Voltar para o radar</Link><div className="detail-grid"><div className="detail-main"><div className="detail-state-head"><div><div className="eyebrow">{event.type} · {event.state||'Brasil'}</div><p className="detail-location">{event.city}{event.state?`, ${event.state}`:''}</p></div></div><h1>{event.title}</h1><div className="detail-meta"><div>📅 {fmtDate(event.date)}</div><div>🕐 {event.time_label||event.time||'Horário não informado'}</div><div>📍 {event.venue}</div>{event.address&&<div>⌖ {event.address}</div>}</div>{event.notes&&<div className={event.status==='warning'?'callout warning':'callout info'}><Info size={20}/><span>{event.notes}</span></div>}{event.image_url&&<PosterActions event={event}/>}<h2>Fontes</h2>{ss.length?<div className="source-list">{ss.map(s=><a className="source-item" key={s.id} href={s.url} target="_blank" rel="noreferrer"><div><strong>{s.account_name}</strong><small>{s.account_handle??s.platform}</small></div><ExternalLink size={17}/></a>)}</div>:<div className="empty-source">As fontes deste evento ainda não foram carregadas.</div>}</div><aside className="detail-side"><div className="status-card"><div className="status-icon"><CheckCircle2/></div><h3>Rastreabilidade</h3><p>O evento foi incluído com base em publicações e materiais de origem identificados na pesquisa editorial.</p></div><div className="share-card"><strong>Encontrou alguma atualização?</strong><p>Avise no chat. Um administrador revisará a sugestão antes de ela alterar o radar público.</p><Link className="button primary" to="/chat"><MessageCircle size={17}/>Enviar atualização</Link></div></aside></div></div>
+
+  useEffect(()=>{
+    const defaultTitle='Radar de Mobilizações';
+    const defaultDescription='Agenda pública e rastreável de mobilizações no Brasil.';
+    const defaultImage=window.location.origin+'/radar-icon-512.png';
+    const nextTitle=event.title+' · '+event.city+(event.state?', '+event.state:'')+' | Radar de Mobilizações';
+    const nextDescription=event.title+' · '+event.city+(event.state?', '+event.state:'')+'. '+(event.time_label||event.time||'Horário não informado')+' · '+event.venue+'.';
+    const nextImage=event.image_url||defaultImage;
+    const canonicalUrl=window.location.href.split('#')[0];
+    const metaDefinitions=[
+      ['name','description',nextDescription],
+      ['property','og:title',nextTitle],
+      ['property','og:description',nextDescription],
+      ['property','og:type','article'],
+      ['property','og:url',canonicalUrl],
+      ['property','og:image',nextImage],
+      ['property','og:image:alt','Pôster de '+event.title],
+      ['name','twitter:card','summary_large_image'],
+      ['name','twitter:title',nextTitle],
+      ['name','twitter:description',nextDescription],
+      ['name','twitter:image',nextImage],
+    ] as const;
+    const previousMeta=new Map<string,{element:HTMLMetaElement|null;had:boolean;content:string}>();
+    for(const item of metaDefinitions){
+      const attribute=item[0];
+      const key=item[1];
+      const content=item[2];
+      const selector='meta['+attribute+'="'+key+'"]';
+      const existing=document.head.querySelector<HTMLMetaElement>(selector);
+      previousMeta.set(selector,{element:existing,had:Boolean(existing),content:existing?.content||''});
+      const meta=existing||document.createElement('meta');
+      meta.setAttribute(attribute,key);
+      meta.content=content;
+      if(!existing)document.head.appendChild(meta);
+    }
+    const canonical=document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    const previousCanonical={element:canonical,had:Boolean(canonical),href:canonical?.href||''};
+    const canonicalLink=canonical||document.createElement('link');
+    canonicalLink.rel='canonical';
+    canonicalLink.href=canonicalUrl;
+    if(!canonical)document.head.appendChild(canonicalLink);
+    document.title=nextTitle;
+    return()=>{
+      document.title=defaultTitle;
+      for(const [selector,state] of previousMeta){
+        if(state.had&&state.element)state.element.content=state.content;
+        else document.head.querySelector(selector)?.remove();
+      }
+      document.head.querySelector('meta[name="description"]')?.setAttribute('content',defaultDescription);
+      if(previousCanonical.had&&previousCanonical.element)previousCanonical.element.href=previousCanonical.href;
+      else document.head.querySelector('link[rel="canonical"]')?.remove();
+    };
+  },[event]);
+
+  const directionsQuery=[event.address,event.venue,event.city,event.state,'Brasil'].filter(Boolean).join(', ');
+  const directionsUrl='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(directionsQuery);
+
+  return <div className="container detail-page"><Link to="/" className="back-link">← Voltar para o radar</Link><div className="detail-grid"><div className="detail-main"><div className="detail-state-head"><div><div className="eyebrow">{event.type} · {event.state||'Brasil'}</div><p className="detail-location">{event.city}{event.state?', '+event.state:''}</p></div></div><h1>{event.title}</h1><div className="detail-meta"><div>📅 {fmtDate(event.date)}</div><div>🕐 {event.time_label||event.time||'Horário não informado'}</div><div>📍 {event.venue}</div>{event.address&&<div>⌖ {event.address}</div>}</div><a className="button ghost directions-button" href={directionsUrl} target="_blank" rel="noreferrer"><MapPinned size={17}/>Como chegar</a>{event.notes&&<div className={event.status==='warning'?'callout warning':'callout info'}><Info size={20}/><span>{event.notes}</span></div>}{event.image_url&&<PosterActions event={event}/>}<h2>Fontes</h2>{ss.length?<div className="source-list">{ss.map(s=><a className="source-item" key={s.id} href={s.url} target="_blank" rel="noreferrer"><div><strong>{s.account_name}</strong><small>{s.account_handle??s.platform}</small></div><ExternalLink size={17}/></a>)}</div>:<div className="empty-source">As fontes deste evento ainda não foram carregadas.</div>}</div><aside className="detail-side"><div className="status-card"><div className="status-icon"><CheckCircle2/></div><h3>Rastreabilidade</h3><p>O evento foi incluído com base em publicações e materiais de origem identificados na pesquisa editorial.</p></div><div className="share-card"><strong>Encontrou alguma atualização?</strong><p>Avise no chat. Um administrador revisará a sugestão antes de ela alterar o radar público.</p><Link className="button primary" to="/chat"><MessageCircle size={17}/>Enviar atualização</Link></div></aside></div></div>
 }
 
 function CalendarPage({events}:{events:MobilizationEvent[]}){
@@ -75,12 +135,66 @@ function MapPage({events}:{events:MobilizationEvent[]}){return <div className="c
 function AboutPage(){return <div className="container page narrow"><div className="eyebrow">SOBRE</div><h1>Uma agenda pública com rastreabilidade.</h1><p className="page-lead">A proposta do Radar é transformar listas espalhadas em uma agenda navegável, fácil de conferir e de atualizar.</p><div className="about-grid"><div><h2>Como funciona</h2><p>Cada evento tem data, horário, cidade, local, tipo e links para as fontes usadas na conferência.</p></div><div><h2>O que “verificado” significa</h2><p>Os campos essenciais foram comparados com uma ou mais publicações ou fontes identificáveis. Isso não substitui a checagem no dia do evento.</p></div><div><h2>Independente</h2><p>Este projeto não é oficial de campanha, partido, governo ou organização.</p></div><div><h2>Base editorial</h2><p>A primeira carga foi montada a partir das threads, pôsteres e fontes complementares identificadas na pesquisa.</p></div></div></div>}
 
 function AuthPage(){
-  const[mode,setMode]=useState<'login'|'signup'>('login');const[email,setEmail]=useState('');const[password,setPassword]=useState('');const[displayName,setDisplayName]=useState('');const[msg,setMsg]=useState('');const[busy,setBusy]=useState(false);const navigate=useNavigate();const location=useLocation();
+  const[mode,setMode]=useState<'login'|'signup'|'recover'|'reset'>('login');
+  const[email,setEmail]=useState('');
+  const[password,setPassword]=useState('');
+  const[confirmPassword,setConfirmPassword]=useState('');
+  const[displayName,setDisplayName]=useState('');
+  const[msg,setMsg]=useState('');
+  const[busy,setBusy]=useState(false);
+  const navigate=useNavigate();
+  const location=useLocation();
   const next=new URLSearchParams(location.search).get('next')||'/chat';
+
+  useEffect(()=>{
+    const params=new URLSearchParams(location.search);
+    const hashParams=new URLSearchParams(window.location.hash.replace(/^#/,''));
+    if(params.get('mode')==='reset'||hashParams.get('type')==='recovery')setMode('reset');
+    if(!supabase)return;
+    const{data}=supabase.auth.onAuthStateChange((event)=>{
+      if(event==='PASSWORD_RECOVERY')setMode('reset');
+    });
+    return()=>data.subscription.unsubscribe();
+  },[location.search]);
+
   if(!supabase)return <div className="container page narrow"><div className="callout warning"><Info/><span>O Supabase não está configurado neste ambiente.</span></div></div>;
   const db=supabase;
-  const submit=async(e:FormEvent)=>{e.preventDefault();setBusy(true);setMsg('');if(mode==='login'){const{error}=await db.auth.signInWithPassword({email,password});if(error)setMsg(error.message);else navigate(next)}else{const{data,error}=await db.auth.signUp({email,password,options:{emailRedirectTo:`${window.location.origin}/chat`,data:{display_name:displayName||safeName(email)}}});if(error)setMsg(error.message);else if(data.session)navigate(next);else setMsg('Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre no chat.')}setBusy(false)};
-  return <div className="container page narrow"><div className="eyebrow">{mode==='login'?'ENTRAR':'CRIAR CONTA'}</div><h1>{mode==='login'?'Entre para participar.':'Crie sua conta.'}</h1><p className="page-lead">O chat exige login para reduzir spam e manter as sugestões sob moderação.</p><form className="auth-form" onSubmit={submit}>{mode==='signup'&&<input placeholder="Como quer aparecer no chat?" value={displayName} onChange={e=>setDisplayName(e.target.value)}/>}<input type="email" placeholder="E-mail" value={email} onChange={e=>setEmail(e.target.value)} required/><input type="password" placeholder="Senha" value={password} onChange={e=>setPassword(e.target.value)} minLength={6} required/><button className="button primary" disabled={busy}>{busy?'Aguarde…':mode==='login'?'Entrar':'Criar conta'}</button>{msg&&<div className="callout info"><Info size={18}/><span>{msg}</span></div>}</form><button className="mode-switch" onClick={()=>{setMode(mode==='login'?'signup':'login');setMsg('')}}>{mode==='login'?<><UserPlus size={16}/>Criar uma conta</>:<><LogIn size={16}/>Já tenho uma conta</>}</button></div>
+
+  const submit=async(e:FormEvent)=>{
+    e.preventDefault();
+    setBusy(true);
+    setMsg('');
+    try{
+      if(mode==='recover'){
+        const{error}=await db.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin+'/entrar?mode=reset&next='+encodeURIComponent(next)});
+        if(error)setMsg(error.message);
+        else setMsg('Enviamos um link para redefinir sua senha. Confira seu e-mail.');
+      }else if(mode==='reset'){
+        if(password!==confirmPassword)setMsg('As senhas não coincidem.');
+        else{
+          const{error}=await db.auth.updateUser({password});
+          if(error)setMsg(error.message);
+          else navigate(next);
+        }
+      }else if(mode==='login'){
+        const{error}=await db.auth.signInWithPassword({email,password});
+        if(error)setMsg(error.message);
+        else navigate(next);
+      }else{
+        const{data,error}=await db.auth.signUp({email,password,options:{emailRedirectTo:window.location.origin+'/chat',data:{display_name:displayName||safeName(email)}}});
+        if(error)setMsg(error.message);
+        else if(data.session)navigate(next);
+        else setMsg('Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre no chat.');
+      }
+    }finally{
+      setBusy(false);
+    }
+  };
+
+  const title=mode==='login'?'Entre para participar.':mode==='signup'?'Crie sua conta.':mode==='recover'?'Recupere sua senha.':'Defina uma nova senha.';
+  const lead=mode==='reset'?'Use uma senha nova para voltar ao Radar.':'O chat exige login para reduzir spam e manter as sugestões sob moderação.';
+
+  return <div className="container page narrow"><div className="eyebrow">{mode==='login'?'ENTRAR':mode==='signup'?'CRIAR CONTA':mode==='recover'?'RECUPERAÇÃO':'NOVA SENHA'}</div><h1>{title}</h1><p className="page-lead">{lead}</p><form className="auth-form" onSubmit={submit}>{mode==='signup'&&<input placeholder="Como quer aparecer no chat?" value={displayName} onChange={e=>setDisplayName(e.target.value)} autoComplete="name"/>}{mode!=='reset'&&<input type="email" placeholder="E-mail" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete={mode==='recover'?'email':'username'}/>} {(mode==='login'||mode==='signup'||mode==='reset')&&<input type="password" placeholder="Senha" value={password} onChange={e=>setPassword(e.target.value)} minLength={6} required autoComplete={mode==='reset'?'new-password':mode==='login'?'current-password':'new-password'}/>} {mode==='reset'&&<input type="password" placeholder="Confirme a nova senha" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} minLength={6} required autoComplete="new-password"/>}<button className="button primary" disabled={busy}>{busy?'Aguarde…':mode==='login'?'Entrar':mode==='signup'?'Criar conta':mode==='recover'?'Enviar link de recuperação':'Salvar nova senha'}</button>{msg&&<div className="callout info"><Info size={18}/><span>{msg}</span></div>}</form>{mode==='login'&&<button className="auth-forgot" onClick={()=>{setMode('recover');setMsg('')}}><KeyRound size={16}/>Esqueci minha senha</button>}{mode==='login'&&<button className="mode-switch" onClick={()=>{setMode('signup');setMsg('')}}><UserPlus size={16}/>Criar uma conta</button>}{mode==='signup'&&<button className="mode-switch" onClick={()=>{setMode('login');setMsg('')}}><LogIn size={16}/>Já tenho uma conta</button>}{(mode==='recover'||mode==='reset')&&<button className="mode-switch" onClick={()=>{setMode('login');setMsg('')}}><LogIn size={16}/>Voltar para entrar</button>}</div>
 }
 
 function ChatPage(){
@@ -99,9 +213,9 @@ function ChatPage(){
 }
 
 function AdminPage(){
-  const[user,setUser]=useState<any>(null);const[loading,setLoading]=useState(true);const[authorized,setAuthorized]=useState(false);const[events,setEvents]=useState<MobilizationEvent[]>([]);const[sources,setSources]=useState<EventSource[]>([]);const[submissions,setSubmissions]=useState<Submission[]>([]);const[chatPending,setChatPending]=useState<ChatMessage[]>([]);const[editing,setEditing]=useState<MobilizationEvent|null>(null);const[posterFile,setPosterFile]=useState<File|null>(null);const[posterPreview,setPosterPreview]=useState<string|null>(null);const[message,setMessage]=useState('');const[saving,setSaving]=useState(false);const[submitting,setSubmitting]=useState<string|null>(null);const[subPosterUrls,setSubPosterUrls]=useState<Record<string,string>>({});
+  const[user,setUser]=useState<any>(null);const[loading,setLoading]=useState(true);const[authorized,setAuthorized]=useState(false);const[events,setEvents]=useState<MobilizationEvent[]>([]);const[sources,setSources]=useState<EventSource[]>([]);const[submissions,setSubmissions]=useState<Submission[]>([]);const[chatPending,setChatPending]=useState<ChatMessage[]>([]);const[editing,setEditing]=useState<MobilizationEvent|null>(null);const[posterFile,setPosterFile]=useState<File|null>(null);const[posterPreview,setPosterPreview]=useState<string|null>(null);const[message,setMessage]=useState('');const[saving,setSaving]=useState(false);const[submitting,setSubmitting]=useState<string|null>(null);const[subPosterUrls,setSubPosterUrls]=useState<Record<string,string>>({});const[adminQuery,setAdminQuery]=useState('');const[adminDate,setAdminDate]=useState('');const[adminStatus,setAdminStatus]=useState('');const[analyticsRows,setAnalyticsRows]=useState<PageViewRow[]>([]);
   const blank=():MobilizationEvent=>({id:'',title:'',type:'Manifestação',date:new Date().toISOString().slice(0,10),time:'18:00',time_label:'',city:'',state:'',venue:'',status:'pending',public:false,source_ids:[ADMIN_SOURCE_FALLBACK],lat:null,lng:null,image_url:null,notes:''});
-  const loadAdmin=async()=>{if(!supabase||!user)return;const[{data:membership},{data:subData},{data:chatData}]=await Promise.all([supabase.from('admin_users').select('user_id').eq('user_id',user.id).maybeSingle(),supabase.from('event_submissions').select('*').eq('status','pending').order('created_at',{ascending:false}),supabase.from('chat_messages').select('*').eq('status','pending').order('created_at',{ascending:false})]);if(!membership){setAuthorized(false);setLoading(false);return}setAuthorized(true);const[e,s]=await Promise.all([getAdminEvents(),getSources()]);setEvents(e);setSources(s);setSubmissions((subData||[]) as Submission[]);setChatPending((chatData||[]) as ChatMessage[]);for(const item of (subData||[]) as Submission[]){if(item.poster_path&&!subPosterUrls[item.id]){const{data}=await supabase.storage.from(SUBMISSION_STORAGE_BUCKET).createSignedUrl(item.poster_path,3600);if(data?.signedUrl)setSubPosterUrls(prev=>({...prev,[item.id]:data.signedUrl}))}}setLoading(false)};
+  const loadAdmin=async()=>{if(!supabase||!user)return;const[{data:membership},{data:subData},{data:chatData}]=await Promise.all([supabase.from('admin_users').select('user_id').eq('user_id',user.id).maybeSingle(),supabase.from('event_submissions').select('*').eq('status','pending').order('created_at',{ascending:false}),supabase.from('chat_messages').select('*').eq('status','pending').order('created_at',{ascending:false})]);if(!membership){setAuthorized(false);setLoading(false);return}setAuthorized(true);const[e,s]=await Promise.all([getAdminEvents(),getSources()]);setEvents(e);setSources(s);setSubmissions((subData||[]) as Submission[]);setChatPending((chatData||[]) as ChatMessage[]);const cutoff=new Date(Date.now()-30*864e5).toISOString();const{data:analyticsData}=await db.from('page_views').select('path,event_id,visitor_id,created_at').gte('created_at',cutoff).order('created_at',{ascending:false}).limit(10000);setAnalyticsRows((analyticsData||[]) as PageViewRow[]);for(const item of (subData||[]) as Submission[]){if(item.poster_path&&!subPosterUrls[item.id]){const{data}=await supabase.storage.from(SUBMISSION_STORAGE_BUCKET).createSignedUrl(item.poster_path,3600);if(data?.signedUrl)setSubPosterUrls(prev=>({...prev,[item.id]:data.signedUrl}))}}setLoading(false)};
   useEffect(()=>{if(!supabase){setLoading(false);return}supabase.auth.getUser().then(({data})=>{setUser(data.user);setLoading(false)});const{data}=supabase.auth.onAuthStateChange((_e,s)=>setUser(s?.user??null));return()=>data.subscription.unsubscribe()},[]);
   useEffect(()=>{if(!user)return;loadAdmin();const id=window.setInterval(loadAdmin,10000);return()=>window.clearInterval(id)},[user]);
   if(loading)return <div className="loading"><div className="spinner"/>Carregando painel…</div>;
@@ -120,18 +234,60 @@ function AdminPage(){
   const reviewChat=async(m:ChatMessage,status:'approved'|'rejected'|'spam')=>{const{error}=await db.from('chat_messages').update({status,reviewed_at:new Date().toISOString(),reviewed_by:user.id}).eq('id',m.id);if(error)setMessage(error.message);else setMessage(status==='approved'?'Mensagem aprovada.':status==='spam'?'Mensagem marcada como spam.':'Mensagem rejeitada.');await loadAdmin()};
   const editFrom=(e:MobilizationEvent)=>{setEditing({...e});setPosterFile(null);setPosterPreview(e.image_url||null)};
   const newEvent=()=>{const e=blank();setEditing(e);setPosterFile(null);setPosterPreview(null)};
-  return <div className="container page"><div className="admin-top"><div><div className="eyebrow">ADMIN</div><h1>Painel editorial</h1><p className="page-lead">Cadastre, revise, publique, anexe pôsteres e faça a triagem de envios.</p></div><div className="admin-actions"><button className="button primary" onClick={newEvent}>+ Novo evento</button><button className="button ghost" onClick={()=>db.auth.signOut()}>Sair</button></div></div>{message&&<div className="callout info"><Info/><span>{message}</span></div>}
+  const filteredAdminEvents=useMemo(()=>events.filter(e=>{
+    const haystack=(e.title+' '+e.city+' '+e.state+' '+e.venue).toLowerCase();
+    if(adminQuery.trim()&&!haystack.includes(adminQuery.trim().toLowerCase()))return false;
+    if(adminDate&&e.date!==adminDate)return false;
+    if(adminStatus&&e.status!==adminStatus)return false;
+    return true;
+  }),[events,adminQuery,adminDate,adminStatus]);
+
+  const analyticsSummary=useMemo(()=>{
+    const now=Date.now();
+    const todayStart=new Date();
+    todayStart.setHours(0,0,0,0);
+    const last7=analyticsRows.filter(r=>new Date(r.created_at).getTime()>=now-7*864e5);
+    const today=last7.filter(r=>new Date(r.created_at).getTime()>=todayStart.getTime());
+    const visitors=new Set(last7.map(r=>r.visitor_id));
+    const pages=new Map<string,number>();
+    const eventsMap=new Map<string,number>();
+    for(const row of last7){
+      pages.set(row.path,(pages.get(row.path)||0)+1);
+      if(row.event_id)eventsMap.set(row.event_id,(eventsMap.get(row.event_id)||0)+1);
+    }
+    const topPages=[...pages.entries()].sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const topEvents=[...eventsMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,5).map(([eventId,count])=>{
+      const event=events.find(e=>e.db_id===eventId);
+      return {eventId,count,title:event?.title||'Evento removido',city:event?.city||''};
+    });
+    return {today:today.length,last7:last7.length,uniqueVisitors:visitors.size,topPages,topEvents};
+  },[analyticsRows,events]);
+
+  return <div className="container page"><div className="admin-top"><div><div className="eyebrow">ADMIN</div><h1>Painel editorial</h1><p className="page-lead">Cadastre, revise, publique, anexe pôsteres e faça a triagem de envios.</p></div><div className="admin-actions"><button className="button primary" onClick={newEvent}>+ Novo evento</button><button className="button ghost" onClick={()=>db.auth.signOut()}>Sair</button></div></div>{message&&<div className="callout info"><Info/><span>{message}</span></div>}<section className="admin-section analytics-panel"><div className="section-head compact"><div><div className="eyebrow">ANALYTICS</div><h2>Visão do Radar</h2></div><span className="analytics-note">últimos 7 dias · sem IP ou conta de usuário</span></div><div className="analytics-stats"><div className="analytics-stat"><Eye size={18}/><strong>{analyticsSummary.today}</strong><span>visualizações hoje</span></div><div className="analytics-stat"><Eye size={18}/><strong>{analyticsSummary.last7}</strong><span>visualizações em 7 dias</span></div><div className="analytics-stat"><BarChart3 size={18}/><strong>{analyticsSummary.uniqueVisitors}</strong><span>visitantes em 7 dias</span></div></div><div className="analytics-columns"><div><h3>Páginas mais acessadas</h3><div className="analytics-list">{analyticsSummary.topPages.length?analyticsSummary.topPages.map(([path,count])=><div key={path}><span>{path}</span><strong>{count}</strong></div>):<p>Nenhum acesso registrado ainda.</p>}</div></div><div><h3>Eventos mais acessados</h3><div className="analytics-list">{analyticsSummary.topEvents.length?analyticsSummary.topEvents.map(item=><div key={item.eventId}><span>{item.title}{item.city?' · '+item.city:''}</span><strong>{item.count}</strong></div>):<p>Nenhum evento acessado ainda.</p>}</div></div></div></section>
     {submissions.length>0&&<section className="admin-section"><div className="section-head compact"><div><div className="eyebrow">CAIXA DE ENTRADA</div><h2>{submissions.length} novo{submissions.length===1?'':'s'} envio{submissions.length===1?'':'s'} de evento</h2></div><button className="button ghost" onClick={loadAdmin}><RefreshCw size={16}/>Atualizar</button></div><div className="submission-list">{submissions.map(s=><article className="review-card" key={s.id}><div className="review-copy"><div className="review-meta"><span>{new Date(s.created_at).toLocaleString('pt-BR')}</span><strong>{s.display_name}</strong></div><h3>{s.title}</h3><p>{s.date?fmtShortDate(s.date):'data não informada'}{s.time_label||s.time?` · ${s.time_label||s.time}`:''}{s.city?` · ${s.city}${s.state?`/${s.state}`:''}`:''}</p>{s.venue&&<p>📍 {s.venue}</p>}{s.message&&<p className="review-message">{s.message}</p>}</div>{s.poster_url&&<img className="review-poster" src={s.poster_url} alt="Pôster enviado"/>}<div className="review-actions"><button className="button primary" onClick={()=>createFromSubmission(s)} disabled={submitting===s.id}>{submitting===s.id?'Criando…':'Criar rascunho'}</button><button className="button ghost" onClick={()=>reviewSubmission(s,'rejected')} disabled={submitting===s.id}>Rejeitar</button><button className="button ghost danger" onClick={()=>reviewSubmission(s,'spam')} disabled={submitting===s.id}><Flag size={15}/>Spam</button></div></article>)}</div></section>}
     {chatPending.length>0&&<section className="admin-section"><div className="section-head compact"><div><div className="eyebrow">MODERAÇÃO</div><h2>{chatPending.length} mensagem{chatPending.length===1?'':'s'} aguardando revisão</h2></div></div><div className="review-card-list">{chatPending.map(m=><article className="chat-review" key={m.id}><div><div className="review-meta"><strong>{m.display_name}</strong><span>{new Date(m.created_at).toLocaleString('pt-BR')}</span></div><p>{m.content}</p></div><div className="review-actions"><button className="button primary" onClick={()=>reviewChat(m,'approved')}>Aprovar</button><button className="button ghost" onClick={()=>reviewChat(m,'rejected')}>Rejeitar</button><button className="button ghost danger" onClick={()=>reviewChat(m,'spam')}><Flag size={15}/>Spam</button></div></article>)}</div></section>}
     {editing&&<div className="edit-card"><div className="edit-card-head"><div><div className="eyebrow">EDITOR</div><h2>{editing.db_id?'Editar evento':'Novo evento'}</h2></div><button className="button ghost" onClick={()=>setEditing(null)}>Fechar</button></div><div className="edit-grid"><label>Título<input value={editing.title} onChange={e=>setEditing({...editing,title:e.target.value})}/></label><label>Tipo<select value={editing.type} onChange={e=>setEditing({...editing,type:e.target.value})}>{['Manifestação','Ato','Plenária','Assembleia','Reunião','Debate','Caminhada','Panfletagem','Atividade cultural/política','Atividade universitária','Plenária online','Mobilização','Oficina'].map(x=><option key={x}>{x}</option>)}</select></label><label>Data<input type="date" value={editing.date} onChange={e=>setEditing({...editing,date:e.target.value})}/></label><label>Hora<input type="time" value={editing.time??''} onChange={e=>setEditing({...editing,time:e.target.value})}/></label><label className="full">Rótulo do horário<input placeholder="Ex.: 16h concentração / 17h saída" value={editing.time_label??''} onChange={e=>setEditing({...editing,time_label:e.target.value})}/></label><label>Cidade<input value={editing.city} onChange={e=>setEditing({...editing,city:e.target.value})}/></label><label>Estado<input maxLength={2} value={editing.state} onChange={e=>setEditing({...editing,state:e.target.value.toUpperCase()})}/></label><label className="full">Local<input value={editing.venue} onChange={e=>setEditing({...editing,venue:e.target.value})}/></label><label className="full">Endereço<input value={editing.address??''} onChange={e=>setEditing({...editing,address:e.target.value})}/></label><label>Status<select value={editing.status} onChange={e=>setEditing({...editing,status:e.target.value as any})}>{['confirmed','updated','warning','pending'].map(x=><option key={x}>{x}</option>)}</select></label><label>Latitude<input value={editing.lat??''} onChange={e=>setEditing({...editing,lat:e.target.value?Number(e.target.value):null})}/></label><label>Longitude<input value={editing.lng??''} onChange={e=>setEditing({...editing,lng:e.target.value?Number(e.target.value):null})}/></label><label className="full">Observação<textarea value={editing.notes??''} onChange={e=>setEditing({...editing,notes:e.target.value})}/></label><div className="poster-upload full"><div className="poster-upload-label"><ImageIcon size={17}/><strong>Pôster</strong></div>{posterPreview&&<img src={posterPreview} alt="Pré-visualização" className="poster-preview"/>}<input type="file" accept="image/*" onChange={e=>{const f=e.target.files?.[0]||null;setPosterFile(f);if(f)setPosterPreview(URL.createObjectURL(f))}}/><small>{posterFile?'Novo arquivo selecionado.':editing.image_url?'Usando pôster atual.':'Nenhum pôster anexado.'}</small></div><div className="source-picker full"><div className="poster-upload-label"><ExternalLink size={17}/><strong>Fontes do evento</strong></div><div className="source-checks">{sources.map(s=><label key={s.id}><input type="checkbox" checked={editing.source_ids.includes(s.id)} onChange={e=>setEditing({...editing,source_ids:e.target.checked?[...editing.source_ids,s.id]:editing.source_ids.filter(id=>id!==s.id)})}/><span>{s.account_name}</span></label>)}</div></div><label className="check full"><input type="checkbox" checked={editing.public} onChange={e=>setEditing({...editing,public:e.target.checked})}/> Publicar no radar</label></div><div className="edit-footer"><button className="button primary" disabled={saving} onClick={save}>{saving?'Salvando…':'Salvar evento'}</button><button className="button ghost" onClick={()=>setEditing(null)}>Cancelar</button></div></div>}
-    <div className="admin-table">{events.map(e=><div className="admin-row" key={e.id}><span><strong>{e.city}</strong><small>{e.title}</small></span><span>{fmtShortDate(e.date)} · {e.time_label||e.time||'—'}</span><span className="admin-status">{e.status}{e.image_url&&<span title="Com pôster"><ImageIcon size={14}/></span>}<button onClick={()=>editFrom(e)}>Editar</button>{e.db_id&&<button onClick={()=>remove(e)} title="Excluir"><Trash2 size={13}/></button>}</span></div>)}</div></div>
+    <section className="admin-section admin-event-filter"><div className="section-head compact"><div><div className="eyebrow">EVENTOS</div><h2>Filtrar cadastro</h2></div><span className="analytics-note">{filteredAdminEvents.length} de {events.length}</span></div><div className="admin-filter-row"><input value={adminQuery} onChange={e=>setAdminQuery(e.target.value)} placeholder="Buscar por título, cidade, UF ou local…"/><input type="date" value={adminDate} onChange={e=>setAdminDate(e.target.value)} aria-label="Filtrar por data"/><select value={adminStatus} onChange={e=>setAdminStatus(e.target.value)} aria-label="Filtrar por status"><option value="">Todos os status</option><option value="confirmed">Confirmado</option><option value="updated">Atualizado</option><option value="warning">Alerta</option><option value="pending">Pendente</option></select>{(adminQuery||adminDate||adminStatus)&&<button className="clear-btn" onClick={()=>{setAdminQuery('');setAdminDate('');setAdminStatus('')}}><X size={15}/> Limpar</button>}</div></section>
+    <div className="admin-table">{filteredAdminEvents.map(e=><div className="admin-row" key={e.id}><span><strong>{e.city}</strong><small>{e.title}</small></span><span>{fmtShortDate(e.date)} · {e.time_label||e.time||'—'}</span><span className="admin-status">{e.status}{e.image_url&&<span title="Com pôster"><ImageIcon size={14}/></span>}<button onClick={()=>editFrom(e)}>Editar</button>{e.db_id&&<button onClick={()=>remove(e)} title="Excluir"><Trash2 size={13}/></button>}</span></div>)}</div></div>
 }
 
 export default function App(){
   const[events,setEvents]=useState<MobilizationEvent[]>([]);
   const[sources,setSources]=useState<EventSource[]>([]);
   const[loading,setLoading]=useState(true);
-  const[loadError,setLoadError]=useState<string|null>(null);
+  const[loadError,setLoadError]=useState<string|null>(null);  const location=useLocation();
+
+  useEffect(()=>{
+    if(loading||loadError)return;
+    if(location.pathname.startsWith('/admin')||location.pathname.startsWith('/entrar'))return;
+    const match=location.pathname.match(/^\/evento\/([^/]+)$/);
+    let eventId:string|null=null;
+    if(match){
+      const slug=decodeURIComponent(match[1]);
+      eventId=events.find(e=>e.id===slug)?.db_id??null;
+    }
+    recordPageView(location.pathname,eventId);
+  },[location.pathname,loading,loadError,events]);
 
   const reload=()=>Promise.all([getEvents(),getSources()])
     .then(([e,s])=>{setEvents(e);setSources(s);setLoadError(null);setLoading(false)})

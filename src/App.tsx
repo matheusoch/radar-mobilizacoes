@@ -1,5 +1,6 @@
 import {useEffect,useMemo,useState} from 'react';
 import type {ChangeEvent,FormEvent,ReactNode} from 'react';
+import React from 'react';
 import {Link,Navigate,Route,Routes,useLocation,useNavigate,useParams} from 'react-router-dom';
 import {CalendarDays,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search,BarChart3,Eye,KeyRound,Users} from 'lucide-react';
 import './App.css';
@@ -22,6 +23,18 @@ type Submission={
 };
 type ChatMessage={id:string;user_id:string;display_name:string;content:string;attachment_path:string|null;status:string;created_at:string;reviewed_at:string|null;reviewed_by:string|null};
 type PageViewRow={path:string;event_id:string|null;visitor_id:string;created_at:string};
+
+class AppErrorBoundary extends React.Component<{children:ReactNode},{error:Error|null}>{
+  state={error:null as Error|null};
+  static getDerivedStateFromError(error:Error){return {error};}
+  componentDidCatch(error:Error){console.error('Radar runtime error',error);}
+  render(){
+    if(this.state.error){
+      return <div className="loading"><div className="empty"><Info/><h2>O Radar encontrou um erro.</h2><p>{this.state.error.message||'Erro inesperado ao renderizar esta página.'}</p><button className="button primary" onClick={()=>window.location.reload()}><RefreshCw size={16}/>Recarregar</button></div></div>;
+    }
+    return this.props.children;
+  }
+}
 
 function slugify(value:string){return value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')}
 function fmtDate(date?:string|null){if(!date)return 'Data não informada';return new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'})}
@@ -405,5 +418,5 @@ export default function App(){
 
   if(loadError)return <div className="loading"><div className="empty"><Info/><h3>Não foi possível carregar os dados</h3><p>{loadError}</p><button className="button primary" onClick={()=>{setLoading(true);reload()}}><RefreshCw size={16}/>Tentar novamente</button></div></div>;
 
-  return <Layout><Routes><Route path="/" element={<Home events={events}/>}/><Route path="/evento/:id" element={<EventPage events={events} sources={sources}/>}/><Route path="/calendario" element={<CalendarPage events={events}/>}/><Route path="/mapa" element={<MapPage events={events}/>}/><Route path="/sobre" element={<AboutPage/>}/><Route path="/chat" element={<ChatPage/>}/><Route path="/entrar" element={<AuthPage/>}/><Route path="/admin" element={<AdminPage/>}/></Routes></Layout>
+  return <AppErrorBoundary><Layout><Routes><Route path="/" element={<Home events={events}/>}/><Route path="/evento/:id" element={<EventPage events={events} sources={sources}/>}/><Route path="/calendario" element={<CalendarPage events={events}/>}/><Route path="/mapa" element={<MapPage events={events}/>}/><Route path="/sobre" element={<AboutPage/>}/><Route path="/chat" element={<ChatPage/>}/><Route path="/entrar" element={<AuthPage/>}/><Route path="/admin" element={<AdminPage/>}/></Routes></Layout></AppErrorBoundary>
 }

@@ -102,3 +102,15 @@
 .event-action-row{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 18px}.event-action-row .button{flex:1;min-width:180px}.event-action-row .directions-button{margin:0}.reminder-button{background:var(--accent)!important;color:#fff!important}
 .brand-chat{color:var(--accent);margin-left:-5px;flex:none}
 @media(max-width:560px){.event-action-row{display:grid;grid-template-columns:1fr}.event-action-row .button{width:100%;min-width:0}.brand-chat{display:none}}
+
+
+/* Blindagem de dimensões e overflow */
+*,*::before,*::after{box-sizing:border-box}
+html,body,#root{width:100%;min-width:0}
+body{margin:0;overflow-x:hidden}
+img,svg,video,canvas{max-width:100%}
+button,input,select,textarea{box-sizing:border-box;max-width:100%}
+.chat-layout{grid-template-columns:minmax(0,1.35fr) minmax(0,.65fr)}
+@media(max-width:940px){.chat-layout{grid-template-columns:1fr}}
+@media(max-width:760px){.container{width:calc(100% - 24px)}.map{height:560px}}
+@media(max-width:560px){.map{height:480px}.map-note{font-size:11px;line-height:1.4}}

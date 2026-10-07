@@ -94,9 +94,28 @@ export interface AttendanceStatus {
   attending: boolean;
 }
 
+const ATTENDANCE_VISITOR_KEY='radar_attendance_visitor_id';
+
+function getAttendanceVisitorId(){
+  if(typeof window==='undefined') return null;
+  try{
+    const existing=window.localStorage.getItem(ATTENDANCE_VISITOR_KEY);
+    if(existing) return existing;
+    const created=crypto.randomUUID();
+    window.localStorage.setItem(ATTENDANCE_VISITOR_KEY,created);
+    return created;
+  }catch{
+    return crypto.randomUUID();
+  }
+}
+
 export async function getAttendanceStatus(eventIds: string[]): Promise<Record<string, AttendanceStatus>> {
   if (!supabase || !eventIds.length) return {};
-  const { data, error } = await supabase.rpc('get_event_attendance', { p_event_ids: eventIds });
+  const visitorId=getAttendanceVisitorId();
+  const { data, error } = await supabase.rpc('get_event_attendance', {
+    p_event_ids: eventIds,
+    p_visitor_id: visitorId,
+  });
   if (error) throw new Error(`Falha ao carregar participantes: ${error.message}`);
 
   return Object.fromEntries(
@@ -112,7 +131,12 @@ export async function getAttendanceStatus(eventIds: string[]): Promise<Record<st
 
 export async function toggleEventAttendance(eventId: string) {
   if (!supabase) throw new Error('Supabase não configurado.');
-  const { data, error } = await supabase.rpc('toggle_event_attendance', { p_event_id: eventId });
+  const visitorId=getAttendanceVisitorId();
+  if(!visitorId) throw new Error('Não foi possível identificar este navegador.');
+  const { data, error } = await supabase.rpc('toggle_event_attendance', {
+    p_event_id: eventId,
+    p_visitor_id: visitorId,
+  });
   if (error) throw new Error(error.message);
   const row = data?.[0];
   if (!row) throw new Error('Não foi possível atualizar sua presença.');

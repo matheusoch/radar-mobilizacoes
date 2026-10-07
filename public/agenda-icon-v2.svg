@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Agenda de Mobilizações</title>
+  <desc>Megafone vermelho representando mobilização e comunicação pública</desc>
+  <rect width="512" height="512" fill="#ffffff"/>
+  <path fill="#E51B23" d="M48 231c-15 13-24 32-24 52s9 39 24 52c12 10 27 16 43 16h42l17-68-17-68H91c-16 0-31 6-43 16Z"/>
+  <path fill="#E51B23" d="M101 230c8-25 27-43 52-52l176-67c20-8 42 7 42 29v142c0 22-22 37-42 29l-176-67c-25-9-44-27-52-52Z"/>
+  <path fill="#B51219" d="M113 218c8-18 23-32 43-39l20-8-16 116-20-8c-20-7-35-21-43-39l-4-11 4-11 16 0Z" opacity=".72"/>
+  <path fill="#E51B23" d="M321 117c31-10 64 8 74 39l32 98c10 31-8 64-39 74l-24 8-88-209 45-10Z"/>
+  <path fill="#ffffff" d="M344 145c15-5 31 4 36 19l27 82c5 15-4 31-19 36l-14 5-48-137 18-5Z"/>
+  <path fill="#E51B23" d="M325 218l39 15c12 5 20 17 20 30s-8 25-20 30l-39 15v-90Z"/>
+  <ellipse cx="366" cy="263" rx="11" ry="17" fill="#ffffff"/>
+  <path fill="#E51B23" d="M127 327l86 15-18 72c-5 19-22 32-41 32h-12c-19 0-33-18-29-37l14-82Z"/>
+  <path fill="#B51219" d="M128 327l30 5-14 77c-3 17 6 30 20 35h-12c-19 0-33-18-29-37l14-80-9 0Z" opacity=".72"/>
+  <path d="M432 151l39-35M447 263h50M432 375l39 35" fill="none" stroke="#E51B23" stroke-width="19" stroke-linecap="round"/>
+</svg>

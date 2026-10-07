@@ -133,6 +133,24 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
     canonicalLink.href=canonicalUrl;
     if(!canonical)document.head.appendChild(canonicalLink);
     document.title=nextTitle;
+    const existingSchema=document.head.querySelector<HTMLScriptElement>('script[data-agenda-event-schema]');
+    const previousSchema=existingSchema?.textContent||null;
+    const schema=existingSchema||document.createElement('script');
+    schema.type='application/ld+json';
+    schema.setAttribute('data-agenda-event-schema','true');
+    schema.textContent=JSON.stringify({
+      '@context':'https://schema.org',
+      '@type':'Event',
+      name:event.title,
+      startDate:event.date+'T'+(event.time||'00:00'),
+      eventStatus:'https://schema.org/EventScheduled',
+      eventAttendanceMode:'https://schema.org/OfflineEventAttendanceMode',
+      location:{'@type':'Place',name:event.venue,address:[event.address,event.city,event.state,'Brasil'].filter(Boolean).join(', ')},
+      url:canonicalUrl,
+      image:event.image_url||defaultImage,
+      description:nextDescription,
+    });
+    if(!existingSchema)document.head.appendChild(schema);
     return()=>{
       document.title=defaultTitle;
       for(const [selector,state] of previousMeta){
@@ -142,6 +160,8 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
       document.head.querySelector('meta[name="description"]')?.setAttribute('content',defaultDescription);
       if(previousCanonical.had&&previousCanonical.element)previousCanonical.element.href=previousCanonical.href;
       else document.head.querySelector('link[rel="canonical"]')?.remove();
+      if(previousSchema!==null&&existingSchema)existingSchema.textContent=previousSchema;
+      else document.head.querySelector('script[data-agenda-event-schema]')?.remove();
     };
   },[event]);
 

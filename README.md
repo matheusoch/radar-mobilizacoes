@@ -4,12 +4,23 @@ Agenda pública de atos, manifestações, plenárias, reuniões e outras mobiliz
 
 ## Rodar localmente
 
+Crie um arquivo `.env` na raiz do projeto com as mesmas credenciais públicas configuradas no Netlify:
+
+```env
+VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=SUA_CHAVE_PUBLICAVEL
+```
+
+Não use a `service_role`/secret key no frontend.
+
+Depois:
+
 ```bash
 npm install
 npm run dev
 ```
 
-O ambiente usa `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY`. Sem Supabase configurado, o aplicativo pode usar o catálogo local de demonstração.
+Sem `.env`, o desenvolvimento entra no catálogo local de demonstração: os eventos aparecem, mas recursos ligados ao Supabase, como participantes, autenticação, chat e painel administrativo, não funcionam.
 
 ## Supabase
 

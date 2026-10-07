@@ -197,7 +197,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}){
             const disabled=!isSelected&&selected.length>=MAX_EVENTS;
             return <button key={event.id} type="button" className={isSelected?'share-event selected':'share-event'} onClick={()=>toggle(event.id)} disabled={disabled}>
               <span className="share-event-check">{isSelected?<Check size={15}/>:<span/>}</span>
-              <span className="share-event-copy"><strong>{displayLocation(event)}</strong><small>{event.venue}</small></span>
+              <span className="share-event-copy"><strong>{displayLocation(event)}</strong><small>{event.venue}</small><small className="share-event-type">{event.type||'Mobilização'}</small></span>
               <span className="share-event-time">{formatTime(event)}</span>
             </button>
           })}

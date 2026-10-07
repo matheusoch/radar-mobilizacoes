@@ -89,3 +89,35 @@ export async function getSources(): Promise<EventSource[]> {
   if (error) throw new Error(`Falha ao carregar fontes: ${error.message}`);
   return (data ?? []) as EventSource[];
 }
+export interface AttendanceStatus {
+  count: number;
+  attending: boolean;
+}
+
+export async function getAttendanceStatus(eventIds: string[]): Promise<Record<string, AttendanceStatus>> {
+  if (!supabase || !eventIds.length) return {};
+  const { data, error } = await supabase.rpc('get_event_attendance', { p_event_ids: eventIds });
+  if (error) throw new Error(`Falha ao carregar participantes: ${error.message}`);
+
+  return Object.fromEntries(
+    (data ?? []).map((row: any) => [
+      row.event_id,
+      {
+        count: Number(row.participant_count ?? 0),
+        attending: Boolean(row.user_attended),
+      },
+    ]),
+  );
+}
+
+export async function toggleEventAttendance(eventId: string) {
+  if (!supabase) throw new Error('Supabase não configurado.');
+  const { data, error } = await supabase.rpc('toggle_event_attendance', { p_event_id: eventId });
+  if (error) throw new Error(error.message);
+  const row = data?.[0];
+  if (!row) throw new Error('Não foi possível atualizar sua presença.');
+  return {
+    count: Number(row.participant_count ?? 0),
+    attending: Boolean(row.attending),
+  };
+}

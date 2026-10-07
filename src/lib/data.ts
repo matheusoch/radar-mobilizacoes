@@ -145,3 +145,30 @@ export async function toggleEventAttendance(eventId: string) {
     attending: Boolean(row.attending),
   };
 }
+
+
+const ANALYTICS_VISITOR_KEY='radar_analytics_visitor_id';
+
+function getAnalyticsVisitorId(){
+  if(typeof window==='undefined')return null;
+  try{
+    const existing=window.localStorage.getItem(ANALYTICS_VISITOR_KEY);
+    if(existing)return existing;
+    const created=crypto.randomUUID();
+    window.localStorage.setItem(ANALYTICS_VISITOR_KEY,created);
+    return created;
+  }catch{
+    return crypto.randomUUID();
+  }
+}
+
+export async function recordPageView(path:string,eventId?:string|null){
+  if(!supabase||!path)return;
+  const visitorId=getAnalyticsVisitorId();
+  if(!visitorId)return;
+  try{
+    await supabase.from('page_views').insert({visitor_id:visitorId,path,event_id:eventId??null});
+  }catch{
+    // Analytics must never interrupt navigation.
+  }
+}

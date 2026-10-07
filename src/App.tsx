@@ -62,10 +62,8 @@ function Home({events}:{events:MobilizationEvent[]}){
 function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSource[]}){
   const{id}=useParams();
   const event=events.find(e=>e.id===id);
-  if(!event)return <Navigate to="/"/>;
-  const ss=sources.filter(s=>event.source_ids.includes(s.id));
-
   useEffect(()=>{
+    if(!event)return;
     const defaultTitle='Radar de Mobilizações';
     const defaultDescription='Agenda pública e rastreável de mobilizações no Brasil.';
     const defaultImage=window.location.origin+'/radar-icon-512.png';
@@ -118,6 +116,8 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
     };
   },[event]);
 
+  if(!event)return <Navigate to="/"/>;
+  const ss=sources.filter(s=>event.source_ids.includes(s.id));
   const directionsQuery=[event.address,event.venue,event.city,event.state,'Brasil'].filter(Boolean).join(', ');
   const directionsUrl='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(directionsQuery);
 

@@ -338,34 +338,32 @@ function AdminPage(){
   };
   useEffect(()=>{if(!supabase){setLoading(false);return}supabase.auth.getUser().then(({data})=>{setUser(data.user);setLoading(false)});const{data}=supabase.auth.onAuthStateChange((_e,s)=>setUser(s?.user??null));return()=>data.subscription.unsubscribe()},[]);
   useEffect(()=>{if(!user)return;loadAdmin();const id=window.setInterval(loadAdmin,10000);return()=>window.clearInterval(id)},[user]);
-  const filteredAdminEvents=useMemo(()=>events.filter(e=>{
+  const filteredAdminEvents=events.filter(e=>{
     const haystack=(e.title+' '+e.city+' '+e.state+' '+e.venue).toLowerCase();
     if(adminQuery.trim()&&!haystack.includes(adminQuery.trim().toLowerCase()))return false;
     if(adminDate&&e.date!==adminDate)return false;
     if(adminStatus&&e.status!==adminStatus)return false;
     return true;
-  }),[events,adminQuery,adminDate,adminStatus]);
+  });
 
-  const analyticsSummary=useMemo(()=>{
-    const now=Date.now();
-    const todayStart=new Date();
-    todayStart.setHours(0,0,0,0);
-    const last7=analyticsRows.filter(r=>new Date(r.created_at).getTime()>=now-7*864e5);
-    const today=last7.filter(r=>new Date(r.created_at).getTime()>=todayStart.getTime());
-    const visitors=new Set(last7.map(r=>r.visitor_id));
-    const pages=new Map<string,number>();
-    const eventsMap=new Map<string,number>();
-    for(const row of last7){
-      pages.set(row.path,(pages.get(row.path)||0)+1);
-      if(row.event_id)eventsMap.set(row.event_id,(eventsMap.get(row.event_id)||0)+1);
-    }
-    const topPages=[...pages.entries()].sort((a,b)=>b[1]-a[1]).slice(0,5);
-    const topEvents=[...eventsMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,5).map(([eventId,count])=>{
-      const event=events.find(e=>e.db_id===eventId);
-      return {eventId,count,title:event?.title||'Evento removido',city:event?.city||''};
-    });
-    return {today:today.length,last7:last7.length,uniqueVisitors:visitors.size,topPages,topEvents};
-  },[analyticsRows,events]);
+  const now=Date.now();
+  const todayStart=new Date();
+  todayStart.setHours(0,0,0,0);
+  const last7=analyticsRows.filter(r=>new Date(r.created_at).getTime()>=now-7*864e5);
+  const today=last7.filter(r=>new Date(r.created_at).getTime()>=todayStart.getTime());
+  const visitors=new Set(last7.map(r=>r.visitor_id));
+  const pages=new Map<string,number>();
+  const eventsMap=new Map<string,number>();
+  for(const row of last7){
+    pages.set(row.path,(pages.get(row.path)||0)+1);
+    if(row.event_id)eventsMap.set(row.event_id,(eventsMap.get(row.event_id)||0)+1);
+  }
+  const topPages=[...pages.entries()].sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const topEvents=[...eventsMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,5).map(([eventId,count])=>{
+    const event=events.find(e=>e.db_id===eventId);
+    return {eventId,count,title:event?.title||'Evento removido',city:event?.city||''};
+  });
+  const analyticsSummary={today:today.length,last7:last7.length,uniqueVisitors:visitors.size,topPages,topEvents};
 
   if(loading)return <div className="loading"><div className="spinner"/>Carregando painel…</div>;
   if(!supabase)return <div className="container page narrow"><div className="eyebrow">ADMIN</div><h1>Painel editorial</h1><div className="callout warning"><Info/><span>Conecte o Supabase pelo .env para ativar o painel.</span></div></div>;

@@ -2,7 +2,7 @@ import {useEffect,useMemo,useState} from 'react';
 import type {ChangeEvent,FormEvent,ReactNode} from 'react';
 import React from 'react';
 import {Link,Navigate,Route,Routes,useLocation,useNavigate,useParams} from 'react-router-dom';
-import {CalendarDays,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search,BarChart3,Eye,KeyRound,Users,ChevronLeft,ChevronRight,Share2,Star} from 'lucide-react';
+import {CalendarDays,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search,BarChart3,Eye,KeyRound,Users,ChevronLeft,ChevronRight,Share2,Star,MessageSquare} from 'lucide-react';
 import './App.css';
 import EventCard from './components/EventCard';
 import Filters,{type FiltersState} from './components/Filters';
@@ -44,7 +44,7 @@ function formatParticipants(count:number){if(count>=10000)return (count/1000).to
 
 function Layout({children}:{children:ReactNode}){
   const[open,setOpen]=useState(false);
-  return <div className="app-shell"><header className="site-header"><div className="container nav"><Link to="/" className="brand" onClick={()=>setOpen(false)}><span className="brand-mark"><img src="/agenda-icon-v2.svg" alt="" width="30" height="30" /></span><span>Agenda de Mobilizações</span></Link><button className="mobile-menu" onClick={()=>setOpen(!open)} aria-label={open?'Fechar menu':'Abrir menu'} aria-expanded={open}>{open?<X/>:<Menu/>}</button><nav className={open?'nav-links nav-open':'nav-links'} aria-label="Navegação principal"><Link onClick={()=>setOpen(false)} to="/">Agenda</Link><Link onClick={()=>setOpen(false)} to="/calendario">Calendário</Link><Link onClick={()=>setOpen(false)} to="/mapa">Mapa</Link><Link onClick={()=>setOpen(false)} to="/chat">Chat</Link><Link onClick={()=>setOpen(false)} to="/sobre">Sobre</Link><Link onClick={()=>setOpen(false)} className="admin-link" to="/admin">Admin</Link></nav></div></header><main>{children}</main><footer className="footer"><div className="container footer-inner"><span>Iniciativa independente · informações com fontes rastreáveis.</span><span>Não oficial · confira alterações antes de sair.</span><span>A Agenda é independente; a estrela vermelha é identidade visual do projeto, não uma representação oficial do PT.</span></div></footer></div>
+  return <div className="app-shell"><header className="site-header"><div className="container nav"><Link to="/" className="brand" onClick={()=>setOpen(false)}><span className="brand-mark"><img src="/agenda-icon-v2.svg" alt="" width="30" height="30" /></span><span>Agenda de Mobilizações</span><MessageSquare className="brand-chat" size={15} strokeWidth={2.5} aria-hidden="true"/></Link><button className="mobile-menu" onClick={()=>setOpen(!open)} aria-label={open?'Fechar menu':'Abrir menu'} aria-expanded={open}>{open?<X/>:<Menu/>}</button><nav className={open?'nav-links nav-open':'nav-links'} aria-label="Navegação principal"><Link onClick={()=>setOpen(false)} to="/">Agenda</Link><Link onClick={()=>setOpen(false)} to="/calendario">Calendário</Link><Link onClick={()=>setOpen(false)} to="/mapa">Mapa</Link><Link onClick={()=>setOpen(false)} to="/chat">Chat</Link><Link onClick={()=>setOpen(false)} to="/sobre">Sobre</Link><Link onClick={()=>setOpen(false)} className="admin-link" to="/admin">Admin</Link></nav></div></header><main>{children}</main><footer className="footer"><div className="container footer-inner"><span>Iniciativa independente · informações com fontes rastreáveis.</span><span>Não oficial · confira alterações antes de sair.</span><span>A Agenda é independente; a estrela vermelha é identidade visual do projeto, não uma representação oficial do PT.</span></div></footer></div>
 }
 
 function Home({events}:{events:MobilizationEvent[]}){
@@ -187,6 +187,18 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
   const ss=sources.filter(s=>event.source_ids.includes(s.id));
   const directionsQuery=[event.address,event.venue,event.city,event.state,'Brasil'].filter(Boolean).join(', ');
   const directionsUrl='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(directionsQuery);
+  const calendarDate=event.date.replace(/-/g,'');
+  const calendarStartTime=event.time ? event.time.replace(':','')+'00' : '000000';
+  const calendarStart=calendarDate+'T'+calendarStartTime;
+  const calendarEndTime=event.time ? (()=>{const [h,m]=event.time.split(':').map(Number);const end=new Date(2000,0,1,h,m);end.setMinutes(end.getMinutes()+120);return String(end.getHours()).padStart(2,'0')+String(end.getMinutes()).padStart(2,'0')+'00'})() : '235900';
+  const calendarEnd=calendarDate+'T'+calendarEndTime;
+  const calendarDetails=[
+    'Evento da Agenda de Mobilizações.',
+    event.type ? 'Tipo: '+event.type+'.' : '',
+    event.notes ? event.notes : '',
+    'Fonte: '+window.location.href,
+  ].filter(Boolean).join(' ');
+  const calendarUrl='https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(event.title)+'&dates='+calendarStart+'/'+calendarEnd+'&details='+encodeURIComponent(calendarDetails)+'&location='+encodeURIComponent(directionsQuery)+'&ctz=America%2FSao_Paulo';
 
   return <div className="container detail-page">
     <Link to="/" className="back-link">← Voltar para o radar</Link>
@@ -212,7 +224,7 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
           </button>
         </div>
         {attendanceError&&<div className="callout warning"><Info size={18}/><span>{attendanceError}</span></div>}
-        <a className="button ghost directions-button" href={directionsUrl} target="_blank" rel="noreferrer"><MapPinned size={17}/>Como chegar</a>
+        <div className="event-action-row"><a className="button ghost directions-button" href={directionsUrl} target="_blank" rel="noreferrer"><MapPinned size={17}/>Como chegar</a><a className="button primary reminder-button" href={calendarUrl} target="_blank" rel="noreferrer"><CalendarDays size={17}/>Definir lembrete</a></div>
         {event.notes&&<div className={event.status==='warning'?'callout warning':'callout info'}><Info size={20}/><span>{event.notes}</span></div>}
         {event.image_url&&<PosterActions event={event}/>}
         <h2>Fontes</h2>

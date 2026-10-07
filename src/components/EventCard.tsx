@@ -1,14 +1,15 @@
 import {Clock3,MapPin,ArrowUpRight,Users,Check} from 'lucide-react';
 import {Link} from 'react-router-dom';
 import type {MobilizationEvent} from '../types';
+import {StatusBadge,TypeBadge} from './Badge';
 
 type Attendance={count:number;attending:boolean};
 
 function formatParticipants(count:number){
-  if(count>=1000){
-    const value=count/1000;
-    return value>=10?value.toFixed(1).replace('.',',')+' mil':value.toFixed(1).replace('.',',')+' mil';
+  if(count>=10000){
+    return (count/1000).toFixed(1).replace('.',',')+' mil';
   }
+  if(count>=1000) return count.toLocaleString('pt-BR');
   return count.toLocaleString('pt-BR');
 }
 
@@ -26,7 +27,7 @@ export default function EventCard({event,attendance,onAttendance}:{event:Mobiliz
       <span className="event-participants"><Users size={14}/>{formatParticipants(count)} participante{count===1?'':'s'}</span>
     </div>
     <div className="event-card-body">
-      <div className="event-card-title-row"><h3>{event.title}</h3><span className="event-status-inline">{event.status}</span></div>
+      <TypeBadge type={event.type}/><div className="event-card-title-row"><h3>{event.title}</h3><StatusBadge status={event.status}/></div>
       <div className="meta-row"><Clock3 size={16}/><span>{event.time||'Horário não informado'}</span></div>
       <div className="meta-row"><MapPin size={16}/><span>{event.venue}</span></div>
       <div className="event-card-footer">

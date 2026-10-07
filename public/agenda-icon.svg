@@ -1,10 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <title id="title">Agenda de Mobilizações</title>
-  <desc id="desc">Punho cerrado vermelho representando mobilização e protesto</desc>
+  <desc id="desc">Megafone vermelho representando mobilização e comunicação pública</desc>
   <rect width="512" height="512" rx="96" fill="#fff"/>
   <g fill="#d71920" stroke="#a90f15" stroke-width="10" stroke-linejoin="round" stroke-linecap="round">
-    <path d="M150 286c-8-18-6-37 8-49l25-22v-77c0-20 16-36 36-36s36 16 36 36v53h8V91c0-20 16-36 36-36s36 16 36 36v100h8v-74c0-20 16-36 36-36s36 16 36 36v107l11-20c10-18 33-24 51-14 18 10 24 33 14 51l-48 87c-18 33-49 57-85 66l-44 11c-48 12-99-8-127-49l-39-57c-7-10-9-23-5-35l7-22z"/>
-    <path d="M219 191v-53M299 191V91M379 191v-74"/>
-    <path d="M154 286l48-22c19-9 41-1 51 17l14 25c9 16 27 25 45 22l72-12"/>
+    <path d="M116 222l244-104c22-9 46 7 46 31v145c0 24-24 40-46 31L116 221z"/>
+    <path d="M116 222l-22 7c-27 9-45 34-45 62v8c0 27 22 49 49 49h22l46-8-30-118z"/>
+    <path d="M152 349l-15 62c-5 20 10 39 30 39h27c15 0 28-10 32-25l16-63-90-13z"/>
+    <path d="M406 175c31 17 51 49 51 85s-20 68-51 85" fill="none"/>
   </g>
 </svg>

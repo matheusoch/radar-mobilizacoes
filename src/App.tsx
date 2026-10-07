@@ -280,7 +280,7 @@ function ChatPage(){
 }
 
 function AdminPage(){
-  const db=supabase;
+  const db=supabase!;
   const[user,setUser]=useState<any>(null);const[loading,setLoading]=useState(true);const[authorized,setAuthorized]=useState(false);const[events,setEvents]=useState<MobilizationEvent[]>([]);const[sources,setSources]=useState<EventSource[]>([]);const[submissions,setSubmissions]=useState<Submission[]>([]);const[chatPending,setChatPending]=useState<ChatMessage[]>([]);const[editing,setEditing]=useState<MobilizationEvent|null>(null);const[posterFile,setPosterFile]=useState<File|null>(null);const[posterPreview,setPosterPreview]=useState<string|null>(null);const[message,setMessage]=useState('');const[saving,setSaving]=useState(false);const[submitting,setSubmitting]=useState<string|null>(null);const[subPosterUrls,setSubPosterUrls]=useState<Record<string,string>>({});const[adminQuery,setAdminQuery]=useState('');const[adminDate,setAdminDate]=useState('');const[adminStatus,setAdminStatus]=useState('');const[analyticsRows,setAnalyticsRows]=useState<PageViewRow[]>([]);
   const blank=():MobilizationEvent=>({id:'',title:'',type:'Manifestação',date:new Date().toISOString().slice(0,10),time:'18:00',time_label:'',city:'',state:'',venue:'',status:'pending',public:false,source_ids:[ADMIN_SOURCE_FALLBACK],lat:null,lng:null,image_url:null,notes:''});
   const loadAdmin=async()=>{

@@ -118,7 +118,8 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}){
   const chosen=selected.map(id=>events.find(event=>event.id===id)).filter((event):event is MobilizationEvent=>Boolean(event));
 
   useEffect(()=>{
-    if(canvasRef.current&&chosen.length)renderCard(canvasRef.current,chosen);
+    if(!canvasRef.current||!chosen.length)return;
+    try{renderCard(canvasRef.current,chosen)}catch{setFeedback('A prévia visual não pôde ser gerada neste navegador. O painel continua disponível para compartilhamento.')}
   },[chosen]);
 
   useEffect(()=>{

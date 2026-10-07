@@ -66,7 +66,7 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[]){
   events.forEach((event,index)=>{
     ctx.fillStyle='#f4f0eb';
     ctx.beginPath();
-    ctx.roundRect(55,y-35,width-110,rowHeight-18,18);
+    ctx.rect(55,y-35,width-110,rowHeight-18);
     ctx.fill();
     ctx.fillStyle='#b51f38';
     ctx.beginPath();

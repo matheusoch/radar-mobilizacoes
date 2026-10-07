@@ -1,0 +1,10 @@
+{
+  "name":"Agenda de Mobilizações",
+  "short_name":"Agenda",
+  "description":"Agenda pública e rastreável de mobilizações no Brasil.",
+  "start_url":"/",
+  "display":"standalone",
+  "background_color":"#fffefa",
+  "theme_color":"#ffffff",
+  "icons":[{"src":"/agenda-icon-v2.svg","sizes":"512x512","type":"image/svg+xml","purpose":"any maskable"}]
+}

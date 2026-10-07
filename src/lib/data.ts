@@ -51,7 +51,11 @@ function normalizeFallbackEvent(e: MobilizationEvent): MobilizationEvent {
 }
 
 export async function getEvents(): Promise<MobilizationEvent[]> {
-  if (!supabase) return fallbackEvents.map(normalizeFallbackEvent);
+  if (!supabase) {
+    if (import.meta.env.PROD) throw new Error('Supabase não configurado no ambiente de produção.');
+    return fallbackEvents.map(normalizeFallbackEvent);
+  }
+
   const { data, error } = await supabase
     .from('events')
     .select('*, event_sources(source_id)')
@@ -59,8 +63,8 @@ export async function getEvents(): Promise<MobilizationEvent[]> {
     .order('date')
     .order('time');
 
-  if (error || !data?.length) return fallbackEvents.filter((e) => e.public).map(normalizeFallbackEvent);
-  return data.map(mapDbEvent);
+  if (error) throw new Error(`Falha ao carregar eventos: ${error.message}`);
+  return (data ?? []).map(mapDbEvent);
 }
 
 export async function getAdminEvents(): Promise<MobilizationEvent[]> {
@@ -76,7 +80,12 @@ export async function getAdminEvents(): Promise<MobilizationEvent[]> {
 }
 
 export async function getSources(): Promise<EventSource[]> {
-  if (!supabase) return fallbackSources;
+  if (!supabase) {
+    if (import.meta.env.PROD) throw new Error('Supabase não configurado no ambiente de produção.');
+    return fallbackSources;
+  }
+
   const { data, error } = await supabase.from('sources').select('*').order('account_name');
-  return error || !data ? fallbackSources : (data as EventSource[]);
+  if (error) throw new Error(`Falha ao carregar fontes: ${error.message}`);
+  return (data ?? []) as EventSource[];
 }

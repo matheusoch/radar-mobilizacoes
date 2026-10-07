@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://agenda-mobilizacoes.fandomscomlula.workers.dev/sitemap.xml

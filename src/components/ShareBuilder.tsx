@@ -42,7 +42,7 @@ function drawText(ctx:CanvasRenderingContext2D,text:string,x:number,y:number,max
 function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[]){
   const width=1080;
   const rowHeight=150;
-  const height=Math.max(900,230+events.length*rowHeight+150);
+  const height=Math.max(980,230+events.length*rowHeight+150);
   canvas.width=width;
   canvas.height=height;
   const ctx=canvas.getContext('2d');
@@ -52,9 +52,12 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[]){
 
   ctx.fillStyle='#b51f38';
   ctx.fillRect(0,0,width,18);
+  ctx.fillStyle='#b51f38';
+  ctx.font='900 34px Arial, sans-serif';
+  ctx.fillText('★',70,78);
   ctx.fillStyle='#171717';
   ctx.font='700 28px Inter, Arial, sans-serif';
-  ctx.fillText('AGENDA DE MOBILIZAÇÕES',70,78);
+  ctx.fillText('AGENDA DE MOBILIZAÇÕES',112,78);
   ctx.fillStyle='#b51f38';
   ctx.font='900 64px Inter, Arial, sans-serif';
   ctx.fillText(panelDate(events),70,145);
@@ -83,18 +86,24 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[]){
     ctx.fillStyle='#555b61';
     ctx.font='600 24px Inter, Arial, sans-serif';
     drawText(ctx,event.venue,135,y+48,width-235,'600 24px Inter, Arial, sans-serif');
+    ctx.fillStyle='#777c82';
+    ctx.font='700 19px Inter, Arial, sans-serif';
+    ctx.fillText(event.type||'Mobilização',135,y+92);
     ctx.fillStyle='#b51f38';
     ctx.font='800 25px Inter, Arial, sans-serif';
     ctx.fillText(formatTime(event),width-270,y+10);
     y+=rowHeight;
   });
 
+  ctx.fillStyle='#b51f38';
+  ctx.font='800 23px Inter, Arial, sans-serif';
+  ctx.fillText('Participe da mobilização e ajude a ocupar as ruas.',70,height-112);
   ctx.fillStyle='#171717';
-  ctx.font='800 22px Inter, Arial, sans-serif';
-  ctx.fillText('Confira os demais eventos e fontes na Agenda.',70,height-92);
+  ctx.font='800 20px Inter, Arial, sans-serif';
+  ctx.fillText('Confira os demais eventos e fontes na Agenda.',70,height-78);
   ctx.fillStyle='#6b7075';
-  ctx.font='500 19px Inter, Arial, sans-serif';
-  ctx.fillText('agenda-mobilizacoes.fandomscomlula.workers.dev',70,height-58);
+  ctx.font='500 18px Inter, Arial, sans-serif';
+  ctx.fillText('agenda-mobilizacoes.fandomscomlula.workers.dev',70,height-48);
 }
 
 export default function ShareBuilder({events}:{events:MobilizationEvent[]}){

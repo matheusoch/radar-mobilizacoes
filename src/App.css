@@ -58,3 +58,35 @@
   .map-count{grid-column:auto}
   .analytics-bars{gap:5px}
 }
+
+
+/* Calendário: navegação adaptável em telas pequenas */
+@media(max-width:760px){
+  .calendar-heading{
+    align-items:stretch;
+    flex-direction:column;
+    gap:16px;
+  }
+  .calendar-nav{
+    display:grid;
+    grid-template-columns:44px minmax(0,1fr) 44px;
+    width:100%;
+    gap:8px;
+  }
+  .calendar-nav .button{
+    width:100%;
+    min-width:0;
+    padding-left:10px;
+    padding-right:10px;
+  }
+}
+
+@media(max-width:420px){
+  .calendar-nav{
+    grid-template-columns:40px minmax(0,1fr) 40px;
+  }
+  .calendar-nav .button{
+    min-height:42px;
+    padding:10px 8px;
+  }
+}

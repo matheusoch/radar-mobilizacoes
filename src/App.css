@@ -52,6 +52,12 @@
 }
 
 
+.detail-attendance{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 18px;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--paper)}
+.detail-participants{display:flex;align-items:center;gap:10px;color:var(--ink)}
+.detail-participants svg{color:var(--accent)}
+.detail-participants strong{font-size:1.15rem;line-height:1}
+.detail-participants span{color:var(--muted);font-size:.86rem}
+.detail-attendance .going-button{min-width:110px}
 .directions-button{margin:0 0 18px}
 .auth-forgot{display:inline-flex;align-items:center;gap:7px;border:0;background:transparent;color:var(--accent);font:inherit;font-weight:800;cursor:pointer;padding:6px 0;margin-top:10px}
 .admin-event-filter{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:18px}

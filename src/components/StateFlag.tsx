@@ -20,12 +20,21 @@ export default function StateFlag({ uf, size = 'md', className = '' }: { uf?: st
   if (!code) return null;
 
   const px = size === 'sm' ? 34 : size === 'lg' ? 74 : 52;
-  const src = `https://cdn.jsdelivr.net/gh/arthurreira/br-state-flags@0.1.0/svgs/${code}.svg`;
+  // The published package stores optimized SVGs under /svgs/optimized/ and uses lowercase UF filenames.
+  const src = `https://cdn.jsdelivr.net/gh/arthurreira/br-state-flags@main/svgs/optimized/${code.toLowerCase()}.svg`;
   const style: CSSProperties = { width: px, height: Math.round(px * 0.68) };
 
   return (
     <span className={`state-flag ${className}`.trim()} title={`${stateNames[code]} (${code})`}>
-      <img src={src} alt={`Bandeira de ${stateNames[code]}`} width={px} height={Math.round(px * 0.68)} loading="lazy" style={style} />
+      <img
+        src={src}
+        alt={`Bandeira de ${stateNames[code]}`}
+        width={px}
+        height={Math.round(px * 0.68)}
+        loading="lazy"
+        decoding="async"
+        style={style}
+      />
     </span>
   );
 }

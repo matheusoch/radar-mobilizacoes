@@ -96,3 +96,9 @@
 .red-star{color:var(--accent);vertical-align:-2px;display:inline-block}
 .brand-star{color:var(--accent);margin-left:2px;flex:none}
 .eyebrow{display:inline-flex;align-items:center;gap:6px}
+
+
+/* Ações rápidas do evento */
+.event-action-row{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 18px}.event-action-row .button{flex:1;min-width:180px}.event-action-row .directions-button{margin:0}.reminder-button{background:var(--accent)!important;color:#fff!important}
+.brand-chat{color:var(--accent);margin-left:-5px;flex:none}
+@media(max-width:560px){.event-action-row{display:grid;grid-template-columns:1fr}.event-action-row .button{width:100%;min-width:0}.brand-chat{display:none}}

@@ -202,7 +202,7 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
   const calendarUrl='https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(event.title)+'&dates='+calendarStart+'/'+calendarEnd+'&details='+encodeURIComponent(calendarDetails)+'&location='+encodeURIComponent(directionsQuery)+'&ctz=America%2FSao_Paulo';
 
   return <div className="container detail-page">
-    <Link to="/" className="back-link">← Voltar para o radar</Link>
+    <Link to="/" className="back-link">← Voltar para a Agenda</Link>
     <div className="detail-grid">
       <div className="detail-main">
         <div className="detail-state-head">
@@ -460,7 +460,7 @@ export default function App(){
 
   const reload=()=>Promise.all([getEvents(),getSources()])
     .then(([e,s])=>{setEvents(e);setSources(s);setLoadError(null);setLoading(false)})
-    .catch((error)=>{setLoadError(error instanceof Error?error.message:'Não foi possível carregar o radar.');setLoading(false)});
+    .catch((error)=>{setLoadError(error instanceof Error?error.message:'Não foi possível carregar a Agenda.');setLoading(false)});
 
   useEffect(()=>{reload()},[]);
 

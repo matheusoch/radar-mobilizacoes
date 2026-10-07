@@ -90,3 +90,9 @@
     padding:10px 8px;
   }
 }
+
+
+/* Identidade visual: estrela vermelha */
+.red-star{color:var(--accent);vertical-align:-2px;display:inline-block}
+.brand-star{color:var(--accent);margin-left:2px;flex:none}
+.eyebrow{display:inline-flex;align-items:center;gap:6px}

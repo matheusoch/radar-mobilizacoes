@@ -96,7 +96,7 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
     if(!event)return;
     const defaultTitle='Agenda de Mobilizações';
     const defaultDescription='Agenda pública e rastreável de mobilizações no Brasil.';
-    const defaultImage=window.location.origin+'/agenda-icon-v2.svg';
+    const defaultImage=window.location.origin+'/agenda-fist.svg';
     const nextTitle=event.title+' · '+event.city+(event.state?', '+event.state:'')+' | Agenda de Mobilizações';
     const nextDescription=event.title+' · '+event.city+(event.state?', '+event.state:'')+'. '+(event.time_label||event.time||'Horário não informado')+' · '+event.venue+'.';
     const nextImage=event.image_url||defaultImage;

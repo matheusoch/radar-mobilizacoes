@@ -27,6 +27,7 @@ function slugify(value:string){return value.normalize('NFD').replace(/[\u0300-\u
 function fmtDate(date?:string|null){if(!date)return 'Data não informada';return new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'})}
 function fmtShortDate(date?:string|null){if(!date)return '—';return new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}
 function safeName(email?:string|null){return email?.split('@')[0] || 'Participante'}
+function formatParticipants(count:number){if(count>=10000)return (count/1000).toFixed(1).replace('.',',')+' mil';return count.toLocaleString('pt-BR')}
 
 function Layout({children}:{children:ReactNode}){
   const[open,setOpen]=useState(false);
@@ -62,6 +63,21 @@ function Home({events}:{events:MobilizationEvent[]}){
 function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSource[]}){
   const{id}=useParams();
   const event=events.find(e=>e.id===id);
+  const[attendance,setAttendance]=useState({count:0,attending:false});
+  const[attendanceBusy,setAttendanceBusy]=useState(false);
+  const[attendanceError,setAttendanceError]=useState('');
+
+  useEffect(()=>{
+    if(!event?.db_id){
+      setAttendance({count:0,attending:false});
+      return;
+    }
+    setAttendanceError('');
+    getAttendanceStatus([event.db_id])
+      .then(result=>setAttendance(result[event.db_id!]??{count:0,attending:false}))
+      .catch(error=>setAttendanceError(error instanceof Error?error.message:'Não foi possível carregar os participantes.'));
+  },[event?.db_id]);
+
   useEffect(()=>{
     if(!event)return;
     const defaultTitle='Radar de Mobilizações';
@@ -88,13 +104,13 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
     for(const item of metaDefinitions){
       const attribute=item[0];
       const key=item[1];
-      const content=item[2];
+      const metaContent=item[2];
       const selector='meta['+attribute+'="'+key+'"]';
       const existing=document.head.querySelector<HTMLMetaElement>(selector);
       previousMeta.set(selector,{element:existing,had:Boolean(existing),content:existing?.content||''});
       const meta=existing||document.createElement('meta');
       meta.setAttribute(attribute,key);
-      meta.content=content;
+      meta.content=metaContent;
       if(!existing)document.head.appendChild(meta);
     }
     const canonical=document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
@@ -116,12 +132,63 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
     };
   },[event]);
 
+  const handleAttendance=async()=>{
+    if(!event?.db_id||attendanceBusy)return;
+    setAttendanceBusy(true);
+    setAttendanceError('');
+    try{
+      const next=await toggleEventAttendance(event.db_id);
+      setAttendance(next);
+    }catch(error){
+      const message=error instanceof Error?error.message:'Não foi possível atualizar sua presença.';
+      setAttendanceError(message);
+    }finally{
+      setAttendanceBusy(false);
+    }
+  };
+
   if(!event)return <Navigate to="/"/>;
+
   const ss=sources.filter(s=>event.source_ids.includes(s.id));
   const directionsQuery=[event.address,event.venue,event.city,event.state,'Brasil'].filter(Boolean).join(', ');
   const directionsUrl='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(directionsQuery);
 
-  return <div className="container detail-page"><Link to="/" className="back-link">← Voltar para o radar</Link><div className="detail-grid"><div className="detail-main"><div className="detail-state-head"><div><div className="eyebrow">{event.type} · {event.state||'Brasil'}</div><p className="detail-location">{event.city}{event.state?', '+event.state:''}</p></div></div><h1>{event.title}</h1><div className="detail-meta"><div>📅 {fmtDate(event.date)}</div><div>🕐 {event.time_label||event.time||'Horário não informado'}</div><div>📍 {event.venue}</div>{event.address&&<div>⌖ {event.address}</div>}</div><a className="button ghost directions-button" href={directionsUrl} target="_blank" rel="noreferrer"><MapPinned size={17}/>Como chegar</a>{event.notes&&<div className={event.status==='warning'?'callout warning':'callout info'}><Info size={20}/><span>{event.notes}</span></div>}{event.image_url&&<PosterActions event={event}/>}<h2>Fontes</h2>{ss.length?<div className="source-list">{ss.map(s=><a className="source-item" key={s.id} href={s.url} target="_blank" rel="noreferrer"><div><strong>{s.account_name}</strong><small>{s.account_handle??s.platform}</small></div><ExternalLink size={17}/></a>)}</div>:<div className="empty-source">As fontes deste evento ainda não foram carregadas.</div>}</div><aside className="detail-side"><div className="status-card"><div className="status-icon"><CheckCircle2/></div><h3>Rastreabilidade</h3><p>O evento foi incluído com base em publicações e materiais de origem identificados na pesquisa editorial.</p></div><div className="share-card"><strong>Encontrou alguma atualização?</strong><p>Avise no chat. Um administrador revisará a sugestão antes de ela alterar o radar público.</p><Link className="button primary" to="/chat"><MessageCircle size={17}/>Enviar atualização</Link></div></aside></div></div>
+  return <div className="container detail-page">
+    <Link to="/" className="back-link">← Voltar para o radar</Link>
+    <div className="detail-grid">
+      <div className="detail-main">
+        <div className="detail-state-head">
+          <div><div className="eyebrow">{event.type} · {event.state||'Brasil'}</div><p className="detail-location">{event.city}{event.state?', '+event.state:''}</p></div>
+        </div>
+        <h1>{event.title}</h1>
+        <div className="detail-meta">
+          <div>📅 {fmtDate(event.date)}</div>
+          <div>🕐 {event.time_label||event.time||'Horário não informado'}</div>
+          <div>📍 {event.venue}</div>
+          {event.address&&<div>⌖ {event.address}</div>}
+        </div>
+        <div className="detail-attendance">
+          <div className="detail-participants">
+            <Users size={20}/>
+            <div><strong>{formatParticipants(attendance.count)}</strong><span> participante{attendance.count===1?'':'s'}</span></div>
+          </div>
+          <button type="button" className={attendance.attending?'going-button active':'going-button'} onClick={handleAttendance} disabled={!event.db_id||attendanceBusy} aria-pressed={attendance.attending}>
+            {attendance.attending?<Check size={16}/>:<Users size={16}/>} {attendanceBusy?'Atualizando…':attendance.attending?'Eu vou':'Eu Vou'}
+          </button>
+        </div>
+        {attendanceError&&<div className="callout warning"><Info size={18}/><span>{attendanceError}</span></div>}
+        <a className="button ghost directions-button" href={directionsUrl} target="_blank" rel="noreferrer"><MapPinned size={17}/>Como chegar</a>
+        {event.notes&&<div className={event.status==='warning'?'callout warning':'callout info'}><Info size={20}/><span>{event.notes}</span></div>}
+        {event.image_url&&<PosterActions event={event}/>}
+        <h2>Fontes</h2>
+        {ss.length?<div className="source-list">{ss.map(s=><a className="source-item" key={s.id} href={s.url} target="_blank" rel="noreferrer"><div><strong>{s.account_name}</strong><small>{s.account_handle??s.platform}</small></div><ExternalLink size={17}/></a>)}</div>:<div className="empty-source">As fontes deste evento ainda não foram carregadas.</div>}
+      </div>
+      <aside className="detail-side">
+        <div className="status-card"><div className="status-icon"><CheckCircle2/></div><h3>Rastreabilidade</h3><p>O evento foi incluído com base em publicações e materiais de origem identificados na pesquisa editorial.</p></div>
+        <div className="share-card"><strong>Encontrou alguma atualização?</strong><p>Avise no chat. Um administrador revisará a sugestão antes de ela alterar o radar público.</p><Link className="button primary" to="/chat"><MessageCircle size={17}/>Enviar atualização</Link></div>
+      </aside>
+    </div>
+  </div>
 }
 
 function CalendarPage({events}:{events:MobilizationEvent[]}){

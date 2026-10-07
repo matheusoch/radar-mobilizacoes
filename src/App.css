@@ -171,3 +171,5 @@ button,input,select,textarea{box-sizing:border-box;max-width:100%}
 .share-help{margin:11px 0 0;color:var(--muted);font-size:11px;line-height:1.5}
 @media(max-width:900px){.share-builder-layout{grid-template-columns:1fr}.share-preview-panel{position:static}.share-event-list{max-height:460px}}
 @media(max-width:620px){.share-builder-heading{align-items:flex-start;flex-direction:column}.share-counter{justify-items:start}.share-builder-layout{gap:14px}.share-picker,.share-preview-panel{padding:14px}.share-event{grid-template-columns:auto minmax(0,1fr)}.share-event-time{grid-column:2}.share-canvas-wrap{max-height:none}.share-actions{grid-template-columns:1fr}.share-actions .button:first-child{grid-column:auto}}
+
+.share-event-type{color:var(--accent)!important;font-weight:800}

@@ -2,7 +2,7 @@ import {useEffect,useMemo,useState} from 'react';
 import type {ChangeEvent,FormEvent,ReactNode} from 'react';
 import React from 'react';
 import {Link,Navigate,Route,Routes,useLocation,useNavigate,useParams} from 'react-router-dom';
-import {CalendarDays,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search,BarChart3,Eye,KeyRound,Users} from 'lucide-react';
+import {CalendarDays,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search,BarChart3,Eye,KeyRound,Users,ChevronLeft,ChevronRight,Share2} from 'lucide-react';
 import './App.css';
 import EventCard from './components/EventCard';
 import Filters,{type FiltersState} from './components/Filters';
@@ -30,7 +30,7 @@ class AppErrorBoundary extends React.Component<{children:ReactNode},{error:Error
   componentDidCatch(error:Error){console.error('Radar runtime error',error);}
   render(){
     if(this.state.error){
-      return <div className="loading"><div className="empty"><Info/><h2>O Radar encontrou um erro.</h2><p>{this.state.error.message||'Erro inesperado ao renderizar esta página.'}</p><button className="button primary" onClick={()=>window.location.reload()}><RefreshCw size={16}/>Recarregar</button></div></div>;
+      return <div className="loading"><div className="empty"><Info/><h2>A Agenda encontrou um erro.</h2><p>{this.state.error.message||'Erro inesperado ao renderizar esta página.'}</p><button className="button primary" onClick={()=>window.location.reload()}><RefreshCw size={16}/>Recarregar</button></div></div>;
     }
     return this.props.children;
   }
@@ -44,7 +44,7 @@ function formatParticipants(count:number){if(count>=10000)return (count/1000).to
 
 function Layout({children}:{children:ReactNode}){
   const[open,setOpen]=useState(false);
-  return <div className="app-shell"><header className="site-header"><div className="container nav"><Link to="/" className="brand" onClick={()=>setOpen(false)}><span className="brand-mark"><img src="/agenda-icon-v2.svg" alt="" width="30" height="30" /></span><span>Agenda de Mobilizações</span></Link><button className="mobile-menu" onClick={()=>setOpen(!open)} aria-label="Abrir menu">{open?<X/>:<Menu/>}</button><nav className={open?'nav-links nav-open':'nav-links'}><Link to="/">Radar</Link><Link to="/calendario">Calendário</Link><Link to="/mapa">Mapa</Link><Link to="/chat">Chat</Link><Link to="/sobre">Sobre</Link><Link className="admin-link" to="/admin">Admin</Link></nav></div></header><main>{children}</main><footer className="footer"><div className="container footer-inner"><span>Iniciativa independente · informações com fontes rastreáveis.</span><span>Não oficial · confira alterações antes de sair.</span><span>O Radar é independente; a estrela vermelha é identidade visual do projeto, não uma representação oficial do PT.</span></div></footer></div>
+  return <div className="app-shell"><header className="site-header"><div className="container nav"><Link to="/" className="brand" onClick={()=>setOpen(false)}><span className="brand-mark"><img src="/agenda-icon-v2.svg" alt="" width="30" height="30" /></span><span>Agenda de Mobilizações</span></Link><button className="mobile-menu" onClick={()=>setOpen(!open)} aria-label="Abrir menu">{open?<X/>:<Menu/>}</button><nav className={open?'nav-links nav-open':'nav-links'}><Link to="/">Radar</Link><Link to="/calendario">Calendário</Link><Link to="/mapa">Mapa</Link><Link to="/chat">Chat</Link><Link to="/sobre">Sobre</Link><Link className="admin-link" to="/admin">Admin</Link></nav></div></header><main>{children}</main><footer className="footer"><div className="container footer-inner"><span>Iniciativa independente · informações com fontes rastreáveis.</span><span>Não oficial · confira alterações antes de sair.</span><span>A Agenda é independente; a estrela vermelha é identidade visual do projeto, não uma representação oficial do PT.</span></div></footer></div>
 }
 
 function Home({events}:{events:MobilizationEvent[]}){
@@ -78,7 +78,7 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
   const event=events.find(e=>e.id===id);
   const[attendance,setAttendance]=useState({count:0,attending:false});
   const[attendanceBusy,setAttendanceBusy]=useState(false);
-  const[attendanceError,setAttendanceError]=useState('');
+  const[attendanceError,setAttendanceError]=useState('');const[shareFeedback,setShareFeedback]=useState('');
 
   useEffect(()=>{
     if(!event?.db_id){
@@ -145,6 +145,8 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
     };
   },[event]);
 
+  const handleShare=async()=>{const url=window.location.href;const shareText=(event?.title||'Mobilização')+' · '+(event?.city||'')+(event?.state?', '+event.state:'');try{if(navigator.share){await navigator.share({title:event?.title||'Agenda de Mobilizações',text:shareText,url});return}if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(url);setShareFeedback('Link copiado.');window.setTimeout(()=>setShareFeedback(''),2200);return}setShareFeedback('Copie o endereço desta página para compartilhar.')}catch(error){if(error instanceof DOMException&&error.name==='AbortError')return;setShareFeedback('Não foi possível compartilhar automaticamente.')}};
+
   const handleAttendance=async()=>{
     if(!event?.db_id||attendanceBusy)return;
     setAttendanceBusy(true);
@@ -197,6 +199,7 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
         {ss.length?<div className="source-list">{ss.map(s=><a className="source-item" key={s.id} href={s.url} target="_blank" rel="noreferrer"><div><strong>{s.account_name}</strong><small>{s.account_handle??s.platform}</small></div><ExternalLink size={17}/></a>)}</div>:<div className="empty-source">As fontes deste evento ainda não foram carregadas.</div>}
       </div>
       <aside className="detail-side">
+        <div className="share-card quick-share-card"><strong>Compartilhe este evento</strong><p>Envie a página diretamente para WhatsApp, Telegram ou outro aplicativo do seu celular.</p><button type="button" className="button primary" onClick={handleShare}><Share2 size={17}/>Compartilhar evento</button>{shareFeedback&&<small className="share-feedback" aria-live="polite">{shareFeedback}</small>}</div>
         <div className="status-card"><div className="status-icon"><CheckCircle2/></div><h3>Rastreabilidade</h3><p>O evento foi incluído com base em publicações e materiais de origem identificados na pesquisa editorial.</p></div>
         <div className="share-card"><strong>Encontrou alguma atualização?</strong><p>Avise no chat. Um administrador revisará a sugestão antes de ela alterar o radar público.</p><Link className="button primary" to="/chat"><MessageCircle size={17}/>Enviar atualização</Link></div>
       </aside>
@@ -205,14 +208,23 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
 }
 
 function CalendarPage({events}:{events:MobilizationEvent[]}){
-  const[query,setQuery]=useState('');
   const publicEvents=events.filter(e=>e.public);
+  const availableMonths=[...new Set(publicEvents.map(e=>e.date.slice(0,7)))].sort();
+  const currentMonth=new Date().toISOString().slice(0,7);
+  const initialMonth=availableMonths.includes(currentMonth)?currentMonth:(availableMonths[0]||currentMonth);
+  const[selectedMonth,setSelectedMonth]=useState(initialMonth);
+  const[query,setQuery]=useState('');
+  useEffect(()=>{if(availableMonths.length&&!availableMonths.includes(selectedMonth))setSelectedMonth(initialMonth)},[events]);
+  const monthDate=new Date(selectedMonth+'-01T12:00:00');
+  const monthLabel=monthDate.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  const monthIndex=availableMonths.indexOf(selectedMonth);
+  const canPrev=monthIndex>0;const canNext=monthIndex>=0&&monthIndex<availableMonths.length-1;
   const normalized=query.trim().toLowerCase();
-  const filtered=publicEvents.filter(e=>!normalized||`${e.city} ${e.state||''} ${e.title} ${e.venue}`.toLowerCase().includes(normalized));
+  const filtered=publicEvents.filter(e=>e.date.slice(0,7)===selectedMonth&&(!normalized||(e.city+' '+(e.state||'')+' '+e.title+' '+e.venue).toLowerCase().includes(normalized)));
   const groups=Object.entries(filtered.reduce((a:Record<string,MobilizationEvent[]>,e)=>{(a[e.date]??=[]).push(e);return a},{})).sort(([a],[b])=>a.localeCompare(b));
-  return <div className="container page"><div className="eyebrow">CALENDÁRIO</div><h1>Outubro 2026</h1><p className="page-lead">Encontre rapidamente uma cidade, estado, local ou evento.</p><div className="calendar-search"><Search size={19}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar cidade, estado, local ou evento..." aria-label="Buscar no calendário"/>{query&&<button type="button" onClick={()=>setQuery('')} aria-label="Limpar busca">×</button>}</div>{query&&<div className="calendar-result-count">{filtered.length} evento{filtered.length===1?'':'s'} encontrado{filtered.length===1?'':'s'}</div>}{groups.map(([date,items])=><section className="day-group" key={date}><div className="day-label"><strong>{new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'}).replace('.','')}</strong><span>{items.length} evento{items.length===1?'':'s'}</span></div><div className="day-events">{items.sort((a,b)=>(a.time||'99:99').localeCompare(b.time||'99:99')).map(e=><Link className="calendar-item" to={`/evento/${e.id}`} key={e.id}><div className="calendar-time">{e.time_label||e.time||'—'}</div><div><strong>{e.city} · {e.state||'—'}</strong><span>{e.venue}</span></div><span className="calendar-type">{e.type}</span></Link>)}</div></section>)}{!groups.length&&<div className="empty calendar-empty"><Search/><h3>Nenhum evento encontrado</h3><p>Tente o nome da cidade, a UF ou parte do nome do evento.</p></div>}</div>}
-function MapPage({events}:{events:MobilizationEvent[]}){return <div className="container page"><div className="eyebrow">MAPA</div><h1>Mobilizações no Brasil</h1><p className="page-lead">Clique nos pontos para abrir cada evento. Nesta primeira versão o mapa usa a cidade como referência.</p><MapView events={events.filter(e=>e.public)}/></div>}
-function AboutPage(){return <div className="container page narrow"><div className="eyebrow">SOBRE</div><h1>Uma agenda pública com rastreabilidade.</h1><p className="page-lead">A proposta do Radar é transformar listas espalhadas em uma agenda navegável, fácil de conferir e de atualizar.</p><div className="about-grid"><div><h2>Como funciona</h2><p>Cada evento tem data, horário, cidade, local, tipo e links para as fontes usadas na conferência.</p></div><div><h2>O que “verificado” significa</h2><p>Os campos essenciais foram comparados com uma ou mais publicações ou fontes identificáveis. Isso não substitui a checagem no dia do evento.</p></div><div><h2>Independente</h2><p>Este projeto não é oficial de campanha, partido, governo ou organização.</p></div><div><h2>Base editorial</h2><p>A primeira carga foi montada a partir das threads, pôsteres e fontes complementares identificadas na pesquisa.</p></div></div></div>}
+  return <div className="container page"><div className="eyebrow">CALENDÁRIO</div><div className="calendar-heading"><div><h1>{monthLabel.charAt(0).toUpperCase()+monthLabel.slice(1)}</h1><p className="page-lead">Navegue pelos meses com eventos e encontre rapidamente uma cidade, estado, local ou evento.</p></div><div className="calendar-nav" aria-label="Navegação do calendário"><button type="button" className="button ghost" onClick={()=>canPrev&&setSelectedMonth(availableMonths[monthIndex-1])} disabled={!canPrev} aria-label="Mês anterior"><ChevronLeft size={17}/></button><button type="button" className="button ghost" onClick={()=>setSelectedMonth(initialMonth)}>Hoje</button><button type="button" className="button ghost" onClick={()=>canNext&&setSelectedMonth(availableMonths[monthIndex+1])} disabled={!canNext} aria-label="Próximo mês"><ChevronRight size={17}/></button></div></div><div className="calendar-search"><Search size={19}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar cidade, estado, local ou evento..." aria-label="Buscar no calendário"/>{query&&<button type="button" onClick={()=>setQuery('')} aria-label="Limpar busca">×</button>}</div><div className="calendar-result-count">{filtered.length} evento{filtered.length===1?'':'s'} em {monthLabel}</div>{groups.map(([date,items])=><section className="day-group" key={date}><div className="day-label"><strong>{new Date(date+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'}).replace('.','')}</strong><span>{items.length} evento{items.length===1?'':'s'}</span></div><div className="day-events">{items.sort((a,b)=>(a.time||'99:99').localeCompare(b.time||'99:99')).map(e=><Link className="calendar-item" to={'/evento/'+e.id} key={e.id}><div className="calendar-time">{e.time_label||e.time||'—'}</div><div><strong>{e.city} · {e.state||'—'}</strong><span>{e.venue}</span></div><span className="calendar-type">{e.type}</span></Link>)}</div></section>)}{!groups.length&&<div className="empty calendar-empty"><Search/><h3>Nenhum evento encontrado</h3><p>{query?'Tente outro termo de busca.':'Não há eventos públicos neste mês.'}</p></div>}</div>
+}function MapPage({events}:{events:MobilizationEvent[]}){return <div className="container page"><div className="eyebrow">MAPA</div><h1>Mobilizações no Brasil</h1><p className="page-lead">Filtre por estado ou cidade e clique nos pontos para abrir cada evento. As coordenadas são as cadastradas editorialmente para cada mobilização.</p><MapView events={events.filter(e=>e.public)}/></div>}
+function AboutPage(){return <div className="container page narrow"><div className="eyebrow">SOBRE</div><h1>Uma agenda pública com rastreabilidade.</h1><p className="page-lead">A proposta da Agenda é transformar listas espalhadas em uma agenda navegável, fácil de conferir e de atualizar.</p><div className="about-grid"><div><h2>Como funciona</h2><p>Cada evento tem data, horário, cidade, local, tipo e links para as fontes usadas na conferência.</p></div><div><h2>O que “verificado” significa</h2><p>Os campos essenciais foram comparados com uma ou mais publicações ou fontes identificáveis. Isso não substitui a checagem no dia do evento.</p></div><div><h2>Independente</h2><p>Este projeto não é oficial de campanha, partido, governo ou organização.</p></div><div><h2>Base editorial</h2><p>A primeira carga foi montada a partir das threads, pôsteres e fontes complementares identificadas na pesquisa.</p></div></div></div>}
 
 function AuthPage(){
   const[mode,setMode]=useState<'login'|'signup'|'recover'|'reset'>('login');

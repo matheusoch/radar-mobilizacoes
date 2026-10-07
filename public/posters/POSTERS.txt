@@ -1,0 +1,2 @@
+Poster assets extracted from the supplied 33-page X thread PDF.
+These files are local app assets under /posters/ and are referenced by events.image_url.

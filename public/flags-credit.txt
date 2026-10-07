@@ -1,0 +1,3 @@
+State flag visuals are loaded from the MIT-licensed br-state-flags project by arthurreira.
+Project: https://github.com/arthurreira/br-state-flags
+Package: https://www.npmjs.com/package/br-state-flags

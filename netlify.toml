@@ -5,3 +5,7 @@ publish = "dist"
 from = "/*"
 to = "/index.html"
 status = 200
+
+[[edge_functions]]
+function = "social-preview"
+path = "/evento/*"

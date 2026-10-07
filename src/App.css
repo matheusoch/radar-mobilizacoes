@@ -114,3 +114,13 @@ button,input,select,textarea{box-sizing:border-box;max-width:100%}
 @media(max-width:940px){.chat-layout{grid-template-columns:1fr}}
 @media(max-width:760px){.container{width:calc(100% - 24px)}.map{height:560px}}
 @media(max-width:560px){.map{height:480px}.map-note{font-size:11px;line-height:1.4}}
+
+
+/* Proteções finais de responsividade */
+.event-card,.filters-wrap,.hero-card,.status-card,.share-card,.poster-section,.chat-card,.chat-login-card,.submission-card,.moderation-note,.analytics-panel,.admin-event-filter,.edit-card,.source-picker{overflow-wrap:anywhere}
+.calendar-item,.source-item,.admin-row,.review-card,.chat-review{min-width:0}
+.calendar-item>*,.source-item>*{min-width:0}
+.map{min-height:360px}
+@media(max-width:760px){.map{height:560px}}
+@media(max-width:560px){.map{height:480px}.detail-page{padding-top:32px}.detail-grid{gap:26px}.detail-meta{padding:18px 0;margin:18px 0}.detail-attendance{align-items:stretch;flex-direction:column}.detail-attendance .going-button{width:100%}.source-item{align-items:flex-start}.source-item svg{flex:none}.footer-inner{align-items:flex-start}.hero-card{padding:22px}.chat-messages{padding:12px}.chat-message-head{align-items:flex-start;flex-direction:column;gap:5px}}
+@media(max-width:360px){.container{width:calc(100% - 20px)}.hero h1,.page h1,.detail-main h1{font-size:36px}.button{padding-left:13px;padding-right:13px}.calendar-nav{grid-template-columns:38px minmax(0,1fr) 38px}.calendar-nav .button{padding-left:6px;padding-right:6px}.map{height:430px}}

@@ -280,16 +280,55 @@ function ChatPage(){
 }
 
 function AdminPage(){
+  const db=supabase;
   const[user,setUser]=useState<any>(null);const[loading,setLoading]=useState(true);const[authorized,setAuthorized]=useState(false);const[events,setEvents]=useState<MobilizationEvent[]>([]);const[sources,setSources]=useState<EventSource[]>([]);const[submissions,setSubmissions]=useState<Submission[]>([]);const[chatPending,setChatPending]=useState<ChatMessage[]>([]);const[editing,setEditing]=useState<MobilizationEvent|null>(null);const[posterFile,setPosterFile]=useState<File|null>(null);const[posterPreview,setPosterPreview]=useState<string|null>(null);const[message,setMessage]=useState('');const[saving,setSaving]=useState(false);const[submitting,setSubmitting]=useState<string|null>(null);const[subPosterUrls,setSubPosterUrls]=useState<Record<string,string>>({});const[adminQuery,setAdminQuery]=useState('');const[adminDate,setAdminDate]=useState('');const[adminStatus,setAdminStatus]=useState('');const[analyticsRows,setAnalyticsRows]=useState<PageViewRow[]>([]);
   const blank=():MobilizationEvent=>({id:'',title:'',type:'Manifestação',date:new Date().toISOString().slice(0,10),time:'18:00',time_label:'',city:'',state:'',venue:'',status:'pending',public:false,source_ids:[ADMIN_SOURCE_FALLBACK],lat:null,lng:null,image_url:null,notes:''});
-  const loadAdmin=async()=>{if(!supabase||!user)return;const[{data:membership},{data:subData},{data:chatData}]=await Promise.all([supabase.from('admin_users').select('user_id').eq('user_id',user.id).maybeSingle(),supabase.from('event_submissions').select('*').eq('status','pending').order('created_at',{ascending:false}),supabase.from('chat_messages').select('*').eq('status','pending').order('created_at',{ascending:false})]);if(!membership){setAuthorized(false);setLoading(false);return}setAuthorized(true);const[e,s]=await Promise.all([getAdminEvents(),getSources()]);setEvents(e);setSources(s);setSubmissions((subData||[]) as Submission[]);setChatPending((chatData||[]) as ChatMessage[]);const cutoff=new Date(Date.now()-30*864e5).toISOString();const{data:analyticsData}=await db.from('page_views').select('path,event_id,visitor_id,created_at').gte('created_at',cutoff).order('created_at',{ascending:false}).limit(10000);setAnalyticsRows((analyticsData||[]) as PageViewRow[]);for(const item of (subData||[]) as Submission[]){if(item.poster_path&&!subPosterUrls[item.id]){const{data}=await supabase.storage.from(SUBMISSION_STORAGE_BUCKET).createSignedUrl(item.poster_path,3600);if(data?.signedUrl)setSubPosterUrls(prev=>({...prev,[item.id]:data.signedUrl}))}}setLoading(false)};
+  const loadAdmin=async()=>{
+    if(!db||!user)return;
+    try{
+      const[{data:membership,error:membershipError},{data:subData,error:subError},{data:chatData,error:chatError}]=await Promise.all([
+        db.from('admin_users').select('user_id').eq('user_id',user.id).maybeSingle(),
+        db.from('event_submissions').select('*').eq('status','pending').order('created_at',{ascending:false}),
+        db.from('chat_messages').select('*').eq('status','pending').order('created_at',{ascending:false})
+      ]);
+      if(membershipError)throw membershipError;
+      if(!membership){
+        setAuthorized(false);
+        setMessage('Sua conta está autenticada, mas ainda não está vinculada como administradora.');
+        setLoading(false);
+        return;
+      }
+      setAuthorized(true);
+      setSubmissions((subData||[]) as Submission[]);
+      setChatPending((chatData||[]) as ChatMessage[]);
+      const[e,s]=await Promise.all([getAdminEvents(),getSources()]);
+      setEvents(e);
+      setSources(s);
+      if(subError)setMessage(subError.message);
+      else if(chatError)setMessage(chatError.message);
+      const cutoff=new Date(Date.now()-30*864e5).toISOString();
+      const{data:analyticsData,error:analyticsError}=await db.from('page_views').select('path,event_id,visitor_id,created_at').gte('created_at',cutoff).order('created_at',{ascending:false}).limit(10000);
+      if(analyticsError) setMessage(analyticsError.message);
+      setAnalyticsRows((analyticsData||[]) as PageViewRow[]);
+      for(const item of (subData||[]) as Submission[]){
+        if(item.poster_path&&!subPosterUrls[item.id]){
+          const{data}=await db.storage.from(SUBMISSION_STORAGE_BUCKET).createSignedUrl(item.poster_path,3600);
+          if(data?.signedUrl)setSubPosterUrls(prev=>({...prev,[item.id]:data.signedUrl}));
+        }
+      }
+    }catch(error){
+      setAuthorized(false);
+      setMessage(error instanceof Error?error.message:'Não foi possível carregar o painel administrativo.');
+    }finally{
+      setLoading(false);
+    }
+  };
   useEffect(()=>{if(!supabase){setLoading(false);return}supabase.auth.getUser().then(({data})=>{setUser(data.user);setLoading(false)});const{data}=supabase.auth.onAuthStateChange((_e,s)=>setUser(s?.user??null));return()=>data.subscription.unsubscribe()},[]);
   useEffect(()=>{if(!user)return;loadAdmin();const id=window.setInterval(loadAdmin,10000);return()=>window.clearInterval(id)},[user]);
   if(loading)return <div className="loading"><div className="spinner"/>Carregando painel…</div>;
   if(!supabase)return <div className="container page narrow"><div className="eyebrow">ADMIN</div><h1>Painel editorial</h1><div className="callout warning"><Info/><span>Conecte o Supabase pelo .env para ativar o painel.</span></div></div>;
   if(!user)return <div className="container page narrow"><div className="eyebrow">ADMIN</div><h1>Entrar</h1><p className="page-lead">Use a conta do Supabase marcada como administradora.</p><Link className="button primary" to="/entrar?next=/admin"><LogIn size={17}/>Entrar</Link></div>;
   if(!authorized)return <div className="container page narrow"><div className="eyebrow">ADMIN</div><h1>Conta sem permissão.</h1><p className="page-lead">A conta está autenticada, mas ainda não foi vinculada à tabela de administradores.</p><button className="button ghost" onClick={()=>db.auth.signOut()}>Sair</button></div>;
-  const db=supabase;
   const save=async()=>{if(!editing)return;setSaving(true);setMessage('');try{const baseSlug=slugify(`${editing.date}-${editing.city}-${editing.title}`)||crypto.randomUUID();const payload={slug:editing.db_id?editing.id:baseSlug,title:editing.title,type:editing.type,date:editing.date,time:editing.time||null,time_label:editing.time_label||null,city:editing.city,state:editing.state,venue:editing.venue,address:editing.address||null,status:editing.status,is_public:editing.public,lat:editing.lat??null,lng:editing.lng??null,image_url:editing.image_url||null,notes:editing.notes||null};let savedId:string;let savedSlug:string;if(editing.db_id){const{data,error}=await db.from('events').update(payload).eq('id',editing.db_id).select().single();if(error)throw error;savedId=data.id;savedSlug=data.slug}else{const{data,error}=await db.from('events').insert(payload).select().single();if(error)throw error;savedId=data.id;savedSlug=data.slug}
       if(posterFile){if(posterFile.size>8*1024*1024)throw new Error('O pôster deve ter no máximo 8 MB.');const ext=(posterFile.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');const path=`events/${savedId}-${Date.now()}.${ext}`;const{error:upErr}=await db.storage.from(ADMIN_STORAGE_BUCKET).upload(path,posterFile,{upsert:true,contentType:posterFile.type});if(upErr)throw upErr;const{data:pub}=db.storage.from(ADMIN_STORAGE_BUCKET).getPublicUrl(path);const{error:urlErr}=await db.from('events').update({image_url:pub.publicUrl}).eq('id',savedId);if(urlErr)throw urlErr;editing.image_url=pub.publicUrl}
       await db.from('event_sources').delete().eq('event_id',savedId);const ids=editing.source_ids.length?editing.source_ids:[ADMIN_SOURCE_FALLBACK];const{error:srcErr}=await db.from('event_sources').insert(ids.map(source_id=>({event_id:savedId,source_id})));if(srcErr)throw srcErr;

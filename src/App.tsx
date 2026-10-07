@@ -44,7 +44,7 @@ function formatParticipants(count:number){if(count>=10000)return (count/1000).to
 
 function Layout({children}:{children:ReactNode}){
   const[open,setOpen]=useState(false);
-  return <div className="app-shell"><header className="site-header"><div className="container nav"><Link to="/" className="brand" onClick={()=>setOpen(false)}><span className="brand-mark"><img src="/radar-icon-32.png" alt="" width="30" height="30" /></span><span>Radar de Mobilizações</span></Link><button className="mobile-menu" onClick={()=>setOpen(!open)} aria-label="Abrir menu">{open?<X/>:<Menu/>}</button><nav className={open?'nav-links nav-open':'nav-links'}><Link to="/">Radar</Link><Link to="/calendario">Calendário</Link><Link to="/mapa">Mapa</Link><Link to="/chat">Chat</Link><Link to="/sobre">Sobre</Link><Link className="admin-link" to="/admin">Admin</Link></nav></div></header><main>{children}</main><footer className="footer"><div className="container footer-inner"><span>Iniciativa independente · informações com fontes rastreáveis.</span><span>Não oficial · confira alterações antes de sair.</span><span>O Radar é independente; a estrela vermelha é identidade visual do projeto, não uma representação oficial do PT.</span></div></footer></div>
+  return <div className="app-shell"><header className="site-header"><div className="container nav"><Link to="/" className="brand" onClick={()=>setOpen(false)}><span className="brand-mark"><img src="/agenda-icon.svg" alt="" width="30" height="30" /></span><span>Agenda de Mobilizações</span></Link><button className="mobile-menu" onClick={()=>setOpen(!open)} aria-label="Abrir menu">{open?<X/>:<Menu/>}</button><nav className={open?'nav-links nav-open':'nav-links'}><Link to="/">Radar</Link><Link to="/calendario">Calendário</Link><Link to="/mapa">Mapa</Link><Link to="/chat">Chat</Link><Link to="/sobre">Sobre</Link><Link className="admin-link" to="/admin">Admin</Link></nav></div></header><main>{children}</main><footer className="footer"><div className="container footer-inner"><span>Iniciativa independente · informações com fontes rastreáveis.</span><span>Não oficial · confira alterações antes de sair.</span><span>O Radar é independente; a estrela vermelha é identidade visual do projeto, não uma representação oficial do PT.</span></div></footer></div>
 }
 
 function Home({events}:{events:MobilizationEvent[]}){
@@ -93,10 +93,10 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
 
   useEffect(()=>{
     if(!event)return;
-    const defaultTitle='Radar de Mobilizações';
+    const defaultTitle='Agenda de Mobilizações';
     const defaultDescription='Agenda pública e rastreável de mobilizações no Brasil.';
-    const defaultImage=window.location.origin+'/radar-icon-512.png';
-    const nextTitle=event.title+' · '+event.city+(event.state?', '+event.state:'')+' | Radar de Mobilizações';
+    const defaultImage=window.location.origin+'/agenda-icon.svg';
+    const nextTitle=event.title+' · '+event.city+(event.state?', '+event.state:'')+' | Agenda de Mobilizações';
     const nextDescription=event.title+' · '+event.city+(event.state?', '+event.state:'')+'. '+(event.time_label||event.time||'Horário não informado')+' · '+event.venue+'.';
     const nextImage=event.image_url||defaultImage;
     const canonicalUrl=window.location.href.split('#')[0];

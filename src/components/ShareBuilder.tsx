@@ -4,7 +4,7 @@ import type {MobilizationEvent} from '../types';
 
 const MAX_EVENTS=5;
 const CARD_WIDTH=1080;
-const CM=41.85;
+const CM=103.5/2.47;
 const OUTER_MARGIN_Y=3.67*CM;
 const TEMPLATE_GAP=1.59*CM;
 const CARD_SIDE_MARGIN=2.47*CM;

@@ -1,259 +1,332 @@
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {CalendarDays,Check,Download,Image as ImageIcon,Link as LinkIcon,Share2,Star,X} from 'lucide-react';
 import type {MobilizationEvent} from '../types';
 
 const MAX_EVENTS=5;
-const W=1080;
+const CARD_WIDTH=1080;
+const CARD_HEIGHT=1378;
 const BG='#ba1414';
 const PANEL='#951010';
-const WHITE='#fff';
+const WHITE='#ffffff';
 const YELLOW='#f7db26';
 
-const HEADER='/agenda-header-exact.png';
-const HEADER_W=618;
-const HEADER_H=195;
-const FOOTER='/agenda-card-footer-exact.png';
-const ICON='/agenda-card-icon.png';
-
 function dateObj(date:string){return new Date(date+'T12:00:00');}
+
+function getTimeInfo(event:MobilizationEvent){
+  const raw=(event.time_label||event.time||'').trim();
+  const matches=[...raw.matchAll(/\d{1,2}:\d{2}/g)].map(match=>match[0]);
+  if(matches.length<=1){
+    return {primary:matches[0]||'—',detail:''};
+  }
+  const detail=raw.replace(matches[0],'').replace(/\s*\/\s*/g,' · ').replace(/\s+/g,' ').replace(/^[\s·\\-–—]+/,'').trim();
+  return {
+    primary:matches[0],
+    detail,
+  };
+}
+
+function formatTime(event:MobilizationEvent){
+  return getTimeInfo(event).primary;
+}
 
 function displayLocation(event:MobilizationEvent){
   return [event.city,event.state].filter(Boolean).join(' ');
 }
 
-function timeInfo(event:MobilizationEvent){
-  const raw=(event.time_label||event.time||'').trim();
-  const times=[...raw.matchAll(/\d{1,2}:\d{2}/g)].map(m=>m[0]);
-  if(!times.length)return {primary:'—',detail:''};
-  if(times.length===1)return {primary:times[0],detail:''};
-  const detail=raw.replace(times[0],'').replace(/\s*\/\s*/g,' · ').replace(/\s+/g,' ').replace(/^[\s·\\-–—]+/,'').trim();
-  return {primary:times[0],detail};
-}
-
 function formatDateLabel(date:string){
   const d=dateObj(date);
-  return d.toLocaleDateString('pt-BR',{weekday:'long'}).replace('-feira','').toUpperCase()+' - '+d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  const weekday=d.toLocaleDateString('pt-BR',{weekday:'long'}).replace('-feira','').toUpperCase();
+  return weekday+' - '+d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
 }
 
-function escapeXml(value:string){
-  return value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
-}
-
-function measureWrap(text:string,maxChars:number,maxLines=2){
+function wrapLines(ctx:CanvasRenderingContext2D,text:string,maxWidth:number,maxLines=2){
   const words=text.trim().split(/\s+/).filter(Boolean);
   const lines:string[]=[];
   let line='';
   for(const word of words){
     const next=line?line+' '+word:word;
-    if(next.length<=maxChars||!line)line=next;
-    else{lines.push(line);line=word;}
+    if(ctx.measureText(next).width<=maxWidth||!line) line=next;
+    else {lines.push(line);line=word;}
   }
   if(line)lines.push(line);
   if(lines.length<=maxLines)return lines;
+
   const clipped=lines.slice(0,maxLines);
-  clipped[maxLines-1]=clipped[maxLines-1].slice(0,Math.max(1,maxChars-1)).replace(/\s+$/,'')+'…';
+  let last=clipped[maxLines-1];
+  while(ctx.measureText(last+'…').width>maxWidth&&last.length>5)last=last.slice(0,-1);
+  clipped[maxLines-1]=last+'…';
   return clipped;
 }
 
-function fitTitle(text:string,maxChars:number){
-  const sizes=[29,28,27,26,25,24,23,22,21,20];
-  for(const size of sizes){
-    const chars=Math.floor(maxChars*(29/size));
-    const lines=measureWrap(text,chars,2);
-    if(lines.every(line=>line.length<=chars))return {size,lines};
+function fitWrappedText(ctx:CanvasRenderingContext2D,text:string,maxWidth:number,maxLines:number,startSize:number,minSize:number,fontFamily:string){
+  let size=startSize;
+  while(size>=minSize){
+    ctx.font='900 italic '+size+'px '+fontFamily;
+    const lines=wrapLines(ctx,text,maxWidth,maxLines);
+    if(lines.every(line=>ctx.measureText(line).width<=maxWidth))return {size,lines};
+    size-=1;
   }
-  return {size:20,lines:measureWrap(text,Math.floor(maxChars*1.45),2)};
+  ctx.font='900 italic '+minSize+'px '+fontFamily;
+  return {size:minSize,lines:wrapLines(ctx,text,maxWidth,maxLines)};
 }
 
-function fitMeta(text:string,maxChars:number){
-  return measureWrap(text,Math.max(20,maxChars),2);
+function fitSingleLine(ctx:CanvasRenderingContext2D,text:string,maxWidth:number,startSize:number,minSize:number,weight='700'){
+  let size=startSize;
+  while(size>=minSize){
+    ctx.font=weight+' italic '+size+'px "Arial Narrow", Arial, sans-serif';
+    if(ctx.measureText(text).width<=maxWidth)return {size,text};
+    size-=1;
+  }
+  ctx.font=weight+' italic '+minSize+'px "Arial Narrow", Arial, sans-serif';
+  let clipped=text;
+  while(ctx.measureText(clipped+'…').width>maxWidth&&clipped.length>6)clipped=clipped.slice(0,-1);
+  return {size:minSize,text:clipped+'…'};
 }
 
-function escText(text:string){
-  return escapeXml(text);
+function roundRect(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number,r:number){
+  ctx.beginPath();
+  if(typeof ctx.roundRect==='function'){ctx.roundRect(x,y,w,h,r);return;}
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
 }
 
-type CardEvent={
-  event:MobilizationEvent;
-  title:string[];
-  schedule:string[];
-  venue:string[];
-  type:string;
-  rowH:number;
-};
+function pill(ctx:CanvasRenderingContext2D,text:string,x:number,y:number,w:number,h:number,font:string){
+  ctx.fillStyle=WHITE;
+  roundRect(ctx,x,y,w,h,h/2);
+  ctx.fill();
+  ctx.fillStyle=PANEL;
+  ctx.font=font;
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillText(text,x+w/2,y+h/2+1);
+  ctx.textAlign='left';
+  ctx.textBaseline='alphabetic';
+}
 
-function prepareEvent(event:MobilizationEvent,compact:boolean):CardEvent{
-  const ti=timeInfo(event);
-  const titleText=event.title+(displayLocation(event)?' - '+displayLocation(event):'');
-  const title=fitTitle(titleText,compact?47:43);
-  const schedule=ti.detail?fitMeta(ti.detail,compact?48:52):[];
-  const venue=fitMeta(event.venue||'Local não informado',compact?50:54);
-  const type=(event.type||'Mobilização').toUpperCase();
-  const titleLH=title.size+2;
-  const scheduleLH=compact?13:15;
-  const venueLH=compact?15:17;
-  const typeH=compact?15:18;
-  const stack=title.lines.length*titleLH+(schedule.length?schedule.length*scheduleLH+5:0)+venue.length*venueLH+5+typeH;
-  return {event,title:title.lines,schedule,venue,type,rowH:Math.max(compact?82:92,stack+10)};
+function eventMetrics(ctx:CanvasRenderingContext2D,event:MobilizationEvent,maxWidth:number,rowH:number,compact:boolean){
+  const title=fitWrappedText(
+    ctx,
+    event.title+(displayLocation(event)?' - '+displayLocation(event):''),
+    maxWidth,
+    2,
+    compact?24:29,
+    compact?14:20,
+    '"Arial Narrow", Arial, sans-serif'
+  );
+  const timeInfo=getTimeInfo(event);
+  const schedule=timeInfo.detail
+    ? fitSingleLine(ctx,timeInfo.detail,maxWidth,compact?12:14,10,'700')
+    : null;
+  const venue=fitSingleLine(ctx,event.venue||'Local não informado',maxWidth,compact?15:20,11);
+  const type=fitSingleLine(ctx,(event.type||'Mobilização').toUpperCase(),maxWidth,compact?13:17,10,'900');
+
+  const titleHeight=title.lines.length*(title.size+2);
+  const scheduleHeight=schedule?(schedule.size+2):0;
+  const venueHeight=venue.size+2;
+  const typeHeight=type.size+2;
+  const gaps=(schedule?4:0)+3+4;
+  const total=titleHeight+scheduleHeight+venueHeight+typeHeight+gaps;
+
+  // Se a pilha ainda passa da linha disponível, reduzimos a tipografia
+  // em conjunto, preservando duas linhas para títulos longos.
+  if(total>rowH-10){
+    let scale=Math.max(0.70,(rowH-10)/total);
+    const title2=fitWrappedText(
+      ctx,
+      event.title+(displayLocation(event)?' - '+displayLocation(event):''),
+      maxWidth,
+      2,
+      Math.max(14,Math.floor(title.size*scale)),
+      14,
+      '"Arial Narrow", Arial, sans-serif'
+    );
+    const schedule2=timeInfo.detail
+      ? fitSingleLine(ctx,timeInfo.detail,maxWidth,Math.max(10,Math.floor((schedule?.size||12)*scale)),9,'700')
+      : null;
+    const venue2=fitSingleLine(ctx,event.venue||'Local não informado',maxWidth,Math.max(11,Math.floor(venue.size*scale)),10);
+    const type2=fitSingleLine(ctx,(event.type||'Mobilização').toUpperCase(),maxWidth,Math.max(10,Math.floor(type.size*scale)),9,'900');
+    return {title:title2,schedule:schedule2,venue:venue2,type:type2};
+  }
+
+  return {title,schedule,venue,type};
+}
+
+function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:string,headerImage?:HTMLImageElement,panelImage?:HTMLImageElement,footerImage?:HTMLImageElement){
+  const ordered=events.slice().sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
+  const dates=[...new Set(ordered.map(event=>event.date))];
+
+  canvas.width=CARD_WIDTH;
+  canvas.height=CARD_HEIGHT;
+
+  const ctx=canvas.getContext('2d');
+  if(!ctx)return;
+
+  // Fundo externo do template.
+  ctx.fillStyle='#b91414';
+  ctx.fillRect(0,0,CARD_WIDTH,CARD_HEIGHT);
+
+  // Cabeçalho original fornecido.
+  const headerW=618;
+  const headerH=195;
+  const headerX=(CARD_WIDTH-headerW)/2;
+  const headerY=52;
+  if(headerImage&&headerImage.complete){
+    ctx.drawImage(headerImage,headerX,headerY,headerW,headerH);
+  }
+
+  // Retângulo original fornecido, sem reconstruir o fundo arredondado.
+  const panelX=103.5;
+  const panelY=337;
+  const panelW=873;
+  const panelH=953;
+  const panelBottom=panelY+panelH;
+
+  if(panelImage&&panelImage.complete){
+    ctx.drawImage(panelImage,panelX,panelY,panelW,panelH);
+  }else{
+    ctx.fillStyle='#951010';
+    roundRect(ctx,panelX,panelY,panelW,panelH,96);
+    ctx.fill();
+  }
+
+  // Grades do conteúdo dentro do retângulo.
+  const timeX=145;
+  const timeW=150;
+  const contentX=320;
+  const rightInset=50;
+  const maxTextWidth=panelX+panelW-rightInset-contentX;
+
+  const contentTop=377;
+  const footerY=panelBottom-74;
+  const footerReserved=66;
+  const contentBottom=footerY-footerReserved;
+  const availableHeight=contentBottom-contentTop;
+
+  const compact=ordered.length>=4;
+  const dateH=compact?46:52;
+  const dateGap=compact?8:11;
+  const groupGap=compact?12:16;
+  const eventGap=compact?6:9;
+
+  const fixedHeight=
+    dates.length*(dateH+dateGap+groupGap)+
+    Math.max(0,ordered.length-dates.length)*eventGap;
+
+  const computedRow=(availableHeight-fixedHeight)/Math.max(1,ordered.length);
+  const rowH=Math.max(88,computedRow);
+
+  let y=contentTop;
+
+  for(const date of dates){
+    const dayEvents=ordered.filter(event=>event.date===date);
+
+    // O marcador de data fica sempre isolado, antes das linhas dos eventos.
+    const dateW=282;
+    pill(
+      ctx,
+      formatDateLabel(date),
+      (CARD_WIDTH-dateW)/2,
+      y,
+      dateW,
+      dateH,
+      '900 italic '+(compact?22:25)+'px "Arial Narrow", Arial, sans-serif'
+    );
+
+    y+=dateH+dateGap;
+
+    for(const [eventIndex,event] of dayEvents.entries()){
+      const rowY=y;
+      const rowCenter=rowY+rowH/2;
+      const info=eventMetrics(ctx,event,maxTextWidth,rowH,compact);
+
+      // O horário tem espaço próprio e nunca recebe o texto complementar.
+      const pillH=Math.min(compact?54:58,Math.max(44,rowH-30));
+      pill(
+        ctx,
+        formatTime(event),
+        timeX,
+        rowCenter-pillH/2,
+        timeW,
+        pillH,
+        '900 italic '+(compact?25:29)+'px "Arial Narrow", Arial, sans-serif'
+      );
+
+      const titleLH=info.title.size+2;
+      const titleH=info.title.lines.length*titleLH;
+      const scheduleH=info.schedule?info.schedule.size+2:0;
+      const venueH=info.venue.size+2;
+      const typeH=info.type.size+2;
+      const scheduleGap=info.schedule?3:0;
+      const stackH=titleH+scheduleGap+scheduleH+3+venueH+4+typeH;
+
+      // Centraliza a pilha inteira do evento dentro de sua própria faixa.
+      let textY=rowCenter-stackH/2;
+      if(textY<rowY+5)textY=rowY+5;
+      if(textY+stackH>rowY+rowH-5)textY=rowY+rowH-5-stackH;
+
+      ctx.textAlign='left';
+      ctx.fillStyle=WHITE;
+      ctx.font='900 italic '+info.title.size+'px "Arial Narrow", Arial, sans-serif';
+      info.title.lines.forEach((line,index)=>{
+        ctx.fillText(line,contentX,textY+info.title.size+index*titleLH);
+      });
+      textY+=titleH;
+
+      if(info.schedule){
+        textY+=scheduleGap;
+        ctx.fillStyle=WHITE;
+        ctx.font='700 italic '+info.schedule.size+'px "Arial Narrow", Arial, sans-serif';
+        ctx.fillText(info.schedule.text,contentX,textY+info.schedule.size);
+        textY+=scheduleH;
+      }
+
+      textY+=3;
+      ctx.fillStyle=WHITE;
+      ctx.font='700 italic '+info.venue.size+'px "Arial Narrow", Arial, sans-serif';
+      ctx.fillText(info.venue.text,contentX,textY+info.venue.size);
+      textY+=venueH+4;
+
+      ctx.fillStyle=YELLOW;
+      ctx.font='900 italic '+info.type.size+'px "Arial Narrow", Arial, sans-serif';
+      ctx.fillText(info.type.text,contentX,textY+info.type.size);
+
+      y+=rowH;
+      if(eventIndex<dayEvents.length-1)y+=eventGap;
+    }
+
+    y+=groupGap;
+  }
+
+  // Rodapé original fornecido. Sem cobrir nem recriar sua transparência.
+  if(footerImage&&footerImage.complete){
+    const footerW=541;
+    const footerH=54;
+    const footerX=(CARD_WIDTH-footerW)/2;
+    ctx.drawImage(footerImage,footerX,footerY,footerW,footerH);
+  }
+
+  ctx.textAlign='left';
 }
 
 function groupSort(events:MobilizationEvent[]){
-  return events.slice().sort((a,b)=>(a.date+' '+(a.time||a.time_label||'')).localeCompare(b.date+' '+(b.time||b.time_label||'')));
-}
-
-function makeSvg(events:MobilizationEvent[]){
-  const ordered=groupSort(events);
-  const dates=[...new Set(ordered.map(e=>e.date))];
-  const compact=ordered.length>=4;
-  const groups=dates.map(date=>({date,items:ordered.filter(e=>e.date===date).map(e=>prepareEvent(e,compact))}));
-
-  const panelX=103;
-  const panelW=874;
-  const panelY=320;
-  const dateW=281;
-  const dateH=77;
-  const dateGap=28;
-  const eventGap=compact?28:42;
-  const groupGap=compact?18:24;
-  const timeX=143;
-  const timeW=149;
-  const timeH=72;
-  const contentX=318;
-
-  let cursor=panelY+38;
-  const positioned:{groupIndex:number;item:CardEvent;rowY:number;rowH:number;dateY:number}[]=[];
-
-  groups.forEach((group,groupIndex)=>{
-    const dateY=cursor;
-    cursor=dateY+dateH+dateGap;
-
-    group.items.forEach(item=>{
-      const titleLH=fitTitle(
-        item.event.title+(displayLocation(item.event)?' - '+displayLocation(item.event):''),
-        compact?47:43
-      ).size+2;
-      const scheduleLH=compact?13:15;
-      const venueLH=compact?15:17;
-      const typeLH=compact?15:18;
-      // A altura da linha precisa comportar exatamente o bloco de texto que será
-      // desenhado abaixo. O cálculo anterior subestimava algumas combinações de
-      // título/local/tipo e fazia o último evento invadir a área do rodapé.
-      const titleH=item.title.length*titleLH;
-      const scheduleH=item.schedule.length ? 4+item.schedule.length*scheduleLH : 0;
-      const venueH=item.venue.length*venueLH;
-      const typeH=5+typeLH;
-      const contentH=titleH+scheduleH+5+venueH+typeH;
-      const rowH=Math.max(timeH,contentH)+36;
-
-      positioned.push({groupIndex,item,rowY:cursor,rowH,dateY});
-      cursor+=rowH+eventGap;
-    });
-
-    if(groupIndex<groups.length-1)cursor+=groupGap;
-  });
-
-  const footerH=54;
-  const footerW=541;
-  // Espaço independente entre o último evento e o rodapé.\n  // Ele não pode depender da altura mínima do card.\n  const footerGap=64;
-  const panelPaddingBottom=48;
-  const footerY=cursor+footerGap;
-  const panelBottom=footerY+footerH+panelPaddingBottom;
-  const panelH=panelBottom-panelY;
-  const height=Math.max(1350,Math.ceil(panelBottom+60));
-
-  let body='';
-  groups.forEach((group,groupIndex)=>{
-    const dateY=positioned.find(p=>p.groupIndex===groupIndex)?.dateY ?? panelY+38;
-    body+=`<rect x="${(W-dateW)/2}" y="${dateY}" width="${dateW}" height="${dateH}" rx="39" fill="${WHITE}"/>
-      <text x="${W/2}" y="${dateY+47}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${compact?26:28}" font-style="italic" font-weight="900" fill="${PANEL}">${escText(formatDateLabel(group.date))}</text>`;
-  });
-
-  positioned.forEach(({item,rowY,rowH})=>{
-    const ti=timeInfo(item.event);
-    const center=rowY+rowH/2;
-    body+=`<rect x="${timeX}" y="${center-timeH/2}" width="${timeW}" height="${timeH}" rx="36" fill="${WHITE}"/>
-      <text x="${timeX+timeW/2}" y="${center+10}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${compact?27:31}" font-style="italic" font-weight="900" fill="${PANEL}">${escText(ti.primary)}</text>`;
-
-    const titleSize=fitTitle(
-      item.event.title+(displayLocation(item.event)?' - '+displayLocation(item.event):''),
-      compact?47:43
-    ).size;
-    const titleLH=titleSize+2;
-    let textY=rowY+titleSize;
-
-    item.title.forEach((line,index)=>{
-      body+=`<text x="${contentX}" y="${textY+index*titleLH}" font-family="Arial, sans-serif" font-size="${titleSize}" font-style="italic" font-weight="900" fill="${WHITE}">${escText(line)}</text>`;
-    });
-    textY+=item.title.length*titleLH;
-
-    if(item.schedule.length){
-      textY+=4;
-      const sz=compact?12:14;
-      item.schedule.forEach((line,index)=>{
-        body+=`<text x="${contentX}" y="${textY+sz+index*(sz+1)}" font-family="Arial, sans-serif" font-size="${sz}" font-style="italic" font-weight="700" fill="${WHITE}">${escText(line)}</text>`;
-      });
-      textY+=item.schedule.length*(sz+1);
-    }
-
-    textY+=5;
-    const vsz=compact?14:17;
-    item.venue.forEach((line,index)=>{
-      body+=`<text x="${contentX}" y="${textY+vsz+index*(vsz+1)}" font-family="Arial, sans-serif" font-size="${vsz}" font-style="italic" font-weight="700" fill="${WHITE}">${escText(line)}</text>`;
-    });
-    textY+=item.venue.length*(vsz+1)+5;
-
-    body+=`<text x="${contentX}" y="${textY+(compact?14:17)}" font-family="Arial, sans-serif" font-size="${compact?14:17}" font-style="italic" font-weight="900" fill="${YELLOW}">${escText(item.type)}</text>`;
-  });
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}">
-    <rect width="${W}" height="${height}" fill="${BG}"/>
-    <image href="${HEADER}" x="${(W-HEADER_W)/2}" y="52" width="${HEADER_W}" height="${HEADER_H}" preserveAspectRatio="xMidYMid meet"/>
-    <rect x="${panelX}" y="${panelY}" width="${panelW}" height="${panelH}" rx="96" fill="${PANEL}"/>
-    ${body}
-    <image href="${FOOTER}" x="${(W-footerW)/2}" y="${footerY}" width="${footerW}" height="${footerH}" preserveAspectRatio="xMidYMid meet"/>
-    <image href="${ICON}" x="0" y="${height-58}" width="42" height="42" preserveAspectRatio="xMidYMid meet" opacity="0"/>
-  </svg>`;
-}
-function svgData(svg:string){
-  return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
-}
-
-async function svgToPng(svg:string,width:number,height:number){
-  const assetPaths=[HEADER,FOOTER,ICON];
-  const embedded=await Promise.all(assetPaths.map(async path=>{
-    const response=await fetch(path,{cache:'no-store'});
-    if(!response.ok)throw new Error('asset');
-    const blob=await response.blob();
-    return new Promise<string>((resolve,reject)=>{
-      const reader=new FileReader();
-      reader.onload=()=>resolve(String(reader.result));
-      reader.onerror=()=>reject(new Error('asset'));
-      reader.readAsDataURL(blob);
-    });
-  }));
-  let embeddedSvg=svg;
-  assetPaths.forEach((path,index)=>{
-    embeddedSvg=embeddedSvg.split(path).join(embedded[index]);
-  });
-  const image=new Image();
-  image.decoding='async';
-  image.src=svgData(embeddedSvg);
-  await new Promise<void>((resolve,reject)=>{image.onload=()=>resolve();image.onerror=()=>reject(new Error('svg'));});
-  const canvas=document.createElement('canvas');
-  canvas.width=width;
-  canvas.height=height;
-  const ctx=canvas.getContext('2d');
-  if(!ctx)throw new Error('canvas');
-  ctx.drawImage(image,0,0,width,height);
-  return canvas.toDataURL('image/png');
+  return events.slice().sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
 }
 
 export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   const params=new URLSearchParams(window.location.search);
   const initialIds=(params.get('eventos')||'').split(',').map(decodeURIComponent).filter(Boolean);
-  const [query,setQuery]=useState('');
-  const [selected,setSelected]=useState<string[]>(initialIds.slice(0,MAX_EVENTS));
-  const [feedback,setFeedback]=useState('');
+  const[query,setQuery]=useState('');
+  const[selected,setSelected]=useState<string[]>(initialIds.slice(0,MAX_EVENTS));
+  const[feedback,setFeedback]=useState('');
+  const canvasRef=useRef<HTMLCanvasElement>(null);
 
   const candidates=useMemo(()=>{
     const today=new Date().toISOString().slice(0,10);
@@ -261,119 +334,217 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
     return groupSort(events.filter(event=>{
       if(!event.public||event.date<today)return false;
       if(!q)return true;
-      return [event.title,event.city,event.state,event.venue,event.type].filter(Boolean).join(' ').toLowerCase().includes(q);
+      return [event.title,event.city,event.state,event.venue,event.type]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(q);
     }));
   },[events,query]);
 
-  const chosen=groupSort(selected.map(id=>events.find(e=>e.id===id)).filter((e):e is MobilizationEvent=>Boolean(e)));
-  const svg=useMemo(()=>chosen.length?makeSvg(chosen):'', [chosen]);
+  const chosen=groupSort(
+    selected
+      .map(id=>events.find(event=>event.id===id))
+      .filter((event):event is MobilizationEvent=>Boolean(event))
+  );
 
   useEffect(()=>{
-    const next=selected.length?'/divulgar?eventos='+selected.map(encodeURIComponent).join(','):'/divulgar';
+    if(!canvasRef.current||!chosen.length)return;
+    let cancelled=false;
+    const header=new Image();
+    const panel=new Image();
+    const footer=new Image();
+    let ready=0;
+    const paint=()=>{
+      if(cancelled||!canvasRef.current||ready<3)return;
+      try{
+        renderCard(canvasRef.current,chosen,window.location.host,header,panel,footer);
+        setFeedback('');
+      }catch{
+        setFeedback('A prévia visual não pôde ser gerada neste navegador.');
+      }
+    };
+    [header,panel,footer].forEach(img=>{
+      img.onload=()=>{ready++;paint();};
+      img.onerror=()=>{ready++;paint();};
+    });
+    header.src='/agenda-card-header-exact.png';
+    panel.src='/agenda-card-panel-exact.png';
+    footer.src='/agenda-card-footer-exact.png';
+    return()=>{cancelled=true;};
+  },[chosen]);
+
+  useEffect(()=>{
+    const next=selected.length
+      ?'/divulgar?eventos='+selected.map(encodeURIComponent).join(',')
+      :'/divulgar';
     window.history.replaceState(null,'',next);
   },[selected]);
 
   const toggle=(id:string)=>{
     setSelected(current=>{
-      if(current.includes(id))return current.filter(x=>x!==id);
+      if(current.includes(id))return current.filter(item=>item!==id);
       if(current.length>=MAX_EVENTS)return current;
       return [...current,id];
     });
     setFeedback('');
   };
 
-  const download=async()=>{
-    if(!svg)return;
-    try{
-      const data=await svgToPng(svg,W,Number(svg.match(/height="(\d+)"/)?.[1]||1350));
-      const a=document.createElement('a');
-      a.download='agenda-de-mobilizacoes.png';
-      a.href=data;
-      a.click();
-      setFeedback('PNG gerado.');
-    }catch{
-      setFeedback('Não foi possível gerar o PNG neste navegador.');
-    }
-    window.setTimeout(()=>setFeedback(''),2500);
-  };
-
   const copyLink=async()=>{
-    try{await navigator.clipboard.writeText(window.location.href);setFeedback('Link do painel copiado.');}
-    catch{setFeedback('Não foi possível copiar automaticamente.');}
+    try{
+      await navigator.clipboard.writeText(window.location.href);
+      setFeedback('Link do painel copiado.');
+    }catch{
+      setFeedback('Não foi possível copiar automaticamente.');
+    }
     window.setTimeout(()=>setFeedback(''),2500);
   };
 
   const share=async()=>{
     if(navigator.share){
-      try{await navigator.share({title:'Agenda de Mobilizações',text:'Confira este painel de mobilizações na Agenda.',url:window.location.href});}catch{}
-    }else await copyLink();
+      try{
+        await navigator.share({
+          title:'Agenda de Mobilizações',
+          text:'Confira este painel de mobilizações na Agenda.',
+          url:window.location.href
+        });
+      }catch{}
+    }else{
+      await copyLink();
+    }
   };
 
-  return <div className="container page share-builder-page">
-    <div className="eyebrow"><Star className="red-star" size={15} fill="currentColor"/>CRIAR DIVULGAÇÃO</div>
+  const download=()=>{
+    if(!canvasRef.current)return;
+    const link=document.createElement('a');
+    link.download='agenda-de-mobilizacoes.png';
+    link.href=canvasRef.current.toDataURL('image/png');
+    link.click();
+  };
 
-    <div className="share-builder-heading">
-      <div>
-        <h1>Crie seu painel de mobilizações.</h1>
-        <p className="page-lead">Escolha até {MAX_EVENTS} eventos e gere uma peça pronta para compartilhar.</p>
-      </div>
-      <div className="share-counter"><strong>{selected.length}/{MAX_EVENTS}</strong><span>selecionados</span></div>
+  return <div className='container page share-builder-page'>
+    <div className='eyebrow'>
+      <Star className='red-star' size={15} fill='currentColor' aria-hidden='true'/>
+      CRIAR DIVULGAÇÃO
     </div>
 
-    <div className="share-builder-layout">
-      <section className="share-picker">
-        <div className="share-picker-head"><strong>Escolha os eventos</strong><span>{candidates.length} disponíveis</span></div>
-        <div className="share-search">
-          <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar cidade, estado ou evento..." aria-label="Buscar eventos para divulgação"/>
-          {query&&<button type="button" onClick={()=>setQuery('')} aria-label="Limpar busca"><X size={16}/></button>}
+    <div className='share-builder-heading'>
+      <div>
+        <h1>Crie seu painel de mobilizações.</h1>
+        <p className='page-lead'>
+          Escolha até {MAX_EVENTS} eventos e gere uma peça pronta para compartilhar.
+          Cada card mostra data, horário, cidade, local e tipo de mobilização.
+        </p>
+      </div>
+      <div className='share-counter'>
+        <strong>{selected.length}/{MAX_EVENTS}</strong>
+        <span>selecionados</span>
+      </div>
+    </div>
+
+    <div className='share-builder-layout'>
+      <section className='share-picker'>
+        <div className='share-picker-head'>
+          <strong>Escolha os eventos</strong>
+          <span>{candidates.length} disponíveis</span>
         </div>
 
-        <div className="share-selected-list">
-          {chosen.length?chosen.map(event=><button className="share-selected-chip" type="button" key={event.id} onClick={()=>toggle(event.id)}>
-            <span>{displayLocation(event)} · {timeInfo(event).primary}</span><X size={15}/>
-          </button>):<div className="share-empty">Selecione eventos abaixo para começar.</div>}
+        <div className='share-search'>
+          <input
+            value={query}
+            onChange={e=>setQuery(e.target.value)}
+            placeholder='Buscar cidade, estado ou evento...'
+            aria-label='Buscar eventos para divulgação'
+          />
+          {query&&
+            <button type='button' onClick={()=>setQuery('')} aria-label='Limpar busca'>
+              <X size={16}/>
+            </button>
+          }
         </div>
 
-        <div className="share-event-list">
+        <div className='share-selected-list'>
+          {chosen.length
+            ? chosen.map(event=>
+                <button
+                  className='share-selected-chip'
+                  type='button'
+                  key={event.id}
+                  onClick={()=>toggle(event.id)}
+                >
+                  <span>{displayLocation(event)} · {formatTime(event)}</span>
+                  <X size={15}/>
+                </button>
+              )
+            : <div className='share-empty'>Selecione eventos abaixo para começar.</div>}
+        </div>
+
+        <div className='share-event-list'>
           {candidates.map(event=>{
-            const selectedNow=selected.includes(event.id);
-            const disabled=!selectedNow&&selected.length>=MAX_EVENTS;
-            const ti=timeInfo(event);
-            return <button key={event.id} type="button" className={selectedNow?'share-event selected':'share-event'} onClick={()=>toggle(event.id)} disabled={disabled}>
-              <span className="share-event-check">{selectedNow?<Check size={15}/>:<span/>}</span>
-              <span className="share-event-copy">
+            const isSelected=selected.includes(event.id);
+            const disabled=!isSelected&&selected.length>=MAX_EVENTS;
+            return <button
+              key={event.id}
+              type='button'
+              className={isSelected?'share-event selected':'share-event'}
+              onClick={()=>toggle(event.id)}
+              disabled={disabled}
+            >
+              <span className='share-event-check'>{isSelected?<Check size={15}/>:<span/>}</span>
+              <span className='share-event-copy'>
                 <strong>{displayLocation(event)}</strong>
                 <small>{event.title}</small>
                 <small>{event.venue}</small>
-                {ti.detail&&<small className="share-event-schedule">{ti.detail}</small>}
-                <small className="share-event-type">{event.type||'Mobilização'}</small>
+                {getTimeInfo(event).detail&&<small className='share-event-schedule'>{getTimeInfo(event).detail}</small>}
+                <small className='share-event-type'>{event.type||'Mobilização'}</small>
               </span>
-              <span className="share-event-time">{ti.primary}</span>
+              <span className='share-event-time'>{formatTime(event)}</span>
             </button>;
           })}
-          {!candidates.length&&<div className="share-empty">Nenhum evento encontrado.</div>}
+          {!candidates.length&&<div className='share-empty'>Nenhum evento encontrado.</div>}
         </div>
       </section>
 
-      <aside className="share-preview-panel">
-        <div className="share-preview-head">
-          <div><div className="eyebrow">PRÉVIA</div><strong>Seu painel</strong></div>
+      <aside className='share-preview-panel'>
+        <div className='share-preview-head'>
+          <div>
+            <div className='eyebrow'>PRÉVIA</div>
+            <strong>Seu painel</strong>
+          </div>
           <ImageIcon size={19}/>
         </div>
 
-        <div className="share-canvas-wrap">
-          {svg?<div className="share-svg-preview" aria-label="Prévia do painel" dangerouslySetInnerHTML={{__html:svg}}/>:
-            <div className="share-canvas-placeholder"><CalendarDays size={30}/><strong>Seu painel aparecerá aqui</strong><span>Selecione pelo menos um evento.</span></div>}
+        <div className='share-canvas-wrap'>
+          {chosen.length
+            ? <canvas ref={canvasRef} className='share-canvas'/>
+            : <div className='share-canvas-placeholder'>
+                <CalendarDays size={30}/>
+                <strong>Seu painel aparecerá aqui</strong>
+                <span>Selecione pelo menos um evento.</span>
+              </div>}
         </div>
 
-        <div className="share-actions">
-          <button className="button primary" type="button" onClick={download} disabled={!chosen.length}><Download size={17}/>Baixar PNG</button>
-          <button className="button ghost" type="button" onClick={share} disabled={!chosen.length}><Share2 size={17}/>Compartilhar</button>
-          <button className="button ghost" type="button" onClick={copyLink}><LinkIcon size={17}/>Copiar link</button>
+        <div className='share-actions'>
+          <button className='button primary' type='button' onClick={download} disabled={!chosen.length}>
+            <Download size={17}/>Baixar PNG
+          </button>
+          <button className='button ghost' type='button' onClick={share} disabled={!chosen.length}>
+            <Share2 size={17}/>Compartilhar
+          </button>
+          <button className='button ghost' type='button' onClick={copyLink} disabled={!chosen.length}>
+            <LinkIcon size={17}/>Copiar link
+          </button>
         </div>
 
-        {feedback&&<div className="share-feedback">{feedback}</div>}
-        <p className="share-help">O layout se adapta ao número de eventos. Horários com concentração, saída ou outras etapas aparecem como informação complementar abaixo do horário principal.</p>
+        {feedback&&
+          <div className='share-feedback' aria-live='polite'>
+            <LinkIcon size={14}/>{feedback}
+          </div>}
+
+        <p className='share-help'>
+          O painel segue a identidade visual da Agenda e fica vinculado a um link próprio,
+          para facilitar a circulação nas redes.
+        </p>
       </aside>
     </div>
   </div>;

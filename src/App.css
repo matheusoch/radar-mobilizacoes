@@ -198,3 +198,5 @@ button,input,select,textarea{box-sizing:border-box;max-width:100%}
   .share-canvas-wrap{padding:8px}
   .share-canvas{width:100%;max-width:100%}
 }
+
+.share-event-schedule{color:var(--accent)!important;font-weight:700}

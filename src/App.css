@@ -404,7 +404,7 @@ body{background:var(--page);color:var(--ink)}
   font-weight:900;
   overflow-wrap:anywhere;
 }
-.share-canvas{display:none!important}
+.share-canvas{display:block}
 @media(max-width:620px){
   .share-canvas-wrap{padding:7px}
   .share-card-art{width:100%;max-width:540px}

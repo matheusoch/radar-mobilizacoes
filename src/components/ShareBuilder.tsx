@@ -168,7 +168,7 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
 
     y+=dateH+dateToEventsGap;
 
-    for(const event of dayEvents){
+    for(const [eventIndex,event] of dayEvents.entries()){
       const rowY=y;
       const rowCenter=rowY+eventH/2;
       const pillH=Math.min(58,Math.max(48,eventH-26));
@@ -232,7 +232,8 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
       ctx.font=`900 italic ${type.size}px "Arial Narrow", Arial, sans-serif`;
       ctx.fillText(type.text,contentX,textY+type.size);
 
-      y+=eventH+eventGap;
+      y+=eventH;
+      if(eventIndex<dayEvents.length-1)y+=eventGap;
     }
 
     // Mantém a separação visual entre blocos de datas sem empurrar

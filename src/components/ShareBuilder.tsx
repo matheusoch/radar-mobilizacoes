@@ -217,67 +217,68 @@ function drawPanelTemplate(
 function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:string,headerImage?:HTMLImageElement,panelImage?:HTMLImageElement,footerImage?:HTMLImageElement){
   const ordered=groupSort(events);
   const dates=[...new Set(ordered.map(event=>event.date))];
-
   const ctx=canvas.getContext('2d');
   if(!ctx)return;
 
-  const panelX=103.5;
+  // Geometria retirada diretamente do card de referência 1080x1350.
+  const panelX=103;
   const panelW=873;
+  const panelY=336;
+  const panelBaseH=953;
   const headerW=618;
   const headerH=195;
   const headerX=(CARD_WIDTH-headerW)/2;
-  const headerY=62;
+  const headerY=74;
 
-  // Posição-base retirada do template: painel escuro começa abaixo
-  // do cabeçalho e todo o conteúdo nasce no topo do painel.
-  const panelY=337;
-  const contentTop=375;
-  const timeX=112;
-  const timeW=150;
+  const timeX=143;
+  const timeW=149;
   const contentX=318;
-  const rightInset=45;
-  const maxTextWidth=panelX+panelW-rightInset-contentX;
+  const maxTextWidth=panelX+panelW-36-contentX;
+
+  // Espaçamentos do template.
+  const panelTopInset=39;
+  const dateW=281;
+  const dateH=77;
+  const dateEventGap=35;
+  const eventGap=66;
+  const eventMinH=84;
 
   const compact=ordered.length>=4;
-  const dateW=282;
-  const dateH=compact?46:52;
-  const dateToEventGap=38;
-  const eventGap=66;
-  const eventMinH=compact?98:108;
 
   const groups=dates.map(date=>({
     date,
     events:ordered.filter(event=>event.date===date).map(event=>{
       const info=eventMetrics(ctx,event,maxTextWidth,compact);
-      return {event,info,rowH:Math.max(eventMinH,info.stackH+24)};
+      return {event,info,rowH:Math.max(eventMinH,info.stackH+10)};
     })
   }));
 
-  // Mede o fluxo de cima para baixo antes de desenhar. Não há
-  // centralização vertical nem espaço vazio artificial entre os eventos.
-  let flowY=contentTop;
+  // Primeiro evento sempre parte imediatamente abaixo da data.
+  // Depois disso, cada evento recebe o mesmo espaçamento vertical.
+  let flowY=panelY+panelTopInset+dateH+dateEventGap;
   let count=0;
 
   for(const group of groups){
-    flowY+=dateH+dateToEventGap;
     for(const item of group.events){
       flowY+=item.rowH;
       count++;
       if(count<ordered.length)flowY+=eventGap;
     }
+    // espaço para a próxima etiqueta de dia
+    if(group!==groups[groups.length-1]){
+      flowY+=Math.max(0,dateH+dateEventGap);
+    }
   }
 
   const footerW=541;
   const footerH=54;
-  const footerBottomGap=30;
-  const footerTop=flowY+22;
+  const bottomGap=32;
   const panelBottom=Math.max(
-    panelY+953,
-    footerTop+footerH+footerBottomGap
+    panelY+panelBaseH,
+    flowY+bottomGap+footerH
   );
   const panelH=panelBottom-panelY;
-  const cardBottom=panelBottom+152; // margem externa inferior do template
-  const cardHeight=Math.max(1378,Math.ceil(cardBottom));
+  const cardHeight=Math.max(1350,Math.ceil(panelBottom+61));
 
   canvas.width=CARD_WIDTH;
   canvas.height=cardHeight;
@@ -286,44 +287,43 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
   ctx.fillStyle=BG;
   ctx.fillRect(0,0,CARD_WIDTH,cardHeight);
 
-  // Cabeçalho: SVG transparente, sem qualquer rasterização/reconstrução.
-  if(headerImage&&headerImage.complete){
+  // PNG do cabeçalho fornecido, sem rasterização adicional.
+  if(headerImage&&headerImage.complete&&headerImage.naturalWidth>0){
     ctx.drawImage(headerImage,headerX,headerY,headerW,headerH);
   }
 
-  // Painel: usa a mesma geometria do template. Como ele é uma área sólida,
-  // apenas a altura muda quando a quantidade de eventos exige mais espaço.
+  // O painel mantém os mesmos cantos do template e só cresce verticalmente
+  // por meio de uma extensão sólida no centro.
   ctx.fillStyle=PANEL;
   roundRect(ctx,panelX,panelY,panelW,panelH,96);
   ctx.fill();
 
-  // Fluxo real de conteúdo.
-  let y=contentTop;
+  let y=panelY+panelTopInset;
   count=0;
 
-  for(const group of groups){
-    const dateX=(CARD_WIDTH-dateW)/2;
+  for(const groupIndex of groups.keys()){
+    const group=groups[groupIndex];
+
     pill(
       ctx,
       formatDateLabel(group.date),
-      dateX,
+      (CARD_WIDTH-dateW)/2,
       y,
       dateW,
       dateH,
-      '900 italic '+(compact?22:25)+'px "Arial Narrow", Arial, sans-serif'
+      '900 italic 28px "Arial Narrow", Arial, sans-serif'
     );
 
-    y+=dateH+dateToEventGap;
+    y+=dateH+dateEventGap;
 
     for(const item of group.events){
       const rowY=y;
       const rowH=item.rowH;
       const info=item.info;
 
-      // O horário fica na coluna própria, alinhado ao centro vertical
-      // do bloco daquele evento.
+      // O horário acompanha verticalmente o evento, e nunca a página inteira.
       const rowCenter=rowY+rowH/2;
-      const pillH=compact?54:58;
+      const pillH=77;
       pill(
         ctx,
         formatTime(item.event),
@@ -331,26 +331,15 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
         rowCenter-pillH/2,
         timeW,
         pillH,
-        '900 italic '+(compact?25:29)+'px "Arial Narrow", Arial, sans-serif'
+        '900 italic '+(compact?28:31)+'px "Arial Narrow", Arial, sans-serif'
       );
+
+      let textY=rowY+8;
 
       const titleLH=info.title.size+2;
       const titleH=info.title.lines.length*titleLH;
-      const scheduleLH=info.schedule?info.schedule.size+1:0;
-      const scheduleH=info.schedule?info.schedule.lines.length*scheduleLH:0;
-      const venueLH=info.venue.size+1;
-      const venueH=info.venue.lines.length*venueLH;
-      const typeH=info.type.size+2;
-      const gaps=(info.schedule?4:0)+4+4;
-      const stackH=titleH+scheduleH+venueH+typeH+gaps;
-
-      // O texto começa próximo do topo da faixa e nunca é centralizado
-      // na página inteira.
-      let textY=rowY+8;
-
       ctx.textAlign='left';
       ctx.textBaseline='alphabetic';
-
       ctx.fillStyle=WHITE;
       ctx.font='900 italic '+info.title.size+'px "Arial Narrow", Arial, sans-serif';
       info.title.lines.forEach((line,index)=>{
@@ -360,21 +349,23 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
 
       if(info.schedule){
         textY+=4;
+        const scheduleLH=info.schedule.size+1;
         ctx.fillStyle=WHITE;
         ctx.font='700 italic '+info.schedule.size+'px "Arial Narrow", Arial, sans-serif';
         info.schedule.lines.forEach((line,index)=>{
           ctx.fillText(line,contentX,textY+info.schedule.size+index*scheduleLH);
         });
-        textY+=scheduleH;
+        textY+=info.schedule.lines.length*scheduleLH;
       }
 
       textY+=4;
+      const venueLH=info.venue.size+1;
       ctx.fillStyle=WHITE;
       ctx.font='700 italic '+info.venue.size+'px "Arial Narrow", Arial, sans-serif';
       info.venue.lines.forEach((line,index)=>{
         ctx.fillText(line,contentX,textY+info.venue.size+index*venueLH);
       });
-      textY+=venueH+4;
+      textY+=info.venue.lines.length*venueLH+4;
 
       ctx.fillStyle=YELLOW;
       ctx.font='900 italic '+info.type.size+'px "Arial Narrow", Arial, sans-serif';
@@ -382,17 +373,21 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
 
       count++;
       y+=rowH;
-      if(count<ordered.length)y+=eventGap;
+      if(count<ordered.length){
+        y+=eventGap;
+      }
+    }
+
+    if(groupIndex<groups.length-1){
+      y+=Math.max(0,dateH+dateEventGap);
     }
   }
 
-  // Rodapé alinhado ao centro do painel.
-  if(footerImage&&footerImage.complete){
+  // Rodapé fica preso ao fundo do painel, sempre centralizado.
+  if(footerImage&&footerImage.complete&&footerImage.naturalWidth>0){
     const footerX=(CARD_WIDTH-footerW)/2;
-    const footerY=panelBottom-footerBottomGap-footerH;
+    const footerY=panelBottom-bottomGap-footerH;
     ctx.drawImage(footerImage,footerX,footerY,footerW,footerH);
-
-    // Atualiza somente o domínio, preservando a arte do PNG/SVG fornecido.
     ctx.fillStyle=PANEL;
     ctx.fillRect(footerX,footerY+25,footerW,29);
     ctx.textAlign='center';
@@ -459,7 +454,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
       img.onload=()=>{ready++;paint();};
       img.onerror=()=>{ready++;paint();};
     });
-    header.src='/share-header.svg';
+    header.src='/agenda-header-exact.png';
     panel.src='/share-panel.svg';
     footer.src='/share-footer.svg';
     return()=>{cancelled=true;};

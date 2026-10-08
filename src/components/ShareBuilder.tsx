@@ -322,11 +322,11 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
     }));
   },[events,query,dateFilter]);
 
-  const chosen=groupSort(
+  const chosen=useMemo(()=>groupSort(
     selected
       .map(id=>events.find(event=>event.id===id))
       .filter((event):event is MobilizationEvent=>Boolean(event))
-  );
+  ),[events,selected]);
 
   useEffect(()=>{
     if(!canvasRef.current||!chosen.length)return;

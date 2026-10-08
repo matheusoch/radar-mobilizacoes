@@ -178,7 +178,7 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
   const headerH=195;
   const headerX=(CARD_WIDTH-headerW)/2;
   const headerY=52;
-  if(headerImage&&headerImage.complete){
+  if(headerImage&&headerImage.complete&&headerImage.naturalWidth>0){
     ctx.drawImage(headerImage,headerX,headerY,headerW,headerH);
   }
 
@@ -189,7 +189,7 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
   const panelH=953;
   const panelBottom=panelY+panelH;
 
-  if(panelImage&&panelImage.complete){
+  if(panelImage&&panelImage.complete&&panelImage.naturalWidth>0){
     ctx.drawImage(panelImage,panelX,panelY,panelW,panelH);
   }else{
     ctx.fillStyle='#951010';
@@ -306,7 +306,7 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
   }
 
   // Rodapé original fornecido. Sem cobrir nem recriar sua transparência.
-  if(footerImage&&footerImage.complete){
+  if(footerImage&&footerImage.complete&&footerImage.naturalWidth>0){
     const footerW=541;
     const footerH=54;
     const footerX=(CARD_WIDTH-footerW)/2;
@@ -368,9 +368,9 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
       img.onload=()=>{ready++;paint();};
       img.onerror=()=>{ready++;paint();};
     });
-    header.src='/agenda-card-header-exact.png';
-    panel.src='/agenda-card-panel-exact.png';
-    footer.src='/agenda-card-footer-exact.png';
+    header.src='/agenda-card-header.png';
+    panel.src='/agenda-card-panel.png';
+    footer.src='/agenda-card-footer.png';
     return()=>{cancelled=true;};
   },[chosen]);
 

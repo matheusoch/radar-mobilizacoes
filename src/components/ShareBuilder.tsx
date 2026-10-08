@@ -158,7 +158,7 @@ function eventMetrics(ctx:CanvasRenderingContext2D,event:MobilizationEvent,maxWi
   return {title,schedule,venue,type};
 }
 
-function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:string,headerImage?:HTMLImageElement){
+function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:string,headerImage?:HTMLImageElement,footerImage?:HTMLImageElement){
   const ordered=events.slice().sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
   const dates=[...new Set(ordered.map(event=>event.date))];
 
@@ -196,7 +196,7 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
   const panelBottom=panelY+panelH;
 
   ctx.fillStyle=PANEL;
-  roundRect(ctx,panelX,panelY,panelW,panelH,90);
+  roundRect(ctx,panelX,panelY,panelW,panelH,108);
   ctx.fill();
 
   // Colunas do template.
@@ -297,17 +297,31 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
     y+=groupGap;
   }
 
-  // Rodapé na posição do PNG fornecido.
-  ctx.textAlign='center';
-  ctx.fillStyle=WHITE;
-  const footerCenterX=CARD_WIDTH/2;
-  const footerLineWidth=541;
-  const footerY=panelBottom-78;
-  ctx.font='900 italic 22px "Arial Narrow", Arial, sans-serif';
-  ctx.fillText('Participe da mobilização e ajude a ocupar as ruas.',footerCenterX,footerY);
-  ctx.font='700 italic 17px "Arial Narrow", Arial, sans-serif';
-  const footerText=fitSingleLine(ctx,'Confira os demais eventos em: '+host,footerLineWidth,17,10,'700');
-  ctx.fillText(footerText.text,footerCenterX,footerY+30);
+  // Rodapé: usa o elemento fornecido e cobre apenas a URL embutida
+  // para atualizar o endereço do Worker sem alterar a arte principal.
+  const footerW=541;
+  const footerH=54;
+  const footerX=(CARD_WIDTH-footerW)/2;
+  const footerY=panelBottom-76;
+  if(footerImage&&footerImage.complete){
+    ctx.drawImage(footerImage,footerX,footerY,footerW,footerH);
+    ctx.fillStyle=PANEL;
+    ctx.fillRect(footerX,footerY+23,footerW,31);
+    ctx.textAlign='center';
+    ctx.fillStyle=WHITE;
+    ctx.font='700 italic 14px "Arial Narrow", Arial, sans-serif';
+    ctx.fillText('Confira os demais eventos em:',CARD_WIDTH/2,footerY+36);
+    ctx.font='900 italic 15px "Arial Narrow", Arial, sans-serif';
+    ctx.fillText('agenda-mobilizacoes.participa.workers.dev',CARD_WIDTH/2,footerY+51);
+  }else{
+    ctx.textAlign='center';
+    ctx.fillStyle=WHITE;
+    ctx.font='900 italic 22px "Arial Narrow", Arial, sans-serif';
+    ctx.fillText('Participe da mobilização e ajude a ocupar as ruas.',CARD_WIDTH/2,footerY+13);
+    ctx.font='700 italic 17px "Arial Narrow", Arial, sans-serif';
+    const footerText=fitSingleLine(ctx,'Confira os demais eventos em: '+host,541,17,10,'700');
+    ctx.fillText(footerText.text,CARD_WIDTH/2,footerY+43);
+  }
   ctx.textAlign='left';
 }
 
@@ -346,20 +360,30 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   useEffect(()=>{
     if(!canvasRef.current||!chosen.length)return;
     let cancelled=false;
-    const img=new Image();
+    const header=new Image();
+    const footer=new Image();
+    let headerReady=false;
+    let footerReady=false;
     const paint=()=>{
-      if(cancelled||!canvasRef.current)return;
-      try{
-        renderCard(canvasRef.current,chosen,window.location.host,img);
-        setFeedback('');
-      }catch{
-        setFeedback('A prévia visual não pôde ser gerada neste navegador.');
+      if(!cancelled&&!canvasRef.current) return;
+      if(!cancelled&&(headerReady||header.complete)&&(footerReady||footer.complete)){
+        try{
+          renderCard(canvasRef.current,chosen,window.location.host,header,footer);
+          setFeedback('');
+        }catch{
+          setFeedback('A prévia visual não pôde ser gerada neste navegador.');
+        }
       }
     };
-    img.onload=paint;
-    img.onerror=paint;
-    img.src='/share-header.svg';
-    if(img.complete)paint();
+    header.onload=()=>{headerReady=true;paint();};
+    header.onerror=()=>{headerReady=true;paint();};
+    footer.onload=()=>{footerReady=true;paint();};
+    footer.onerror=()=>{footerReady=true;paint();};
+    header.src='/share-header.svg';
+    footer.src='/share-footer.svg';
+    if(header.complete)headerReady=true;
+    if(footer.complete)footerReady=true;
+    paint();
     return()=>{cancelled=true;};
   },[chosen]);
 

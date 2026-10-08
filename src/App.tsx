@@ -45,7 +45,7 @@ function formatParticipants(count:number){if(count>=10000)return (count/1000).to
 
 function Layout({children}:{children:ReactNode}){
   const[open,setOpen]=useState(false);
-  return <div className="app-shell"><header className="site-header"><div className="container nav"><Link to="/" className="brand" onClick={()=>setOpen(false)}><span className="brand-mark"><img src="/agenda-fist-v2.svg" alt="" width="30" height="30" /></span><span>Agenda de Mobilizações</span></Link><button className="mobile-menu" onClick={()=>setOpen(!open)} aria-label={open?'Fechar menu':'Abrir menu'} aria-expanded={open}>{open?<X/>:<Menu/>}</button><nav className={open?'nav-links nav-open':'nav-links'} aria-label="Navegação principal"><Link onClick={()=>setOpen(false)} to="/">Agenda</Link><Link onClick={()=>setOpen(false)} to="/calendario">Calendário</Link><Link onClick={()=>setOpen(false)} to="/mapa">Mapa</Link><Link onClick={()=>setOpen(false)} to="/divulgar">Divulgar</Link><Link onClick={()=>setOpen(false)} to="/chat">Chat</Link><Link onClick={()=>setOpen(false)} to="/sobre">Sobre</Link><Link onClick={()=>setOpen(false)} className="admin-link" to="/admin">Admin</Link></nav></div></header><main>{children}</main><footer className="footer"><div className="container footer-inner"><span>Projeto independente de organização e divulgação de mobilizações.</span></div></footer></div>
+  return <div className="app-shell"><header className="site-header"><div className="container nav"><Link to="/" className="brand" onClick={()=>setOpen(false)}><span className="brand-mark"><img src="/agenda-fist.svg" alt="" width="30" height="30" /></span><span>Agenda de Mobilizações</span></Link><button className="mobile-menu" onClick={()=>setOpen(!open)} aria-label={open?'Fechar menu':'Abrir menu'} aria-expanded={open}>{open?<X/>:<Menu/>}</button><nav className={open?'nav-links nav-open':'nav-links'} aria-label="Navegação principal"><Link onClick={()=>setOpen(false)} to="/">Agenda</Link><Link onClick={()=>setOpen(false)} to="/calendario">Calendário</Link><Link onClick={()=>setOpen(false)} to="/mapa">Mapa</Link><Link onClick={()=>setOpen(false)} to="/divulgar">Divulgar</Link><Link onClick={()=>setOpen(false)} to="/chat">Chat</Link><Link onClick={()=>setOpen(false)} to="/sobre">Sobre</Link><Link onClick={()=>setOpen(false)} className="admin-link" to="/admin">Admin</Link></nav></div></header><main>{children}</main><footer className="footer"><div className="container footer-inner"><span>Projeto independente de organização e divulgação de mobilizações.</span></div></footer></div>
 }
 
 function Home({events}:{events:MobilizationEvent[]}){
@@ -96,7 +96,7 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
     if(!event)return;
     const defaultTitle='Agenda de Mobilizações';
     const defaultDescription='Agenda pública e rastreável de mobilizações no Brasil.';
-    const defaultImage=window.location.origin+'/agenda-fist-v2.svg';
+    const defaultImage=window.location.origin+'/agenda-fist.svg';
     const nextTitle=event.title+' · '+event.city+(event.state?', '+event.state:'')+' | Agenda de Mobilizações';
     const nextDescription=event.title+' · '+event.city+(event.state?', '+event.state:'')+'. '+(event.time_label||event.time||'Horário não informado')+' · '+event.venue+'.';
     const nextImage=event.image_url||defaultImage;

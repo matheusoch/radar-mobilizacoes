@@ -24,7 +24,7 @@ Sem `.env`, o desenvolvimento entra no catálogo local de demonstração: os eve
 
 ## Supabase
 
-Para uma instalação nova, rode `supabase/schema.sql` e depois o seed editorial disponível em `supabase/seed_full.sql`. Crie uma conta em `Authentication > Users` e vincule o UUID dessa conta à tabela `public.admin_users`.
+Para uma instalação nova, rode `supabase/schema.sql`, depois `supabase/migrations/20261008090000_event_community.sql` e, por fim, o seed editorial disponível em `supabase/seed_full.sql`. O schema base já inclui a migration de analytics anterior. Crie uma conta em `Authentication > Users` e vincule o UUID dessa conta à tabela `public.admin_users`.
 
 O banco atual já está provisionado no projeto `radar-mobilizacoes` com:
 
@@ -53,6 +53,12 @@ A rota `/chat` exige login. Mensagens de conversa entram como `pending` e só fi
 Além do chat, o usuário autenticado pode usar **Enviar novo evento** para mandar título, data, horário, cidade, UF, local, contexto e um pôster. O arquivo vai para o bucket privado `submission_posters` e chega à caixa de entrada do `/admin`.
 
 O administrador pode aprovar, rejeitar ou marcar mensagens e submissões como spam. Ao criar um rascunho a partir de uma submissão, o pôster é transferido para o bucket público `event_posters` e o evento fica oculto até a publicação manual.
+
+## Segurança e discussão por evento
+
+Cada rota `/evento/:id` pode exibir informações comunitárias com estado de verificação, discussão pública, conversa para contas que marcaram interesse e contagem agregada de interessados. Esse interesse autenticado é separado da presença anônima **Eu Vou** já existente; nenhum nome/email/lista de participantes é exibido. Comentários e informações novas passam por validação e fila de moderação; tabelas comunitárias não têm acesso direto pelo cliente e são acessadas por RPCs com `SECURITY DEFINER`, `auth.uid()` e RLS default-deny. Administradores em `public.admin_users` podem atribuir moderadores pela rota `/admin/moderacao`.
+
+Os nomes públicos vêm somente de `user_metadata.display_name` (ou do rótulo genérico “Participante”); e-mails e listas de participantes não são retornados. A migration `20261008090000_event_community.sql` deve ser aplicada no Supabase depois do schema base antes de habilitar o módulo.
 
 Há limites de 8 mensagens por 15 minutos e 10 submissões por 24 horas por conta. O tamanho máximo do pôster é 8 MB.
 

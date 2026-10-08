@@ -6,6 +6,8 @@ import {CalendarDays,CalendarPlus,ExternalLink,Info,MapPinned,Menu,X,CheckCircle
 import './App.css';
 // Tema único: o aplicativo mantém a aparência clara padrão.
 import EventCard from './components/EventCard';
+import EventCommunity from './components/EventCommunity';
+import EventModerationPage from './components/EventModerationPage';
 import Filters,{type FiltersState} from './components/Filters';
 import MapView from './components/MapView';
 import PosterActions from './components/PosterActions';
@@ -112,6 +114,7 @@ function agendaFilterOptions(events:MobilizationEvent[],filters:FiltersState,tod
 
 function Layout({children}:{children:ReactNode}){
   const[open,setOpen]=useState(false);
+  const location=useLocation();
   return <div className="app-shell">
     <header className="site-header">
       <div className="container nav">
@@ -128,6 +131,7 @@ function Layout({children}:{children:ReactNode}){
           <Link onClick={()=>setOpen(false)} to="/chat">Chat</Link>
           <Link onClick={()=>setOpen(false)} to="/sobre">Sobre</Link>
           <Link onClick={()=>setOpen(false)} className="admin-link" to="/admin">Admin</Link>
+          {location.pathname==='/admin'&&<Link onClick={()=>setOpen(false)} to="/admin/moderacao">Moderação comunitária</Link>}
         </nav>
       </div>
     </header>
@@ -417,6 +421,7 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
         {attendanceError&&<div className="callout warning"><Info size={18}/><span>{attendanceError}</span></div>}
         <div className="event-action-row"><a className="button ghost directions-button" href={directionsUrl} target="_blank" rel="noreferrer"><MapPinned size={17}/>Como chegar</a><button type="button" className="button ghost" onClick={downloadIcs}><CalendarPlus size={17}/>Adicionar ao calendário</button><a className="button primary reminder-button" href={calendarUrl} target="_blank" rel="noreferrer"><CalendarDays size={17}/>Definir lembrete</a><Link className="button ghost" to={'/divulgar?eventos='+encodeURIComponent(event.id)}><ImageIcon size={17}/>Divulgar</Link></div>
         {event.notes&&<div className={event.status==='warning'?'callout warning':'callout info'}><Info size={20}/><span>{event.notes}</span></div>}
+        <EventCommunity eventSlug={event.id}/>
         {event.image_url&&<PosterActions event={event}/>}
         <h2>Fontes</h2>
         {ss.length?<div className="source-list">{ss.map(s=><a className="source-item" key={s.id} href={s.url} target="_blank" rel="noreferrer"><div><strong>{s.account_name}</strong><small>{s.account_handle??s.platform}</small></div><ExternalLink size={17}/></a>)}</div>:<div className="empty-source">As fontes deste evento ainda não foram carregadas.</div>}
@@ -711,5 +716,5 @@ export default function App(){
 
   if(loadError)return <div className="loading"><div className="empty"><Info/><h3>Não foi possível carregar os dados</h3><p>{loadError}</p><button className="button primary" onClick={()=>{setLoading(true);reload()}}><RefreshCw size={16}/>Tentar novamente</button></div></div>;
 
-  return <AppErrorBoundary><Layout><Routes><Route path="/" element={<Home events={events}/>}/><Route path="/evento/:id" element={<EventPage events={events} sources={sources}/>}/><Route path="/calendario" element={<CalendarPage events={events}/>}/><Route path="/mapa" element={<MapPage events={events}/>}/><Route path="/divulgar" element={<ShareBuilder events={events}/>}/><Route path="/sobre" element={<AboutPage/>}/><Route path="/chat" element={<ChatPage/>}/><Route path="/entrar" element={<AuthPage/>}/><Route path="/admin" element={<AdminPage/>}/></Routes></Layout></AppErrorBoundary>
+  return <AppErrorBoundary><Layout><Routes><Route path="/" element={<Home events={events}/>}/><Route path="/evento/:id" element={<EventPage events={events} sources={sources}/>}/><Route path="/calendario" element={<CalendarPage events={events}/>}/><Route path="/mapa" element={<MapPage events={events}/>}/><Route path="/divulgar" element={<ShareBuilder events={events}/>}/><Route path="/sobre" element={<AboutPage/>}/><Route path="/chat" element={<ChatPage/>}/><Route path="/entrar" element={<AuthPage/>}/><Route path="/admin" element={<AdminPage/>}/><Route path="/admin/moderacao" element={<EventModerationPage/>}/></Routes></Layout></AppErrorBoundary>
 }

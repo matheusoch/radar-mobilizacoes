@@ -10,6 +10,8 @@ const WHITE='#fff';
 const YELLOW='#f7db26';
 
 const HEADER='/agenda-card-header-exact.png';
+const HEADER_W=618;
+const HEADER_H=451;
 const FOOTER='/agenda-card-footer-exact.png';
 const ICON='/agenda-card-icon.png';
 
@@ -107,7 +109,7 @@ function makeSvg(events:MobilizationEvent[]){
 
   const panelX=103;
   const panelW=874;
-  const panelY=336;
+  const panelY=563;
   const dateW=281;
   const dateH=77;
   const dateGap=28;
@@ -185,7 +187,7 @@ function makeSvg(events:MobilizationEvent[]){
 
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}">
     <rect width="${W}" height="${height}" fill="${BG}"/>
-    <image href="${HEADER}" x="231" y="52" width="618" height="195" preserveAspectRatio="xMidYMid meet"/>
+    <image href="${HEADER}" x="231" y="52" width="${HEADER_W}" height="${HEADER_H}" preserveAspectRatio="none"/>
     <rect x="${panelX}" y="${panelY}" width="${panelW}" height="${panelH}" rx="96" fill="${PANEL}"/>
     ${body}
     <image href="${FOOTER}" x="${(W-footerW)/2}" y="${footerY}" width="${footerW}" height="${footerH}" preserveAspectRatio="xMidYMid meet"/>

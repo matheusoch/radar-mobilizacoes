@@ -12,10 +12,20 @@ const YELLOW='#f7db26';
 
 function dateObj(date:string){return new Date(date+'T12:00:00');}
 
+function getTimeInfo(event:MobilizationEvent){
+  const raw=(event.time_label||event.time||'').trim();
+  const matches=[...raw.matchAll(/\d{1,2}:\d{2}/g)].map(match=>match[0]);
+  if(matches.length<=1){
+    return {primary:matches[0]||'—',detail:''};
+  }
+  return {
+    primary:matches[0],
+    detail:raw.replace(/\s*\/\s*/g,' · ').replace(/\s+/g,' ').trim(),
+  };
+}
+
 function formatTime(event:MobilizationEvent){
-  if(event.time) return event.time.slice(0,5);
-  const match=(event.time_label||'').match(/\d{1,2}:\d{2}/);
-  return match?.[0]||'—';
+  return getTimeInfo(event).primary;
 }
 
 function displayLocation(event:MobilizationEvent){
@@ -50,23 +60,23 @@ function wrapLines(ctx:CanvasRenderingContext2D,text:string,maxWidth:number,maxL
 function fitWrappedText(ctx:CanvasRenderingContext2D,text:string,maxWidth:number,maxLines:number,startSize:number,minSize:number,fontFamily:string){
   let size=startSize;
   while(size>=minSize){
-    ctx.font=`900 italic ${size}px ${fontFamily}`;
+    ctx.font='900 italic '+size+'px '+fontFamily;
     const lines=wrapLines(ctx,text,maxWidth,maxLines);
     if(lines.length<=maxLines&&lines.every(line=>ctx.measureText(line).width<=maxWidth))return {size,lines};
     size-=1;
   }
-  ctx.font=`900 italic ${minSize}px ${fontFamily}`;
+  ctx.font='900 italic '+minSize+'px '+fontFamily;
   return {size:minSize,lines:wrapLines(ctx,text,maxWidth,maxLines)};
 }
 
 function fitSingleLine(ctx:CanvasRenderingContext2D,text:string,maxWidth:number,startSize:number,minSize:number,weight='700'){
   let size=startSize;
   while(size>=minSize){
-    ctx.font=`${weight} italic ${size}px "Arial Narrow", Arial, sans-serif`;
+    ctx.font=weight+' italic '+size+'px "Arial Narrow", Arial, sans-serif';
     if(ctx.measureText(text).width<=maxWidth)return {size,text};
     size-=1;
   }
-  ctx.font=`${weight} italic ${minSize}px "Arial Narrow", Arial, sans-serif`;
+  ctx.font=weight+' italic '+minSize+'px "Arial Narrow", Arial, sans-serif';
   let clipped=text;
   while(ctx.measureText(clipped+'…').width>maxWidth&&clipped.length>6)clipped=clipped.slice(0,-1);
   return {size:minSize,text:clipped+'…'};
@@ -113,7 +123,7 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
   ctx.fillStyle=BG;
   ctx.fillRect(0,0,CARD_WIDTH,CARD_HEIGHT);
 
-  // Cabeçalho fixo do template.
+  // Cabeçalho preservado do template.
   ctx.fillStyle=WHITE;
   ctx.textAlign='center';
   ctx.font='900 102px Impact, "Arial Narrow", Arial, sans-serif';
@@ -122,8 +132,6 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
   ctx.fillText('DE MOBILIZAÇÃO NAS CIDADES',CARD_WIDTH/2,244);
   ctx.textAlign='left';
 
-  // Área de conteúdo: os elementos ficam dentro do vermelho escuro,
-  // mantendo a mesma coluna visual do template.
   const panelX=102;
   const panelY=337;
   const panelW=876;
@@ -134,21 +142,33 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
   roundRect(ctx,panelX,panelY,panelW,panelH,54);
   ctx.fill();
 
-  const contentX=320;
+  // Colunas e margens do layout original.
   const timeX=145;
   const timeW=150;
+  const contentX=320;
   const rightInset=54;
   const maxTextWidth=panelX+panelW-rightInset-contentX;
+
+  // Área reservada para conteúdo. O rodapé tem sua própria faixa.
   const contentTop=375;
-  const footerTop=1208;
+  const footerTop=1198;
   const availableHeight=footerTop-contentTop;
 
-  const dateH=52;
-  const dateToEventsGap=12;
-  const groupTailGap=6;
-  const eventGap=8;
-  const fixedHeight=dates.length*(dateH+dateToEventsGap+groupTailGap)+Math.max(0,ordered.length-dates.length)*eventGap;
-  const eventH=Math.max(88,(availableHeight-fixedHeight)/Math.max(1,ordered.length));
+  // Quanto mais eventos, menor e mais compacto fica o espaçamento,
+  // mas nunca abaixo de uma altura mínima de linha.
+  const compact=ordered.length>=5;
+  const dateH=compact?44:52;
+  const dateGap=compact?6:12;
+  const groupGap=compact?4:7;
+  const eventGap=compact?4:8;
+  const dateFont=compact?21:25;
+  const timeFont=compact?25:29;
+
+  const reserved=
+    dates.length*(dateH+dateGap+groupGap)+
+    Math.max(0,ordered.length-dates.length)*eventGap;
+
+  const eventH=Math.max(88,(availableHeight-reserved)/Math.max(1,ordered.length));
 
   let y=contentTop;
 
@@ -163,23 +183,27 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
       y,
       dateW,
       dateH,
-      '900 italic 25px "Arial Narrow", Arial, sans-serif'
+      '900 italic '+dateFont+'px "Arial Narrow", Arial, sans-serif'
     );
 
-    y+=dateH+dateToEventsGap;
+    y+=dateH+dateGap;
 
     for(const [eventIndex,event] of dayEvents.entries()){
       const rowY=y;
       const rowCenter=rowY+eventH/2;
-      const pillH=Math.min(58,Math.max(48,eventH-26));
+      const timeInfo=getTimeInfo(event);
+      const pillH=Math.min(compact?54:58,Math.max(46,eventH-28));
+
+      // O retângulo mostra somente o horário principal.
+      // Informações adicionais vão para a coluna de texto.
       pill(
         ctx,
-        formatTime(event),
+        timeInfo.primary,
         timeX,
         rowCenter-pillH/2,
         timeW,
         pillH,
-        '900 italic 29px "Arial Narrow", Arial, sans-serif'
+        '900 italic '+timeFont+'px "Arial Narrow", Arial, sans-serif'
       );
 
       const titleText=event.title+(displayLocation(event)?' - '+displayLocation(event):'');
@@ -188,60 +212,84 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
         titleText,
         maxTextWidth,
         2,
-        eventH<105?26:30,
-        eventH<105?21:24,
+        compact?24:30,
+        compact?17:22,
         '"Arial Narrow", Arial, sans-serif'
       );
+
+      const schedule=timeInfo.detail
+        ? fitSingleLine(ctx,timeInfo.detail,maxTextWidth,compact?13:15,10,'700')
+        : null;
 
       const venue=fitSingleLine(
         ctx,
         event.venue||'Local não informado',
         maxTextWidth,
-        eventH<105?18:21,
-        14
+        compact?15:21,
+        12
       );
 
       const type=fitSingleLine(
         ctx,
         (event.type||'Mobilização').toUpperCase(),
         maxTextWidth,
-        eventH<105?16:18,
-        12,
+        compact?13:18,
+        11,
         '900'
       );
 
-      const titleLineHeight=title.size+3;
+      const titleLineHeight=title.size+2;
       const titleHeight=title.lines.length*titleLineHeight;
-      const venueGap=5;
-      const typeGap=7;
-      const venueLineHeight=venue.size+2;
-      const typeLineHeight=type.size+1;
-      const textHeight=titleHeight+venueGap+venueLineHeight+typeGap+typeLineHeight;
-      let textY=Math.max(rowY+9,rowCenter-textHeight/2);
+      const scheduleGap=schedule?3:0;
+      const scheduleHeight=schedule?(schedule.size+1):0;
+      const venueGap=3;
+      const venueHeight=venue.size+1;
+      const typeGap=4;
+      const typeHeight=type.size+1;
+
+      const textHeight=
+        titleHeight+
+        scheduleGap+scheduleHeight+
+        venueGap+venueHeight+
+        typeGap+typeHeight;
+
+      let textY=rowCenter-textHeight/2;
+      textY=Math.max(rowY+6,Math.min(textY,rowY+eventH-textHeight-6));
 
       ctx.fillStyle=WHITE;
-      ctx.font=`900 italic ${title.size}px "Arial Narrow", Arial, sans-serif`;
-      title.lines.forEach((line,index)=>ctx.fillText(line,contentX,textY+title.size+index*titleLineHeight));
-      textY+=titleHeight+venueGap;
+      ctx.font='900 italic '+title.size+'px "Arial Narrow", Arial, sans-serif';
+      title.lines.forEach((line,index)=>{
+        ctx.fillText(line,contentX,textY+title.size+index*titleLineHeight);
+      });
+      textY+=titleHeight;
 
-      ctx.font=`${'700'} italic ${venue.size}px "Arial Narrow", Arial, sans-serif`;
+      if(schedule){
+        textY+=scheduleGap;
+        ctx.fillStyle=WHITE;
+        ctx.font='700 italic '+schedule.size+'px "Arial Narrow", Arial, sans-serif';
+        ctx.fillText(schedule.text,contentX,textY+schedule.size);
+        textY+=scheduleHeight;
+      }
+
+      textY+=venueGap;
+      ctx.fillStyle=WHITE;
+      ctx.font='700 italic '+venue.size+'px "Arial Narrow", Arial, sans-serif';
       ctx.fillText(venue.text,contentX,textY+venue.size);
-      textY+=venueLineHeight+typeGap;
+      textY+=venueHeight;
 
+      textY+=typeGap;
       ctx.fillStyle=YELLOW;
-      ctx.font=`900 italic ${type.size}px "Arial Narrow", Arial, sans-serif`;
+      ctx.font='900 italic '+type.size+'px "Arial Narrow", Arial, sans-serif';
       ctx.fillText(type.text,contentX,textY+type.size);
 
       y+=eventH;
       if(eventIndex<dayEvents.length-1)y+=eventGap;
     }
 
-    // Mantém a separação visual entre blocos de datas sem empurrar
-    // os elementos para as bordas do painel.
-    y+=groupTailGap;
+    y+=groupGap;
   }
 
-  // Rodapé sempre dentro do painel escuro.
+  // Garantia final: nada do conteúdo passa da faixa reservada ao rodapé.
   const footerY=panelBottom-82;
   ctx.textAlign='center';
   ctx.fillStyle=WHITE;

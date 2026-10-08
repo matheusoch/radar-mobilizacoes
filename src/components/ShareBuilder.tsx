@@ -158,7 +158,7 @@ function eventMetrics(ctx:CanvasRenderingContext2D,event:MobilizationEvent,maxWi
   return {title,schedule,venue,type};
 }
 
-function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:string){
+function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:string,headerImage?:HTMLImageElement){
   const ordered=events.slice().sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
   const dates=[...new Set(ordered.map(event=>event.date))];
 
@@ -171,14 +171,22 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
   ctx.fillStyle=BG;
   ctx.fillRect(0,0,CARD_WIDTH,CARD_HEIGHT);
 
-  // Cabeçalho do template.
-  ctx.fillStyle=WHITE;
-  ctx.textAlign='center';
-  ctx.font='900 102px Impact, "Arial Narrow", Arial, sans-serif';
-  ctx.fillText('AGENDA',CARD_WIDTH/2,146);
-  ctx.font='900 italic 50px "Arial Narrow", Arial, sans-serif';
-  ctx.fillText('DE MOBILIZAÇÃO NAS CIDADES',CARD_WIDTH/2,244);
-  ctx.textAlign='left';
+  // Cabeçalho: usa o elemento fornecido, preservando proporção e desenho.
+  const headerW=618;
+  const headerH=195;
+  const headerX=(CARD_WIDTH-headerW)/2;
+  const headerY=48;
+  if(headerImage&&headerImage.complete){
+    ctx.drawImage(headerImage,headerX,headerY,headerW,headerH);
+  }else{
+    ctx.fillStyle=WHITE;
+    ctx.textAlign='center';
+    ctx.font='900 102px Impact, "Arial Narrow", Arial, sans-serif';
+    ctx.fillText('AGENDA',CARD_WIDTH/2,146);
+    ctx.font='900 italic 50px "Arial Narrow", Arial, sans-serif';
+    ctx.fillText('DE MOBILIZAÇÃO NAS CIDADES',CARD_WIDTH/2,244);
+    ctx.textAlign='left';
+  }
 
   // Área escura: mesma dimensão e posição do elemento enviado.
   const panelX=103.5;
@@ -205,15 +213,15 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
 
   const compact=ordered.length>=4;
   const dateH=compact?44:50;
-  const dateGap=compact?7:11;
-  const groupGap=compact?4:7;
-  const eventGap=compact?5:8;
+  const dateGap=compact?6:11;
+  const groupGap=compact?8:8;
+  const eventGap=compact?4:8;
 
   const fixed=
     dates.length*(dateH+dateGap+groupGap)+
     Math.max(0,ordered.length-dates.length)*eventGap;
 
-  const rowH=Math.max(82,(availableHeight-fixed)/Math.max(1,ordered.length));
+  const rowH=Math.max(92,(availableHeight-fixed)/Math.max(1,ordered.length));
   let y=contentTop;
 
   for(const date of dates){
@@ -337,12 +345,22 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
 
   useEffect(()=>{
     if(!canvasRef.current||!chosen.length)return;
-    try{
-      renderCard(canvasRef.current,chosen,window.location.host);
-      setFeedback('');
-    }catch{
-      setFeedback('A prévia visual não pôde ser gerada neste navegador.');
-    }
+    let cancelled=false;
+    const img=new Image();
+    const paint=()=>{
+      if(cancelled||!canvasRef.current)return;
+      try{
+        renderCard(canvasRef.current,chosen,window.location.host,img);
+        setFeedback('');
+      }catch{
+        setFeedback('A prévia visual não pôde ser gerada neste navegador.');
+      }
+    };
+    img.onload=paint;
+    img.onerror=paint;
+    img.src='/share-header.svg';
+    if(img.complete)paint();
+    return()=>{cancelled=true;};
   },[chosen]);
 
   useEffect(()=>{

@@ -62,7 +62,7 @@ function fitWrappedText(ctx:CanvasRenderingContext2D,text:string,maxWidth:number
   while(size>=minSize){
     ctx.font='900 italic '+size+'px '+fontFamily;
     const lines=wrapLines(ctx,text,maxWidth,maxLines);
-    if(lines.length<=maxLines&&lines.every(line=>ctx.measureText(line).width<=maxWidth))return {size,lines};
+    if(lines.every(line=>ctx.measureText(line).width<=maxWidth))return {size,lines};
     size-=1;
   }
   ctx.font='900 italic '+minSize+'px '+fontFamily;
@@ -110,6 +110,54 @@ function pill(ctx:CanvasRenderingContext2D,text:string,x:number,y:number,w:numbe
   ctx.textBaseline='alphabetic';
 }
 
+function eventMetrics(ctx:CanvasRenderingContext2D,event:MobilizationEvent,maxWidth:number,rowH:number,compact:boolean){
+  const title=fitWrappedText(
+    ctx,
+    event.title+(displayLocation(event)?' - '+displayLocation(event):''),
+    maxWidth,
+    2,
+    compact?24:29,
+    compact?14:20,
+    '"Arial Narrow", Arial, sans-serif'
+  );
+  const timeInfo=getTimeInfo(event);
+  const schedule=timeInfo.detail
+    ? fitSingleLine(ctx,timeInfo.detail,maxWidth,compact?12:14,10,'700')
+    : null;
+  const venue=fitSingleLine(ctx,event.venue||'Local não informado',maxWidth,compact?15:20,11);
+  const type=fitSingleLine(ctx,(event.type||'Mobilização').toUpperCase(),maxWidth,compact?13:17,10,'900');
+
+  const titleHeight=title.lines.length*(title.size+2);
+  const scheduleHeight=schedule?(schedule.size+2):0;
+  const venueHeight=venue.size+2;
+  const typeHeight=type.size+2;
+  const gaps=(schedule?4:0)+3+4;
+  const total=titleHeight+scheduleHeight+venueHeight+typeHeight+gaps;
+
+  // Se a pilha ainda passa da linha disponível, reduzimos a tipografia
+  // em conjunto, preservando duas linhas para títulos longos.
+  if(total>rowH-10){
+    let scale=Math.max(0.70,(rowH-10)/total);
+    const title2=fitWrappedText(
+      ctx,
+      event.title+(displayLocation(event)?' - '+displayLocation(event):''),
+      maxWidth,
+      2,
+      Math.max(14,Math.floor(title.size*scale)),
+      14,
+      '"Arial Narrow", Arial, sans-serif'
+    );
+    const schedule2=timeInfo.detail
+      ? fitSingleLine(ctx,timeInfo.detail,maxWidth,Math.max(10,Math.floor((schedule?.size||12)*scale)),9,'700')
+      : null;
+    const venue2=fitSingleLine(ctx,event.venue||'Local não informado',maxWidth,Math.max(11,Math.floor(venue.size*scale)),10);
+    const type2=fitSingleLine(ctx,(event.type||'Mobilização').toUpperCase(),maxWidth,Math.max(10,Math.floor(type.size*scale)),9,'900');
+    return {title:title2,schedule:schedule2,venue:venue2,type:type2};
+  }
+
+  return {title,schedule,venue,type};
+}
+
 function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:string){
   const ordered=events.slice().sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
   const dates=[...new Set(ordered.map(event=>event.date))];
@@ -123,7 +171,7 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
   ctx.fillStyle=BG;
   ctx.fillRect(0,0,CARD_WIDTH,CARD_HEIGHT);
 
-  // Cabeçalho preservado do template.
+  // Cabeçalho do template.
   ctx.fillStyle=WHITE;
   ctx.textAlign='center';
   ctx.font='900 102px Impact, "Arial Narrow", Arial, sans-serif';
@@ -132,173 +180,126 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
   ctx.fillText('DE MOBILIZAÇÃO NAS CIDADES',CARD_WIDTH/2,244);
   ctx.textAlign='left';
 
-  const panelX=102;
+  // Área escura: mesma dimensão e posição do elemento enviado.
+  const panelX=103.5;
   const panelY=337;
-  const panelW=876;
-  const panelH=981;
+  const panelW=873;
+  const panelH=953;
   const panelBottom=panelY+panelH;
 
   ctx.fillStyle=PANEL;
-  roundRect(ctx,panelX,panelY,panelW,panelH,54);
+  roundRect(ctx,panelX,panelY,panelW,panelH,90);
   ctx.fill();
 
-  // Colunas e margens do layout original.
+  // Colunas do template.
   const timeX=145;
   const timeW=150;
   const contentX=320;
-  const rightInset=54;
+  const rightInset=50;
   const maxTextWidth=panelX+panelW-rightInset-contentX;
 
-  // Área reservada para conteúdo. O rodapé tem sua própria faixa.
-  const contentTop=375;
-  const footerTop=1198;
+  // O rodapé ocupa uma faixa independente dentro do retângulo.
+  const contentTop=376;
+  const footerTop=1210;
   const availableHeight=footerTop-contentTop;
 
-  // Quanto mais eventos, menor e mais compacto fica o espaçamento,
-  // mas nunca abaixo de uma altura mínima de linha.
-  const compact=ordered.length>=5;
-  const dateH=compact?44:52;
-  const dateGap=compact?6:12;
+  const compact=ordered.length>=4;
+  const dateH=compact?44:50;
+  const dateGap=compact?7:11;
   const groupGap=compact?4:7;
-  const eventGap=compact?4:8;
-  const dateFont=compact?21:25;
-  const timeFont=compact?25:29;
+  const eventGap=compact?5:8;
 
-  const reserved=
+  const fixed=
     dates.length*(dateH+dateGap+groupGap)+
     Math.max(0,ordered.length-dates.length)*eventGap;
 
-  const eventH=Math.max(88,(availableHeight-reserved)/Math.max(1,ordered.length));
-
+  const rowH=Math.max(82,(availableHeight-fixed)/Math.max(1,ordered.length));
   let y=contentTop;
 
   for(const date of dates){
     const dayEvents=ordered.filter(event=>event.date===date);
 
-    const dateW=282;
     pill(
       ctx,
       formatDateLabel(date),
-      (CARD_WIDTH-dateW)/2,
+      (CARD_WIDTH-282)/2,
       y,
-      dateW,
+      282,
       dateH,
-      '900 italic '+dateFont+'px "Arial Narrow", Arial, sans-serif'
+      '900 italic '+(compact?22:25)+'px "Arial Narrow", Arial, sans-serif'
     );
 
     y+=dateH+dateGap;
 
     for(const [eventIndex,event] of dayEvents.entries()){
       const rowY=y;
-      const rowCenter=rowY+eventH/2;
-      const timeInfo=getTimeInfo(event);
-      const pillH=Math.min(compact?54:58,Math.max(46,eventH-28));
+      const rowCenter=rowY+rowH/2;
+      const info=eventMetrics(ctx,event,maxTextWidth,rowH,compact);
 
-      // O retângulo mostra somente o horário principal.
-      // Informações adicionais vão para a coluna de texto.
+      const pillH=Math.min(compact?54:58,Math.max(44,rowH-26));
       pill(
         ctx,
-        timeInfo.primary,
+        formatTime(event),
         timeX,
         rowCenter-pillH/2,
         timeW,
         pillH,
-        '900 italic '+timeFont+'px "Arial Narrow", Arial, sans-serif'
+        '900 italic '+(compact?25:29)+'px "Arial Narrow", Arial, sans-serif'
       );
 
-      const titleText=event.title+(displayLocation(event)?' - '+displayLocation(event):'');
-      const title=fitWrappedText(
-        ctx,
-        titleText,
-        maxTextWidth,
-        2,
-        compact?24:30,
-        compact?17:22,
-        '"Arial Narrow", Arial, sans-serif'
-      );
-
-      const schedule=timeInfo.detail
-        ? fitSingleLine(ctx,timeInfo.detail,maxTextWidth,compact?13:15,10,'700')
-        : null;
-
-      const venue=fitSingleLine(
-        ctx,
-        event.venue||'Local não informado',
-        maxTextWidth,
-        compact?15:21,
-        12
-      );
-
-      const type=fitSingleLine(
-        ctx,
-        (event.type||'Mobilização').toUpperCase(),
-        maxTextWidth,
-        compact?13:18,
-        11,
-        '900'
-      );
-
-      const titleLineHeight=title.size+2;
-      const titleHeight=title.lines.length*titleLineHeight;
-      const scheduleGap=schedule?3:0;
-      const scheduleHeight=schedule?(schedule.size+1):0;
-      const venueGap=3;
-      const venueHeight=venue.size+1;
-      const typeGap=4;
-      const typeHeight=type.size+1;
-
-      const textHeight=
-        titleHeight+
-        scheduleGap+scheduleHeight+
-        venueGap+venueHeight+
-        typeGap+typeHeight;
-
-      let textY=rowCenter-textHeight/2;
-      textY=Math.max(rowY+6,Math.min(textY,rowY+eventH-textHeight-6));
+      const titleLineHeight=info.title.size+2;
+      const titleHeight=info.title.lines.length*titleLineHeight;
+      const scheduleHeight=info.schedule?(info.schedule.size+2):0;
+      const venueHeight=info.venue.size+2;
+      const typeHeight=info.type.size+2;
+      const scheduleGap=info.schedule?4:0;
+      const totalHeight=titleHeight+scheduleGap+scheduleHeight+3+venueHeight+4+typeHeight;
+      let textY=rowCenter-totalHeight/2;
+      textY=Math.max(rowY+5,Math.min(textY,rowY+rowH-totalHeight-5));
 
       ctx.fillStyle=WHITE;
-      ctx.font='900 italic '+title.size+'px "Arial Narrow", Arial, sans-serif';
-      title.lines.forEach((line,index)=>{
-        ctx.fillText(line,contentX,textY+title.size+index*titleLineHeight);
+      ctx.font='900 italic '+info.title.size+'px "Arial Narrow", Arial, sans-serif';
+      info.title.lines.forEach((line,index)=>{
+        ctx.fillText(line,contentX,textY+info.title.size+index*titleLineHeight);
       });
       textY+=titleHeight;
 
-      if(schedule){
+      if(info.schedule){
         textY+=scheduleGap;
+        ctx.font='700 italic '+info.schedule.size+'px "Arial Narrow", Arial, sans-serif';
         ctx.fillStyle=WHITE;
-        ctx.font='700 italic '+schedule.size+'px "Arial Narrow", Arial, sans-serif';
-        ctx.fillText(schedule.text,contentX,textY+schedule.size);
+        ctx.fillText(info.schedule.text,contentX,textY+info.schedule.size);
         textY+=scheduleHeight;
       }
 
-      textY+=venueGap;
+      textY+=3;
+      ctx.font='700 italic '+info.venue.size+'px "Arial Narrow", Arial, sans-serif';
       ctx.fillStyle=WHITE;
-      ctx.font='700 italic '+venue.size+'px "Arial Narrow", Arial, sans-serif';
-      ctx.fillText(venue.text,contentX,textY+venue.size);
-      textY+=venueHeight;
+      ctx.fillText(info.venue.text,contentX,textY+info.venue.size);
+      textY+=venueHeight+4;
 
-      textY+=typeGap;
+      ctx.font='900 italic '+info.type.size+'px "Arial Narrow", Arial, sans-serif';
       ctx.fillStyle=YELLOW;
-      ctx.font='900 italic '+type.size+'px "Arial Narrow", Arial, sans-serif';
-      ctx.fillText(type.text,contentX,textY+type.size);
+      ctx.fillText(info.type.text,contentX,textY+info.type.size);
 
-      y+=eventH;
+      y+=rowH;
       if(eventIndex<dayEvents.length-1)y+=eventGap;
     }
 
     y+=groupGap;
   }
 
-  // Garantia final: nada do conteúdo passa da faixa reservada ao rodapé.
-  const footerY=panelBottom-82;
+  // Rodapé na posição do PNG fornecido.
   ctx.textAlign='center';
   ctx.fillStyle=WHITE;
-  ctx.font='900 italic 23px "Arial Narrow", Arial, sans-serif';
-  ctx.fillText('Participe da mobilização e ajude a ocupar as ruas.',CARD_WIDTH/2,footerY);
-  ctx.font='700 italic 18px "Arial Narrow", Arial, sans-serif';
-  ctx.fillText('Confira os demais eventos em:',CARD_WIDTH/2,footerY+30);
-  ctx.font='900 italic 18px "Arial Narrow", Arial, sans-serif';
-  ctx.fillText(host,CARD_WIDTH/2,footerY+59);
+  const footerCenterX=CARD_WIDTH/2;
+  const footerLineWidth=541;
+  const footerY=panelBottom-78;
+  ctx.font='900 italic 22px "Arial Narrow", Arial, sans-serif';
+  ctx.fillText('Participe da mobilização e ajude a ocupar as ruas.',footerCenterX,footerY);
+  ctx.font='700 italic 17px "Arial Narrow", Arial, sans-serif';
+  const footerText=fitSingleLine(ctx,'Confira os demais eventos em: '+host,footerLineWidth,17,10,'700');
+  ctx.fillText(footerText.text,footerCenterX,footerY+30);
   ctx.textAlign='left';
 }
 

@@ -135,12 +135,15 @@ function makeSvg(events:MobilizationEvent[]){
       const scheduleLH=compact?13:15;
       const venueLH=compact?15:17;
       const typeLH=compact?15:18;
-      const contentH=
-        item.title.length*titleLH+
-        (item.schedule.length ? 4+item.schedule.length*scheduleLH : 0)+
-        5+item.venue.length*venueLH+
-        5+typeLH;
-      const rowH=Math.max(timeH,contentH)+20;
+      // A altura da linha precisa comportar exatamente o bloco de texto que será
+      // desenhado abaixo. O cálculo anterior subestimava algumas combinações de
+      // título/local/tipo e fazia o último evento invadir a área do rodapé.
+      const titleH=item.title.length*titleLH;
+      const scheduleH=item.schedule.length ? 4+item.schedule.length*scheduleLH : 0;
+      const venueH=item.venue.length*venueLH;
+      const typeH=5+typeLH;
+      const contentH=titleH+scheduleH+5+venueH+typeH;
+      const rowH=Math.max(timeH,contentH)+36;
 
       positioned.push({groupIndex,item,rowY:cursor,rowH,dateY});
       cursor+=rowH+eventGap;
@@ -151,8 +154,8 @@ function makeSvg(events:MobilizationEvent[]){
 
   const footerH=54;
   const footerW=541;
-  const footerGap=36;
-  const panelPaddingBottom=34;
+  // Espaço independente entre o último evento e o rodapé.\n  // Ele não pode depender da altura mínima do card.\n  const footerGap=64;
+  const panelPaddingBottom=48;
   const footerY=cursor+footerGap;
   const panelBottom=footerY+footerH+panelPaddingBottom;
   const panelH=panelBottom-panelY;

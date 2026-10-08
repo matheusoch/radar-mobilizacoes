@@ -2,7 +2,7 @@ import {useEffect,useMemo,useState} from 'react';
 import type {ChangeEvent,FormEvent,ReactNode} from 'react';
 import React from 'react';
 import {Link,Navigate,Route,Routes,useLocation,useNavigate,useParams} from 'react-router-dom';
-import {CalendarDays,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search,BarChart3,Eye,KeyRound,Users,ChevronLeft,ChevronRight,Share2,Star} from 'lucide-react';
+import {CalendarDays,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search,BarChart3,Eye,KeyRound,Users,ChevronLeft,ChevronRight,Share2,Star,Sun,Moon} from 'lucide-react';
 import './App.css';
 import EventCard from './components/EventCard';
 import Filters,{type FiltersState} from './components/Filters';
@@ -45,7 +45,39 @@ function formatParticipants(count:number){if(count>=10000)return (count/1000).to
 
 function Layout({children}:{children:ReactNode}){
   const[open,setOpen]=useState(false);
-  return <div className="app-shell"><header className="site-header"><div className="container nav"><Link to="/" className="brand" onClick={()=>setOpen(false)}><span className="brand-mark"><img src="/agenda-fist.svg" alt="" width="30" height="30" /></span><span>Agenda de Mobilizações</span></Link><button className="mobile-menu" onClick={()=>setOpen(!open)} aria-label={open?'Fechar menu':'Abrir menu'} aria-expanded={open}>{open?<X/>:<Menu/>}</button><nav className={open?'nav-links nav-open':'nav-links'} aria-label="Navegação principal"><Link onClick={()=>setOpen(false)} to="/">Agenda</Link><Link onClick={()=>setOpen(false)} to="/calendario">Calendário</Link><Link onClick={()=>setOpen(false)} to="/mapa">Mapa</Link><Link onClick={()=>setOpen(false)} to="/divulgar">Divulgar</Link><Link onClick={()=>setOpen(false)} to="/chat">Chat</Link><Link onClick={()=>setOpen(false)} to="/sobre">Sobre</Link><Link onClick={()=>setOpen(false)} className="admin-link" to="/admin">Admin</Link></nav></div></header><main>{children}</main><footer className="footer"><div className="container footer-inner"><span>Projeto independente de organização e divulgação de mobilizações.</span></div></footer></div>
+  const[theme,setTheme]=useState<'light'|'dark'>(()=>(localStorage.getItem('agenda-theme')==='dark'?'dark':'light'));
+  useEffect(()=>{
+    document.documentElement.dataset.theme=theme;
+    localStorage.setItem('agenda-theme',theme);
+  },[theme]);
+  useEffect(()=>()=>{delete document.documentElement.dataset.theme;},[]);
+  const nextTheme=theme==='dark'?'light':'dark';
+  return <div className="app-shell">
+    <header className="site-header">
+      <div className="container nav">
+        <Link to="/" className="brand" onClick={()=>setOpen(false)}>
+          <span className="brand-mark"><img src="/agenda-fist.png" alt="" width="30" height="30"/></span>
+          <span>Agenda de Mobilizações</span>
+        </Link>
+        <button className="mobile-menu" onClick={()=>setOpen(!open)} aria-label={open?'Fechar menu':'Abrir menu'} aria-expanded={open}>{open?<X/>:<Menu/>}</button>
+        <nav className={open?'nav-links nav-open':'nav-links'} aria-label="Navegação principal">
+          <Link onClick={()=>setOpen(false)} to="/">Agenda</Link>
+          <Link onClick={()=>setOpen(false)} to="/calendario">Calendário</Link>
+          <Link onClick={()=>setOpen(false)} to="/mapa">Mapa</Link>
+          <Link onClick={()=>setOpen(false)} to="/divulgar">Divulgar</Link>
+          <Link onClick={()=>setOpen(false)} to="/chat">Chat</Link>
+          <Link onClick={()=>setOpen(false)} to="/sobre">Sobre</Link>
+          <Link onClick={()=>setOpen(false)} className="admin-link" to="/admin">Admin</Link>
+          <button className="theme-toggle" type="button" onClick={()=>setTheme(nextTheme)} aria-label={theme==='dark'?'Ativar modo claro':'Ativar modo escuro'} title={theme==='dark'?'Modo claro':'Modo escuro'}>
+            {theme==='dark'?<Sun size={17}/>:<Moon size={17}/>}
+            <span>{theme==='dark'?'Claro':'Escuro'}</span>
+          </button>
+        </nav>
+      </div>
+    </header>
+    <main>{children}</main>
+    <footer className="footer"><div className="container footer-inner"><span>Projeto independente de organização e divulgação de mobilizações.</span></div></footer>
+  </div>
 }
 
 function Home({events}:{events:MobilizationEvent[]}){

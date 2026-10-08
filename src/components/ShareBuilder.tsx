@@ -466,6 +466,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
                 <strong>{displayLocation(event)}</strong>
                 <small>{event.title}</small>
                 <small>{event.venue}</small>
+                {getTimeInfo(event).detail&&<small className='share-event-schedule'>{getTimeInfo(event).detail}</small>}
                 <small className='share-event-type'>{event.type||'Mobilização'}</small>
               </span>
               <span className='share-event-time'>{formatTime(event)}</span>

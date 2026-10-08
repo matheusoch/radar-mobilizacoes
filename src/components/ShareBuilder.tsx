@@ -4,7 +4,7 @@ import type {MobilizationEvent} from '../types';
 
 const MAX_EVENTS=5;
 const CARD_WIDTH=1080;
-const CARD_HEIGHT=1378;
+const CARD_HEIGHT=1350;
 const BG='#ba1414';
 const PANEL='#951010';
 const WHITE='#ffffff';
@@ -175,13 +175,13 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],template
   // Área útil do painel existente no template.
   // Os eventos começam no topo e avançam para baixo; nunca são centralizados verticalmente.
   const panelX=103.5;
-  const panelY=337;
+  const panelY=327;
   const panelW=873;
   const panelH=953;
   const panelBottom=panelY+panelH;
 
-  const contentTop=377;
-  const contentBottom=panelBottom-95;
+  const contentTop=375;
+  const contentBottom=1180;
   const timeX=145;
   const timeW=150;
   const contentX=320;

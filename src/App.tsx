@@ -2,7 +2,7 @@ import {useEffect,useMemo,useState} from 'react';
 import type {ChangeEvent,FormEvent,ReactNode} from 'react';
 import React from 'react';
 import {Link,Navigate,Route,Routes,useLocation,useNavigate,useParams} from 'react-router-dom';
-import {CalendarDays,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search,BarChart3,Eye,KeyRound,Users,ChevronLeft,ChevronRight,Share2,Star} from 'lucide-react';
+import {CalendarDays,CalendarPlus,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search,BarChart3,Eye,KeyRound,Users,ChevronLeft,ChevronRight,Share2,Star} from 'lucide-react';
 import './App.css';
 // Tema único: o aplicativo mantém a aparência clara padrão.
 import EventCard from './components/EventCard';
@@ -43,6 +43,72 @@ function fmtDate(date?:string|null){if(!date)return 'Data não informada';return
 function fmtShortDate(date?:string|null){if(!date)return '—';return new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}
 function safeName(email?:string|null){return email?.split('@')[0] || 'Participante'}
 function formatParticipants(count:number){if(count>=10000)return (count/1000).toFixed(1).replace('.',',')+' mil';return count.toLocaleString('pt-BR')}
+type AgendaModality='Presencial'|'Virtual'|'Híbrido'|'Não informado';
+type AgendaFilterField='state'|'city'|'type'|'modality';
+function localDateKey(date=new Date()){
+  return [date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
+}
+function normalizedSearchText(value:string){
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+}
+function deriveEventModality(event:MobilizationEvent):AgendaModality{
+  const onlinePattern=/\b(online|virtual|remot[oa]s?|zoom|webex|jitsi)\b|\bgoogle\s+meet\b|\bmicrosoft\s+teams\b|\b(link\s+geral|via\s+link)\b/;
+  const eventText=[event.title,event.type,event.city,event.venue,event.address,event.description,event.notes].filter(Boolean).join(' ');
+  const hasOnlineEvidence=onlinePattern.test(normalizedSearchText(eventText));
+  const venueText=normalizedSearchText(event.venue||'')
+    .replace(/\b(online|virtual|remot[oa]s?|zoom|webex|jitsi|link\s+geral|via\s+link|link\s+dos?\s+organizadores)\b|google\s+meet|microsoft\s+teams/g,' ')
+    .replace(/[\s/;,.-]+/g,' ')
+    .trim();
+  const hasConcreteVenue=Boolean(venueText)&&!/^local nao informado(?: no poster)?$/.test(venueText)&&!/^nao informado$/.test(venueText);
+  const hasMappedCoordinates=Number.isFinite(event.lat)&&Number.isFinite(event.lng);
+  const hasExplicitPhysicalEvidence=Boolean(event.address?.trim())||hasConcreteVenue||/\bpresencial(?:mente)?\b/.test(normalizedSearchText([event.venue,event.notes,event.description].filter(Boolean).join(' ')));
+  const hasPhysicalEvidence=hasExplicitPhysicalEvidence||(
+    Number.isFinite(event.lat)&&Number.isFinite(event.lng)
+  );
+
+  if(hasOnlineEvidence&&hasExplicitPhysicalEvidence)return 'Híbrido';
+  if(hasOnlineEvidence)return 'Virtual';
+  if(hasPhysicalEvidence||hasMappedCoordinates)return 'Presencial';
+  return 'Não informado';
+}
+function physicalCitiesForEvent(event:MobilizationEvent,modality=deriveEventModality(event)){
+  if(modality==='Virtual'||modality==='Não informado')return [];
+  const city=event.city.trim();
+  const normalizedCity=normalizedSearchText(city);
+  if(/\bcidade nao (especificada|identificada)\b/.test(normalizedCity))return [];
+  if(/\bonline\b/.test(normalizedCity)){
+    return city.split(/\s*\/\s*/).map(part=>part.trim()).filter(part=>part&&!/\b(online|virtual)\b/i.test(part));
+  }
+  return city?[city]:[];
+}
+function matchesAgendaFilters(event:MobilizationEvent,filters:FiltersState,today:string,lastDay:string,skip?:AgendaFilterField){
+  if(!event.public)return false;
+  const modality=deriveEventModality(event);
+  if(skip!=='modality'&&filters.modality&&modality!==filters.modality)return false;
+  const ignorePhysicalLocation=filters.modality==='Virtual'&&modality==='Virtual';
+  if(skip!=='state'&&filters.state&&!ignorePhysicalLocation&&((modality!=='Presencial'&&modality!=='Híbrido')||event.state!==filters.state))return false;
+  if(skip!=='city'&&filters.city&&!ignorePhysicalLocation&&!physicalCitiesForEvent(event,modality).includes(filters.city))return false;
+  if(skip!=='type'&&filters.type&&event.type!==filters.type)return false;
+  if(filters.search&&!`${event.title} ${event.city} ${event.state} ${event.venue} ${event.type}`.toLowerCase().includes(filters.search.trim().toLowerCase()))return false;
+  if(filters.period==='today'&&event.date!==today)return false;
+  if(filters.period==='7days'&&(event.date<today||event.date>lastDay))return false;
+  if(filters.period==='upcoming'&&event.date<today)return false;
+  return true;
+}
+function agendaFilterOptions(events:MobilizationEvent[],filters:FiltersState,today:string,lastDay:string,field:AgendaFilterField){
+  const options=[...new Set(events.filter(event=>matchesAgendaFilters(event,filters,today,lastDay,field)).flatMap(event=>{
+    if(field==='city')return physicalCitiesForEvent(event);
+    if(field==='modality'){
+      const modality=deriveEventModality(event);
+      return modality==='Não informado'?[]:[modality];
+    }
+    const value=event[field];
+    if(field==='state'&&deriveEventModality(event)==='Virtual')return [];
+    return value?[value]:[];
+  }))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const selected=filters[field];
+  return selected&&!options.includes(selected)?[selected,...options]:options;
+}
 
 function Layout({children}:{children:ReactNode}){
   const[open,setOpen]=useState(false);
@@ -71,12 +137,16 @@ function Layout({children}:{children:ReactNode}){
 }
 
 function Home({events}:{events:MobilizationEvent[]}){
-  const today=new Date().toISOString().slice(0,10);
-  const[filters,setFilters]=useState<FiltersState>({search:'',state:'',city:'',type:'',period:'upcoming'});
-  const states=[...new Set(events.map(e=>e.state).filter(Boolean))].sort();
-  const cities=[...new Set(events.map(e=>e.city).filter(Boolean))].sort();
-  const types=[...new Set(events.map(e=>e.type).filter(Boolean))].sort();
-  const filtered=useMemo(()=>events.filter(e=>{if(!e.public)return false;if(filters.state&&e.state!==filters.state)return false;if(filters.city&&e.city!==filters.city)return false;if(filters.type&&e.type!==filters.type)return false;if(filters.search&&!`${e.title} ${e.city} ${e.state} ${e.venue} ${e.type}`.toLowerCase().includes(filters.search.toLowerCase()))return false;const d=new Date(`${e.date}T12:00:00`),t=new Date(`${today}T12:00:00`);if(filters.period==='today'&&e.date!==today)return false;if(filters.period==='7days'&&(d<t||d>new Date(t.getTime()+7*864e5)))return false;if(filters.period==='upcoming'&&d<t)return false;return true}),[events,filters,today]);
+  const today=localDateKey();
+  const lastDate=new Date();
+  lastDate.setDate(lastDate.getDate()+7);
+  const lastDay=localDateKey(lastDate);
+  const[filters,setFilters]=useState<FiltersState>({search:'',state:'',city:'',type:'',period:'upcoming',modality:''});
+  const states=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'state'),[events,filters,today,lastDay]);
+  const cities=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'city'),[events,filters,today,lastDay]);
+  const types=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'type'),[events,filters,today,lastDay]);
+  const modalities:AgendaModality[]=['Presencial','Virtual','Híbrido'];
+  const filtered=useMemo(()=>events.filter(event=>matchesAgendaFilters(event,filters,today,lastDay)),[events,filters,today,lastDay]);
   const[attendance,setAttendance]=useState<Record<string,{count:number;attending:boolean}>>({});
   useEffect(()=>{
     const ids=events.map(e=>e.db_id).filter((id):id is string=>Boolean(id));
@@ -93,7 +163,84 @@ function Home({events}:{events:MobilizationEvent[]}){
       else alert(message);
     }
   };
-  return <><section className="hero"><div className="container hero-grid"><div><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> AGENDA DE MOBILIZAÇÕES</div><h1>Eventos e mobilizações pelo Brasil.</h1><p>Agenda de atos, manifestações, plenárias e encontros em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, organizados por data e cidade e acompanhados de fontes para conferência.</p><div className="hero-actions"><Link to="/calendario" className="button primary"><CalendarDays size={18}/>Ver calendário</Link><Link to="/divulgar" className="button ghost"><ImageIcon size={18}/>Criar divulgação</Link><Link to="/chat" className="button ghost"><MessageCircle size={18}/>Enviar atualização</Link></div></div><div className="hero-card"><div className="hero-stat"><strong>{events.length}</strong><span>eventos públicos</span></div><div className="hero-stat"><strong>{states.length}</strong><span>estados representados</span></div><div className="hero-stat"><strong>{events.filter(e=>e.status!=='warning').length}</strong><span>sem alerta de divergência</span></div></div></div></section><section className="container section"><Filters value={filters} onChange={setFilters} states={states} cities={cities} types={types}/><div className="section-head"><div><div className="eyebrow">AGENDA</div><h2>{filtered.length} evento{filtered.length===1?'':'s'}</h2></div><div className="legend">Informação rastreável</div></div><div className="event-grid">{filtered.map(e=><EventCard key={e.id} event={e} attendance={e.db_id?attendance[e.db_id]:undefined} onAttendance={()=>handleAttendance(e)}/>)}</div>{!filtered.length&&<div className="empty"><Info/><h3>Nenhum evento encontrado</h3><p>Tente outro termo ou remova alguns filtros.</p></div>}</section></>
+  return <><section className="hero"><div className="container hero-grid"><div><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> AGENDA DE MOBILIZAÇÕES</div><h1>Eventos e mobilizações pelo Brasil.</h1><p>Agenda de atos, manifestações, plenárias e encontros em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, organizados por data e cidade e acompanhados de fontes para conferência.</p><div className="hero-actions"><Link to="/calendario" className="button primary"><CalendarDays size={18}/>Ver calendário</Link><Link to="/divulgar" className="button ghost"><ImageIcon size={18}/>Criar divulgação</Link><Link to="/chat" className="button ghost"><MessageCircle size={18}/>Enviar atualização</Link></div></div><div className="hero-card"><div className="hero-stat"><strong>{events.length}</strong><span>eventos públicos</span></div><div className="hero-stat"><strong>{states.length}</strong><span>estados representados</span></div><div className="hero-stat"><strong>{events.filter(e=>e.status!=='warning').length}</strong><span>sem alerta de divergência</span></div></div></div></section><section className="container section"><Filters value={filters} onChange={setFilters} states={states} cities={cities} types={types} modalities={modalities}/><div className="section-head"><div><div className="eyebrow">AGENDA</div><h2>{filtered.length} evento{filtered.length===1?'':'s'}</h2></div><div className="legend">Informação rastreável</div></div><div className="event-grid">{filtered.map(e=><EventCard key={e.id} event={e} attendance={e.db_id?attendance[e.db_id]:undefined} onAttendance={()=>handleAttendance(e)}/>)}</div>{!filtered.length&&<div className="empty"><Info/><h3>Nenhum evento encontrado</h3><p>Tente outro termo ou remova alguns filtros.</p></div>}</section></>
+}
+
+function escapeIcsText(value:string){
+  return value.replace(/\\/g,'\\\\').replace(/\r\n|\n|\r/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;');
+}
+
+function foldIcsLine(value:string){
+  const encoder=new TextEncoder();
+  const lines:string[]=[];
+  let line='';
+  let bytes=0;
+  for(const character of value){
+    const characterBytes=encoder.encode(character).length;
+    if(bytes+characterBytes>75){
+      lines.push(line);
+      line=' '+character;
+      bytes=1+characterBytes;
+    }else{
+      line+=character;
+      bytes+=characterBytes;
+    }
+  }
+  lines.push(line);
+  return lines.join('\r\n');
+}
+
+function buildEventIcs(event:MobilizationEvent,eventUrl:string){
+  const date=event.date.replace(/-/g,'');
+  const time=event.time||event.time_label?.match(/\d{1,2}:\d{2}/)?.[0];
+  const [year,month,day]=event.date.split('-').map(Number);
+  const nextDate=new Date(Date.UTC(year,month-1,day+1)).toISOString().slice(0,10).replace(/-/g,'');
+  const lines=[
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Radar de Mobilizacoes//Agenda//PT-BR',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+  ];
+
+  if(time){
+    const [hour,minute]=time.split(':').map(Number);
+    const end=new Date(Date.UTC(year,month-1,day,hour,minute+120));
+    const formatDateTime=(dateValue:Date)=>dateValue.toISOString().slice(0,16).replace(/[-:]/g,'')+'00';
+    lines.push(
+      'BEGIN:VTIMEZONE',
+      'TZID:America/Sao_Paulo',
+      'X-LIC-LOCATION:America/Sao_Paulo',
+      'BEGIN:STANDARD',
+      'DTSTART:19700101T000000',
+      'TZOFFSETFROM:-0300',
+      'TZOFFSETTO:-0300',
+      'TZNAME:BRT',
+      'END:STANDARD',
+      'END:VTIMEZONE',
+      'BEGIN:VEVENT',
+      'UID:'+escapeIcsText(event.id)+'@radar-mobilizacoes',
+      'DTSTAMP:'+new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z'),
+      'DTSTART;TZID=America/Sao_Paulo:'+date+'T'+String(hour).padStart(2,'0')+String(minute).padStart(2,'0')+'00',
+      'DTEND;TZID=America/Sao_Paulo:'+formatDateTime(end),
+    );
+  }else{
+    lines.push(
+      'BEGIN:VEVENT',
+      'UID:'+escapeIcsText(event.id)+'@radar-mobilizacoes',
+      'DTSTAMP:'+new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z'),
+      'DTSTART;VALUE=DATE:'+date,
+      'DTEND;VALUE=DATE:'+nextDate,
+    );
+  }
+
+  const location=[event.address,event.venue,event.city,event.state,'Brasil'].filter(Boolean).join(', ');
+  const description=[event.description,event.notes].filter(Boolean).join('\n\n');
+  lines.push('SUMMARY:'+escapeIcsText(event.title));
+  if(location)lines.push('LOCATION:'+escapeIcsText(location));
+  if(description)lines.push('DESCRIPTION:'+escapeIcsText(description));
+  lines.push('URL:'+eventUrl,'END:VEVENT','END:VCALENDAR');
+  return lines.map(foldIcsLine).join('\r\n')+'\r\n';
 }
 
 function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSource[]}){
@@ -205,7 +352,17 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
     }
   };
 
-  if(!event)return <Navigate to="/"/>;
+  if(!event)return <div className="container detail-page">
+    <div className="empty">
+      <Info size={22}/>
+      <h2>Evento não encontrado</h2>
+      <p>Este evento não está disponível ou o link pode estar incorreto.</p>
+      <div className="event-action-row">
+        <Link className="button primary" to="/">Voltar para a agenda</Link>
+        <Link className="button ghost" to="/calendario">Abrir calendário</Link>
+      </div>
+    </div>
+  </div>;
 
   const ss=sources.filter(s=>event.source_ids.includes(s.id));
   const directionsQuery=[event.address,event.venue,event.city,event.state,'Brasil'].filter(Boolean).join(', ');
@@ -222,6 +379,16 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
     'Fonte: '+window.location.href,
   ].filter(Boolean).join(' ');
   const calendarUrl='https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(event.title)+'&dates='+calendarStart+'/'+calendarEnd+'&details='+encodeURIComponent(calendarDetails)+'&location='+encodeURIComponent(directionsQuery)+'&ctz=America%2FSao_Paulo';
+  const downloadIcs=()=>{
+    const eventUrl=new URL('/evento/'+encodeURIComponent(event.id),window.location.origin).href;
+    const blob=new Blob([buildEventIcs(event,eventUrl)],{type:'text/calendar;charset=utf-8'});
+    const objectUrl=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=objectUrl;
+    link.download='mobilizacao-'+event.id.replace(/[^a-zA-Z0-9_-]+/g,'-')+'.ics';
+    link.click();
+    window.setTimeout(()=>URL.revokeObjectURL(objectUrl),1000);
+  };
 
   return <div className="container detail-page">
     <Link to="/" className="back-link">← Voltar para a Agenda</Link>
@@ -237,6 +404,7 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
           <div>📍 {event.venue}</div>
           {event.address&&<div>⌖ {event.address}</div>}
         </div>
+        {event.description&&<p>{event.description}</p>}
         <div className="detail-attendance">
           <div className="detail-participants">
             <Users size={20}/>
@@ -247,7 +415,7 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
           </button>
         </div>
         {attendanceError&&<div className="callout warning"><Info size={18}/><span>{attendanceError}</span></div>}
-        <div className="event-action-row"><a className="button ghost directions-button" href={directionsUrl} target="_blank" rel="noreferrer"><MapPinned size={17}/>Como chegar</a><a className="button primary reminder-button" href={calendarUrl} target="_blank" rel="noreferrer"><CalendarDays size={17}/>Definir lembrete</a></div>
+        <div className="event-action-row"><a className="button ghost directions-button" href={directionsUrl} target="_blank" rel="noreferrer"><MapPinned size={17}/>Como chegar</a><button type="button" className="button ghost" onClick={downloadIcs}><CalendarPlus size={17}/>Adicionar ao calendário</button><a className="button primary reminder-button" href={calendarUrl} target="_blank" rel="noreferrer"><CalendarDays size={17}/>Definir lembrete</a><Link className="button ghost" to={'/divulgar?eventos='+encodeURIComponent(event.id)}><ImageIcon size={17}/>Divulgar</Link></div>
         {event.notes&&<div className={event.status==='warning'?'callout warning':'callout info'}><Info size={20}/><span>{event.notes}</span></div>}
         {event.image_url&&<PosterActions event={event}/>}
         <h2>Fontes</h2>
@@ -268,7 +436,7 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
     const d=new Date();
     return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
   };
-  const[today]=useState(getLocalDateKey);
+  const today=getLocalDateKey();
   const[selectedDate,setSelectedDate]=useState(today);
   const[query,setQuery]=useState('');
 
@@ -282,6 +450,9 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
 
   const selectedDateObj=new Date(selectedDate+'T12:00:00');
   const dateLabel=selectedDateObj.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  const dateIndicatorLabel=selectedDate===today
+    ?'Hoje'
+    :String(selectedDateObj.getDate()).padStart(2,'0')+' '+selectedDateObj.toLocaleDateString('pt-BR',{month:'short'}).replace('.','');
   const normalized=query.trim().toLowerCase();
   const filtered=publicEvents.filter(e=>e.date===selectedDate&&(!normalized||(e.city+' '+(e.state||'')+' '+e.title+' '+e.venue).toLowerCase().includes(normalized)));
   const groups=Object.entries(filtered.reduce((a:Record<string,MobilizationEvent[]>,e)=>{(a[e.date]??=[]).push(e);return a},{})).sort(([a],[b])=>a.localeCompare(b));
@@ -293,9 +464,10 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
         <h1>{dateLabel.charAt(0).toUpperCase()+dateLabel.slice(1)}</h1>
         <p className="page-lead">Navegue dia a dia e encontre rapidamente uma cidade, estado, local ou evento.</p>
       </div>
-      <div className="calendar-nav" aria-label="Navegação do calendário">
+      <div className={`calendar-nav${selectedDate===today?'':' has-return'}`} aria-label="Navegação do calendário">
         <button type="button" className="button ghost" onClick={e=>{e.preventDefault();shiftDate(-1)}} aria-label="Dia anterior" title="Dia anterior"><ChevronLeft size={17}/></button>
-        <button type="button" className="button ghost" onClick={e=>{e.preventDefault();setSelectedDate(today)}} title="Voltar para hoje">Hoje</button>
+        <span className="calendar-current-date" aria-live="polite">{dateIndicatorLabel}</span>
+        {selectedDate!==today&&<button type="button" className="button ghost" onClick={e=>{e.preventDefault();setSelectedDate(today)}} title="Voltar para hoje">Hoje</button>}
         <button type="button" className="button ghost" onClick={e=>{e.preventDefault();shiftDate(1)}} aria-label="Próximo dia" title="Próximo dia"><ChevronRight size={17}/></button>
       </div>
     </div>

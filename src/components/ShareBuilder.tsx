@@ -302,6 +302,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   const params=new URLSearchParams(window.location.search);
   const initialIds=(params.get('eventos')||'').split(',').map(decodeURIComponent).filter(Boolean);
   const[query,setQuery]=useState('');
+  const[dateFilter,setDateFilter]=useState('');
   const[selected,setSelected]=useState<string[]>(initialIds.slice(0,MAX_EVENTS));
   const[feedback,setFeedback]=useState('');
   const canvasRef=useRef<HTMLCanvasElement>(null);
@@ -311,6 +312,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
     const q=query.trim().toLowerCase();
     return groupSort(events.filter(event=>{
       if(!event.public||event.date<today)return false;
+      if(dateFilter&&event.date!==dateFilter)return false;
       if(!q)return true;
       return [event.title,event.city,event.state,event.venue,event.type]
         .filter(Boolean)
@@ -318,7 +320,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
         .toLowerCase()
         .includes(q);
     }));
-  },[events,query]);
+  },[events,query,dateFilter]);
 
   const chosen=groupSort(
     selected
@@ -425,15 +427,31 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
           <span>{candidates.length} disponíveis</span>
         </div>
 
-        <div className='share-search'>
-          <input
-            value={query}
-            onChange={e=>setQuery(e.target.value)}
-            placeholder='Buscar cidade, estado ou evento...'
-            aria-label='Buscar eventos para divulgação'
-          />
-          {query&&
-            <button type='button' onClick={()=>setQuery('')} aria-label='Limpar busca'>
+        <div className='share-filter-row'>
+          <div className='share-search'>
+            <input
+              value={query}
+              onChange={e=>setQuery(e.target.value)}
+              placeholder='Buscar cidade, estado ou evento...'
+              aria-label='Buscar eventos para divulgação'
+            />
+            {query&&
+              <button type='button' onClick={()=>setQuery('')} aria-label='Limpar busca'>
+                <X size={16}/>
+              </button>
+            }
+          </div>
+          <label className='share-date-filter'>
+            <span>Data</span>
+            <input
+              type='date'
+              value={dateFilter}
+              onChange={e=>setDateFilter(e.target.value)}
+              aria-label='Filtrar eventos por data'
+            />
+          </label>
+          {dateFilter&&
+            <button type='button' className='share-date-clear' onClick={()=>setDateFilter('')} aria-label='Limpar filtro de data'>
               <X size={16}/>
             </button>
           }

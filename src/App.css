@@ -254,3 +254,158 @@ body{background:var(--page);color:var(--ink)}
 .share-canvas{border-radius:0;box-shadow:none}
 
 .share-canvas{border-radius:0;box-shadow:none}
+
+
+/* Card de divulgação — composição responsiva baseada diretamente no template PNG. */
+.share-canvas-wrap{
+  background:#eee9e5;
+  border-radius:14px;
+  padding:12px;
+  display:flex;
+  justify-content:center;
+  align-items:flex-start;
+  overflow:auto;
+  max-height:none;
+}
+.share-card-art{
+  --card-red:#ba1414;
+  --card-panel:#951010;
+  container-type:inline-size;
+  width:min(100%,540px);
+  flex:0 0 auto;
+  box-sizing:border-box;
+  background:var(--card-red);
+  padding:6.85cqw 0 5.65cqw;
+  color:#fff;
+}
+.share-card-header{
+  display:block;
+  width:57.22%;
+  height:auto;
+  margin:0 auto 6.2cqw;
+  object-fit:contain;
+  user-select:none;
+}
+.share-card-panel{
+  width:80.83%;
+  box-sizing:border-box;
+  margin:0 auto;
+  padding:3.62cqw 3.70cqw 3.1cqw;
+  background:var(--card-panel);
+  border-radius:8.9cqw;
+}
+.share-card-group+.share-card-group{
+  margin-top:6.1cqw;
+}
+.share-card-date{
+  width:26.02cqw;
+  min-height:7.13cqw;
+  margin:0 auto 3.24cqw;
+  border-radius:999px;
+  background:#fff;
+  color:var(--card-panel);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:0 1.5cqw;
+  box-sizing:border-box;
+  font-family:"Arial Narrow",Arial,sans-serif;
+  font-size:clamp(9px,2.59cqw,14px);
+  font-weight:900;
+  font-style:italic;
+  white-space:nowrap;
+}
+.share-card-events{
+  display:grid;
+  gap:6.1cqw;
+}
+.share-card-event{
+  display:grid;
+  grid-template-columns:13.8cqw minmax(0,1fr);
+  column-gap:2.4cqw;
+  align-items:center;
+  min-height:7.8cqw;
+}
+.share-card-time{
+  width:13.8cqw;
+  min-height:7.13cqw;
+  border-radius:999px;
+  background:#fff;
+  color:var(--card-panel);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:0 1cqw;
+  box-sizing:border-box;
+  font-family:"Arial Narrow",Arial,sans-serif;
+  font-size:clamp(10px,2.87cqw,15.5px);
+  font-weight:900;
+  font-style:italic;
+  white-space:nowrap;
+}
+.share-card-info{
+  min-width:0;
+  font-family:"Arial Narrow",Arial,sans-serif;
+  font-style:italic;
+  line-height:1.03;
+}
+.share-card-title{
+  color:#fff;
+  font-size:clamp(10px,2.69cqw,14.5px);
+  font-weight:900;
+  overflow-wrap:anywhere;
+}
+.share-card-schedule{
+  color:#fff;
+  margin-top:.55cqw;
+  font-size:clamp(7px,1.30cqw,7px);
+  font-weight:700;
+  overflow-wrap:anywhere;
+}
+.share-card-venue{
+  color:#fff;
+  margin-top:.55cqw;
+  font-size:clamp(7px,1.67cqw,9px);
+  font-weight:700;
+  overflow-wrap:anywhere;
+}
+.share-card-type{
+  color:#f7db26;
+  margin-top:.55cqw;
+  font-size:clamp(7px,1.57cqw,8.5px);
+  font-weight:900;
+  overflow-wrap:anywhere;
+}
+.share-card-footer{
+  margin-top:3.0cqw;
+  text-align:center;
+  color:#fff;
+  font-family:"Arial Narrow",Arial,sans-serif;
+  font-style:italic;
+  line-height:1.12;
+}
+.share-card-footer strong,
+.share-card-footer span,
+.share-card-footer b{
+  display:block;
+}
+.share-card-footer strong{
+  font-size:clamp(8px,1.67cqw,9px);
+  font-weight:900;
+}
+.share-card-footer span{
+  margin-top:.7cqw;
+  font-size:clamp(7px,1.39cqw,7.5px);
+  font-weight:700;
+}
+.share-card-footer b{
+  margin-top:.35cqw;
+  font-size:clamp(7px,1.39cqw,7.5px);
+  font-weight:900;
+  overflow-wrap:anywhere;
+}
+.share-canvas{display:none!important}
+@media(max-width:620px){
+  .share-canvas-wrap{padding:7px}
+  .share-card-art{width:100%;max-width:540px}
+}

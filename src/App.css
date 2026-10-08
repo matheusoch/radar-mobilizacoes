@@ -172,3 +172,29 @@ button,input,select,textarea{box-sizing:border-box;max-width:100%}
 @media(max-width:620px){.share-builder-heading{align-items:flex-start;flex-direction:column}.share-counter{justify-items:start}.share-builder-layout{gap:14px}.share-picker,.share-preview-panel{padding:14px}.share-event{grid-template-columns:auto minmax(0,1fr)}.share-event-time{grid-column:2}.share-canvas-wrap{max-height:none}.share-actions{grid-template-columns:1fr}.share-actions .button:first-child{grid-column:auto}}
 
 .share-event-type{color:var(--accent)!important;font-weight:800}
+
+
+/* Ajustes finais do criador de divulgação: prévia responsiva e sem overflow. */
+.share-canvas-wrap{
+  width:100%;
+  box-sizing:border-box;
+  padding:12px;
+  overflow:hidden;
+  align-items:flex-start;
+}
+.share-canvas{
+  width:min(100%,540px);
+  max-width:100%;
+  height:auto;
+  aspect-ratio:1080 / 1378;
+  flex:0 1 auto;
+  display:block;
+}
+.share-preview-panel{min-width:0;overflow:hidden}
+@media(max-width:900px){
+  .share-canvas{width:min(100%,620px)}
+}
+@media(max-width:620px){
+  .share-canvas-wrap{padding:8px}
+  .share-canvas{width:100%;max-width:100%}
+}

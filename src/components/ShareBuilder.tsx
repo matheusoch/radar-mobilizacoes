@@ -306,12 +306,23 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
     y+=groupGap;
   }
 
-  // Rodapé original fornecido. Sem cobrir nem recriar sua transparência.
+  // Rodapé original fornecido. A arte é preservada; apenas a linha do
+  // endereço antigo é coberta pelo mesmo vermelho do painel e atualizada.
   if(footerImage&&footerImage.complete){
     const footerW=541;
     const footerH=54;
     const footerX=(CARD_WIDTH-footerW)/2;
     ctx.drawImage(footerImage,footerX,footerY,footerW,footerH);
+
+    ctx.fillStyle='#951010';
+    ctx.fillRect(footerX,footerY+25,footerW,29);
+
+    ctx.textAlign='center';
+    ctx.fillStyle=WHITE;
+    ctx.font='700 italic 15px "Arial Narrow", Arial, sans-serif';
+    ctx.fillText('Confira os demais eventos em:',CARD_WIDTH/2,footerY+37);
+    ctx.font='900 italic 15px "Arial Narrow", Arial, sans-serif';
+    ctx.fillText('agenda-mobilizacoes.participa.workers.dev',CARD_WIDTH/2,footerY+52);
   }
 
   ctx.textAlign='left';
@@ -369,9 +380,9 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
       img.onload=()=>{ready++;paint();};
       img.onerror=()=>{ready++;paint();};
     });
-    header.src='/agenda-card-header.png';
-    panel.src='/share-panel.svg';
-    footer.src='/agenda-card-footer.png';
+    header.src='/agenda-card-header-exact.png';
+    panel.src='/agenda-card-panel-exact.png';
+    footer.src='/agenda-card-footer-exact.png';
     return()=>{cancelled=true;};
   },[chosen]);
 

@@ -505,3 +505,5 @@ body{background:var(--page);color:var(--ink)}
   .community-login{align-items:flex-start;flex-direction:column}
   .community-login .button{width:100%}
 }
+
+.auth-forgot,.mode-switch{display:flex;width:fit-content;max-width:100%}

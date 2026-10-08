@@ -188,12 +188,17 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],template
   const rightInset=50;
   const maxTextWidth=panelX+panelW-rightInset-contentX;
 
+  const dates=[...new Set(ordered.map(event=>event.date))];
   const compact=ordered.length>=4;
-  const rowH=compact?128:150;
-  const eventGap=compact?6:9;
-  const dateH=compact?46:52;
-  const dateGap=compact?8:11;
-  const groupGap=compact?12:16;
+  // Cinco eventos em cinco dias distintos precisam compartilhar a mesma
+  // área vertical. Nesse caso reduzimos apenas o espaçamento/altura das
+  // linhas; o template e a ordem de cima para baixo permanecem iguais.
+  const ultraCompact=dates.length>=5;
+  const rowH=ultraCompact?110:(compact?128:150);
+  const eventGap=ultraCompact?2:(compact?6:9);
+  const dateH=ultraCompact?36:(compact?46:52);
+  const dateGap=ultraCompact?4:(compact?8:11);
+  const groupGap=ultraCompact?5:(compact?12:16);
 
   ctx.save();
   ctx.beginPath();
@@ -201,8 +206,6 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],template
   ctx.clip();
 
   let y=contentTop;
-
-  const dates=[...new Set(ordered.map(event=>event.date))];
 
   for(const date of dates){
     const dayEvents=ordered.filter(event=>event.date===date);
@@ -218,7 +221,7 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],template
       y,
       dateW,
       dateH,
-      '900 italic '+(compact?22:25)+'px "Arial Narrow", Arial, sans-serif'
+      '900 italic '+(ultraCompact?19:(compact?22:25))+'px "Arial Narrow", Arial, sans-serif'
     );
 
     y+=dateH+dateGap;
@@ -230,7 +233,7 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],template
       const rowCenter=rowY+rowH/2;
       const info=eventMetrics(ctx,event,maxTextWidth,rowH,compact);
 
-      const pillH=Math.min(compact?54:58,Math.max(44,rowH-30));
+      const pillH=Math.min(ultraCompact?48:(compact?54:58),Math.max(42,rowH-30));
       pill(
         ctx,
         formatTime(event),
@@ -238,7 +241,7 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],template
         rowCenter-pillH/2,
         timeW,
         pillH,
-        '900 italic '+(compact?25:29)+'px "Arial Narrow", Arial, sans-serif'
+        '900 italic '+(ultraCompact?22:(compact?25:29))+'px "Arial Narrow", Arial, sans-serif'
       );
 
       const titleLH=info.title.size+2;

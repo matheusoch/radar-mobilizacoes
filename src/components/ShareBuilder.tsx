@@ -198,9 +198,25 @@ function svgData(svg:string){
 }
 
 async function svgToPng(svg:string,width:number,height:number){
+  const assetPaths=[HEADER,FOOTER,ICON];
+  const embedded=await Promise.all(assetPaths.map(async path=>{
+    const response=await fetch(path,{cache:'no-store'});
+    if(!response.ok)throw new Error('asset');
+    const blob=await response.blob();
+    return new Promise<string>((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(String(reader.result));
+      reader.onerror=()=>reject(new Error('asset'));
+      reader.readAsDataURL(blob);
+    });
+  }));
+  let embeddedSvg=svg;
+  assetPaths.forEach((path,index)=>{
+    embeddedSvg=embeddedSvg.split(path).join(embedded[index]);
+  });
   const image=new Image();
   image.decoding='async';
-  image.src=svgData(svg);
+  image.src=svgData(embeddedSvg);
   await new Promise<void>((resolve,reject)=>{image.onload=()=>resolve();image.onerror=()=>reject(new Error('svg'));});
   const canvas=document.createElement('canvas');
   canvas.width=width;

@@ -367,9 +367,9 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
       img.onload=()=>{ready++;paint();};
       img.onerror=()=>{ready++;paint();};
     });
-    header.src='/share-header.svg';
+    header.src='/agenda-card-header.png';
     panel.src='/share-panel.svg';
-    footer.src='/share-footer.svg';
+    footer.src='/agenda-card-footer.png';
     return()=>{cancelled=true;};
   },[chosen]);
 

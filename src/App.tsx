@@ -4,6 +4,7 @@ import React from 'react';
 import {Link,Navigate,Route,Routes,useLocation,useNavigate,useParams} from 'react-router-dom';
 import {CalendarDays,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search,BarChart3,Eye,KeyRound,Users,ChevronLeft,ChevronRight,Share2,Star} from 'lucide-react';
 import './App.css';
+// Tema único: o aplicativo mantém a aparência clara padrão.
 import EventCard from './components/EventCard';
 import Filters,{type FiltersState} from './components/Filters';
 import MapView from './components/MapView';

@@ -159,9 +159,8 @@ function eventMetrics(ctx:CanvasRenderingContext2D,event:MobilizationEvent,maxWi
   return {title,schedule,venue,type};
 }
 
-function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:string,headerImage?:HTMLImageElement,panelImage?:HTMLImageElement,footerImage?:HTMLImageElement){
+function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],templateImage:HTMLImageElement){
   const ordered=events.slice().sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
-  const dates=[...new Set(ordered.map(event=>event.date))];
 
   canvas.width=CARD_WIDTH;
   canvas.height=CARD_HEIGHT;
@@ -169,62 +168,49 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
   const ctx=canvas.getContext('2d');
   if(!ctx)return;
 
-  // Fundo externo do template.
-  ctx.fillStyle='#b91414';
-  ctx.fillRect(0,0,CARD_WIDTH,CARD_HEIGHT);
+  // O PNG é o template completo. O código abaixo desenha somente os eventos.
+  ctx.clearRect(0,0,CARD_WIDTH,CARD_HEIGHT);
+  ctx.drawImage(templateImage,0,0,CARD_WIDTH,CARD_HEIGHT);
 
-  // Cabeçalho original fornecido.
-  const headerW=618;
-  const headerH=195;
-  const headerX=(CARD_WIDTH-headerW)/2;
-  const headerY=52;
-  if(headerImage&&headerImage.complete&&headerImage.naturalWidth>0){
-    ctx.drawImage(headerImage,headerX,headerY,headerW,headerH);
-  }
-
-  // Retângulo original fornecido, sem reconstruir o fundo arredondado.
+  // Área útil do painel existente no template.
+  // Os eventos começam no topo e avançam para baixo; nunca são centralizados verticalmente.
   const panelX=103.5;
   const panelY=337;
   const panelW=873;
   const panelH=953;
   const panelBottom=panelY+panelH;
 
-  // O painel escuro é a base. O PNG fornecido é uma camada transparente decorativa,
-  // portanto ele deve ser aplicado POR CIMA da base, e não substituir a base inteira.
-  ctx.fillStyle=PANEL;
-  roundRect(ctx,panelX,panelY,panelW,panelH,96);
-  ctx.fill();
-  if(panelImage&&panelImage.complete&&panelImage.naturalWidth>0){
-    ctx.drawImage(panelImage,panelX,panelY,panelW,panelH);
-  }
-
-  // Grades do conteúdo dentro do retângulo.
+  const contentTop=377;
+  const contentBottom=panelBottom-95;
   const timeX=145;
   const timeW=150;
   const contentX=320;
   const rightInset=50;
   const maxTextWidth=panelX+panelW-rightInset-contentX;
 
-  const contentTop=377;
-  const footerY=panelBottom-74;
-
   const compact=ordered.length>=4;
+  const rowH=compact?128:150;
+  const eventGap=compact?6:9;
   const dateH=compact?46:52;
   const dateGap=compact?8:11;
   const groupGap=compact?12:16;
-  const eventGap=compact?6:9;
 
-    // Não esticamos uma única mobilização para ocupar todo o painel.
-  // Cada evento recebe uma faixa própria; o espaço restante fica limpo dentro do template.
-  const rowH=compact?128:150;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(panelX+25,contentTop-8,panelW-50,contentBottom-contentTop+16);
+  ctx.clip();
 
   let y=contentTop;
+
+  const dates=[...new Set(ordered.map(event=>event.date))];
 
   for(const date of dates){
     const dayEvents=ordered.filter(event=>event.date===date);
 
-    // O marcador de data fica sempre isolado, antes das linhas dos eventos.
+    // A data também é conteúdo do evento e permanece no fluxo vertical.
     const dateW=282;
+    if(y+dateH>contentBottom)break;
+
     pill(
       ctx,
       formatDateLabel(date),
@@ -237,12 +223,13 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
 
     y+=dateH+dateGap;
 
-    for(const [eventIndex,event] of dayEvents.entries()){
+    for(const event of dayEvents){
+      if(y+rowH>contentBottom)break;
+
       const rowY=y;
       const rowCenter=rowY+rowH/2;
       const info=eventMetrics(ctx,event,maxTextWidth,rowH,compact);
 
-      // O horário tem espaço próprio e nunca recebe o texto complementar.
       const pillH=Math.min(compact?54:58,Math.max(44,rowH-30));
       pill(
         ctx,
@@ -262,7 +249,8 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
       const scheduleGap=info.schedule?3:0;
       const stackH=titleH+scheduleGap+scheduleH+3+venueH+4+typeH;
 
-      // Centraliza a pilha inteira do evento dentro de sua própria faixa.
+      // O texto fica no centro HORIZONTAL da sua própria linha,
+      // mas a linha inteira segue de cima para baixo no painel.
       let textY=rowCenter-stackH/2;
       if(textY<rowY+5)textY=rowY+5;
       if(textY+stackH>rowY+rowH-5)textY=rowY+rowH-5-stackH;
@@ -293,21 +281,13 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
       ctx.font='900 italic '+info.type.size+'px "Arial Narrow", Arial, sans-serif';
       ctx.fillText(info.type.text,contentX,textY+info.type.size);
 
-      y+=rowH;
-      if(eventIndex<dayEvents.length-1)y+=eventGap;
+      y+=rowH+eventGap;
     }
 
     y+=groupGap;
   }
 
-  // Rodapé original fornecido. Sem cobrir nem recriar sua transparência.
-  if(footerImage&&footerImage.complete&&footerImage.naturalWidth>0){
-    const footerW=541;
-    const footerH=54;
-    const footerX=(CARD_WIDTH-footerW)/2;
-    ctx.drawImage(footerImage,footerX,footerY,footerW,footerH);
-  }
-
+  ctx.restore();
   ctx.textAlign='left';
 }
 
@@ -346,26 +326,24 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   useEffect(()=>{
     if(!canvasRef.current||!chosen.length)return;
     let cancelled=false;
-    const header=new Image();
-    const panel=new Image();
-    const footer=new Image();
-    let ready=0;
+    const template=new Image();
+
     const paint=()=>{
-      if(cancelled||!canvasRef.current||ready<3)return;
+      if(cancelled||!canvasRef.current||!template.complete||template.naturalWidth===0)return;
       try{
-        renderCard(canvasRef.current,chosen,window.location.host,header,panel,footer);
+        renderCard(canvasRef.current,chosen,template);
         setFeedback('');
       }catch{
         setFeedback('A prévia visual não pôde ser gerada neste navegador.');
       }
     };
-    [header,panel,footer].forEach(img=>{
-      img.onload=()=>{ready++;paint();};
-      img.onerror=()=>{ready++;paint();};
-    });
-    header.src='/agenda-header-exact.png';
-    panel.src='/agenda-card-panel.png';
-    footer.src='/agenda-card-footer.png';
+
+    template.onload=paint;
+    template.onerror=()=>{
+      if(!cancelled)setFeedback('Não foi possível carregar o template da divulgação.');
+    };
+    template.src='/agenda-template.png';
+
     return()=>{cancelled=true;};
   },[chosen]);
 

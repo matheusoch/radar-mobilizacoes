@@ -161,15 +161,15 @@ function makeSvg(events:MobilizationEvent[]){
   let body='';
   groups.forEach((group,groupIndex)=>{
     const dateY=positioned.find(p=>p.groupIndex===groupIndex)?.dateY ?? panelY+38;
-    body+=\`<rect x="\${(W-dateW)/2}" y="\${dateY}" width="\${dateW}" height="\${dateH}" rx="39" fill="\${WHITE}"/>
-      <text x="\${W/2}" y="\${dateY+47}" text-anchor="middle" font-family="Arial, sans-serif" font-size="\${compact?26:28}" font-style="italic" font-weight="900" fill="\${PANEL}">\${escText(formatDateLabel(group.date))}</text>\`;
+    body+=`<rect x="${(W-dateW)/2}" y="${dateY}" width="${dateW}" height="${dateH}" rx="39" fill="${WHITE}"/>
+      <text x="${W/2}" y="${dateY+47}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${compact?26:28}" font-style="italic" font-weight="900" fill="${PANEL}">${escText(formatDateLabel(group.date))}</text>`;
   });
 
   positioned.forEach(({item,rowY,rowH})=>{
     const ti=timeInfo(item.event);
     const center=rowY+rowH/2;
-    body+=\`<rect x="\${timeX}" y="\${center-timeH/2}" width="\${timeW}" height="\${timeH}" rx="36" fill="\${WHITE}"/>
-      <text x="\${timeX+timeW/2}" y="\${center+10}" text-anchor="middle" font-family="Arial, sans-serif" font-size="\${compact?27:31}" font-style="italic" font-weight="900" fill="\${PANEL}">\${escText(ti.primary)}</text>\`;
+    body+=`<rect x="${timeX}" y="${center-timeH/2}" width="${timeW}" height="${timeH}" rx="36" fill="${WHITE}"/>
+      <text x="${timeX+timeW/2}" y="${center+10}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${compact?27:31}" font-style="italic" font-weight="900" fill="${PANEL}">${escText(ti.primary)}</text>`;
 
     const titleSize=fitTitle(
       item.event.title+(displayLocation(item.event)?' - '+displayLocation(item.event):''),
@@ -179,7 +179,7 @@ function makeSvg(events:MobilizationEvent[]){
     let textY=rowY+titleSize;
 
     item.title.forEach((line,index)=>{
-      body+=\`<text x="\${contentX}" y="\${textY+index*titleLH}" font-family="Arial, sans-serif" font-size="\${titleSize}" font-style="italic" font-weight="900" fill="\${WHITE}">\${escText(line)}</text>\`;
+      body+=`<text x="${contentX}" y="${textY+index*titleLH}" font-family="Arial, sans-serif" font-size="${titleSize}" font-style="italic" font-weight="900" fill="${WHITE}">${escText(line)}</text>`;
     });
     textY+=item.title.length*titleLH;
 
@@ -187,7 +187,7 @@ function makeSvg(events:MobilizationEvent[]){
       textY+=4;
       const sz=compact?12:14;
       item.schedule.forEach((line,index)=>{
-        body+=\`<text x="\${contentX}" y="\${textY+sz+index*(sz+1)}" font-family="Arial, sans-serif" font-size="\${sz}" font-style="italic" font-weight="700" fill="\${WHITE}">\${escText(line)}</text>\`;
+        body+=`<text x="${contentX}" y="${textY+sz+index*(sz+1)}" font-family="Arial, sans-serif" font-size="${sz}" font-style="italic" font-weight="700" fill="${WHITE}">${escText(line)}</text>`;
       });
       textY+=item.schedule.length*(sz+1);
     }
@@ -195,21 +195,21 @@ function makeSvg(events:MobilizationEvent[]){
     textY+=5;
     const vsz=compact?14:17;
     item.venue.forEach((line,index)=>{
-      body+=\`<text x="\${contentX}" y="\${textY+vsz+index*(vsz+1)}" font-family="Arial, sans-serif" font-size="\${vsz}" font-style="italic" font-weight="700" fill="\${WHITE}">\${escText(line)}</text>\`;
+      body+=`<text x="${contentX}" y="${textY+vsz+index*(vsz+1)}" font-family="Arial, sans-serif" font-size="${vsz}" font-style="italic" font-weight="700" fill="${WHITE}">${escText(line)}</text>`;
     });
     textY+=item.venue.length*(vsz+1)+5;
 
-    body+=\`<text x="\${contentX}" y="\${textY+(compact?14:17)}" font-family="Arial, sans-serif" font-size="\${compact?14:17}" font-style="italic" font-weight="900" fill="\${YELLOW}">\${escText(item.type)}</text>\`;
+    body+=`<text x="${contentX}" y="${textY+(compact?14:17)}" font-family="Arial, sans-serif" font-size="${compact?14:17}" font-style="italic" font-weight="900" fill="${YELLOW}">${escText(item.type)}</text>`;
   });
 
-  return \`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="\${W}" height="\${height}" viewBox="0 0 \${W} \${height}">
-    <rect width="\${W}" height="\${height}" fill="\${BG}"/>
-    <image href="\${HEADER}" x="\${(W-HEADER_W)/2}" y="52" width="\${HEADER_W}" height="\${HEADER_H}" preserveAspectRatio="xMidYMid meet"/>
-    <rect x="\${panelX}" y="\${panelY}" width="\${panelW}" height="\${panelH}" rx="96" fill="\${PANEL}"/>
-    \${body}
-    <image href="\${FOOTER}" x="\${(W-footerW)/2}" y="\${footerY}" width="\${footerW}" height="\${footerH}" preserveAspectRatio="xMidYMid meet"/>
-    <image href="\${ICON}" x="0" y="\${height-58}" width="42" height="42" preserveAspectRatio="xMidYMid meet" opacity="0"/>
-  </svg>\`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}">
+    <rect width="${W}" height="${height}" fill="${BG}"/>
+    <image href="${HEADER}" x="${(W-HEADER_W)/2}" y="52" width="${HEADER_W}" height="${HEADER_H}" preserveAspectRatio="xMidYMid meet"/>
+    <rect x="${panelX}" y="${panelY}" width="${panelW}" height="${panelH}" rx="96" fill="${PANEL}"/>
+    ${body}
+    <image href="${FOOTER}" x="${(W-footerW)/2}" y="${footerY}" width="${footerW}" height="${footerH}" preserveAspectRatio="xMidYMid meet"/>
+    <image href="${ICON}" x="0" y="${height-58}" width="42" height="42" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+  </svg>`;
 }
 function svgData(svg:string){
   return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);

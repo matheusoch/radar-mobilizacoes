@@ -9,9 +9,9 @@ const PANEL='#951010';
 const WHITE='#fff';
 const YELLOW='#f7db26';
 
-const HEADER='/agenda-card-header-exact.png';
+const HEADER='/agenda-header-exact.png';
 const HEADER_W=618;
-const HEADER_H=451;
+const HEADER_H=195;
 const FOOTER='/agenda-card-footer-exact.png';
 const ICON='/agenda-card-icon.png';
 
@@ -109,7 +109,7 @@ function makeSvg(events:MobilizationEvent[]){
 
   const panelX=103;
   const panelW=874;
-  const panelY=563;
+  const panelY=320;
   const dateW=281;
   const dateH=77;
   const dateGap=28;
@@ -132,13 +132,13 @@ function makeSvg(events:MobilizationEvent[]){
 
   const footerH=54;
   const footerW=541;
-  const footerGap=28;
-  const basePanelH=953;
-  const neededBottom=y-eventGap+footerGap+footerH;
-  const panelBottom=Math.max(panelY+basePanelH,neededBottom);
+  const footerGap=42;
+  const panelPaddingBottom=34;
+  const contentBottom=y-eventGap;
+  const footerY=contentBottom+footerGap;
+  const panelBottom=footerY+footerH+panelPaddingBottom;
   const panelH=panelBottom-panelY;
   const height=Math.max(1350,Math.ceil(panelBottom+60));
-  const footerY=panelBottom-footerGap-footerH;
 
   let body='';
   groups.forEach((group,groupIndex)=>{
@@ -190,7 +190,7 @@ function makeSvg(events:MobilizationEvent[]){
     <image href="${HEADER}" x="231" y="52" width="${HEADER_W}" height="${HEADER_H}" preserveAspectRatio="none"/>
     <rect x="${panelX}" y="${panelY}" width="${panelW}" height="${panelH}" rx="96" fill="${PANEL}"/>
     ${body}
-    <image href="${FOOTER}" x="${(W-footerW)/2}" y="${footerY}" width="${footerW}" height="${footerH}" preserveAspectRatio="xMidYMid meet"/>
+    <image href="${FOOTER}" x="${(W-footerW)/2}" y="${footerY}" width="${footerW}" height="${footerH}" preserveAspectRatio="none"/>
     <image href="${ICON}" x="0" y="${height-58}" width="42" height="42" preserveAspectRatio="xMidYMid meet" opacity="0"/>
   </svg>`;
 }

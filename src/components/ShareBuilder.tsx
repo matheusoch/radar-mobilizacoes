@@ -109,68 +109,85 @@ function makeSvg(events:MobilizationEvent[]){
 
   const panelX=103;
   const panelW=874;
-  const panelY=563;
+  const panelY=320;
   const dateW=281;
   const dateH=77;
   const dateGap=28;
-  const eventGap=compact?32:42;
+  const eventGap=compact?28:42;
+  const groupGap=compact?18:24;
   const timeX=143;
   const timeW=149;
+  const timeH=72;
   const contentX=318;
-  const contentW=620;
 
-  let y=panelY+38;
-  const positioned:{groupIndex:number;item:CardEvent;y:number}[]=[];
+  let cursor=panelY+38;
+  const positioned:{groupIndex:number;item:CardEvent;rowY:number;rowH:number;dateY:number}[]=[];
+
   groups.forEach((group,groupIndex)=>{
-    y+=dateH+dateGap;
+    const dateY=cursor;
+    cursor=dateY+dateH+dateGap;
+
     group.items.forEach(item=>{
-      positioned.push({groupIndex,item,y});
-      y+=item.rowH+eventGap;
+      const titleLH=fitTitle(
+        item.event.title+(displayLocation(item.event)?' - '+displayLocation(item.event):''),
+        compact?47:43
+      ).size+2;
+      const scheduleLH=compact?13:15;
+      const venueLH=compact?15:17;
+      const typeLH=compact?15:18;
+      const contentH=
+        item.title.length*titleLH+
+        (item.schedule.length ? 4+item.schedule.length*scheduleLH : 0)+
+        5+item.venue.length*venueLH+
+        5+typeLH;
+      const rowH=Math.max(timeH,contentH)+20;
+
+      positioned.push({groupIndex,item,rowY:cursor,rowH,dateY});
+      cursor+=rowH+eventGap;
     });
-    if(groupIndex<groups.length-1)y+=18;
+
+    if(groupIndex<groups.length-1)cursor+=groupGap;
   });
 
   const footerH=54;
   const footerW=541;
-  const footerGap=96;
-  const panelPaddingBottom=42;
-  const contentBottom=y-eventGap;
-  const footerY=contentBottom+footerGap;
+  const footerGap=36;
+  const panelPaddingBottom=34;
+  const footerY=cursor+footerGap;
   const panelBottom=footerY+footerH+panelPaddingBottom;
   const panelH=panelBottom-panelY;
   const height=Math.max(1350,Math.ceil(panelBottom+60));
 
   let body='';
   groups.forEach((group,groupIndex)=>{
-    const dateY=groupIndex===0?panelY+38:
-      positioned.find(p=>p.groupIndex===groupIndex)?.y!-dateH-dateGap;
-    body+=`<rect x="${(W-dateW)/2}" y="${dateY}" width="${dateW}" height="${dateH}" rx="39" fill="${WHITE}"/>
-      <text x="${W/2}" y="${dateY+47}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${compact?26:28}" font-style="italic" font-weight="900" fill="${PANEL}">${escText(formatDateLabel(group.date))}</text>`;
+    const dateY=positioned.find(p=>p.groupIndex===groupIndex)?.dateY ?? panelY+38;
+    body+=\`<rect x="\${(W-dateW)/2}" y="\${dateY}" width="\${dateW}" height="\${dateH}" rx="39" fill="\${WHITE}"/>
+      <text x="\${W/2}" y="\${dateY+47}" text-anchor="middle" font-family="Arial, sans-serif" font-size="\${compact?26:28}" font-style="italic" font-weight="900" fill="\${PANEL}">\${escText(formatDateLabel(group.date))}</text>\`;
   });
 
-  positioned.forEach(({item,y:rowY})=>{
+  positioned.forEach(({item,rowY,rowH})=>{
     const ti=timeInfo(item.event);
-    const pillH=72;
-    const center=rowY+item.rowH/2;
-    body+=`<rect x="${timeX}" y="${center-pillH/2}" width="${timeW}" height="${pillH}" rx="36" fill="${WHITE}"/>
-      <text x="${timeX+timeW/2}" y="${center+10}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${compact?27:31}" font-style="italic" font-weight="900" fill="${PANEL}">${escText(ti.primary)}</text>`;
+    const center=rowY+rowH/2;
+    body+=\`<rect x="\${timeX}" y="\${center-timeH/2}" width="\${timeW}" height="\${timeH}" rx="36" fill="\${WHITE}"/>
+      <text x="\${timeX+timeW/2}" y="\${center+10}" text-anchor="middle" font-family="Arial, sans-serif" font-size="\${compact?27:31}" font-style="italic" font-weight="900" fill="\${PANEL}">\${escText(ti.primary)}</text>\`;
 
-    let ty=rowY+item.title[0] ? 0 : 0;
-    ty=rowY+item.title.length*(item.title.length?24:0);
-    const titleSize=fitTitle(item.event.title+(displayLocation(item.event)?' - '+displayLocation(item.event):''),compact?47:43).size;
+    const titleSize=fitTitle(
+      item.event.title+(displayLocation(item.event)?' - '+displayLocation(item.event):''),
+      compact?47:43
+    ).size;
     const titleLH=titleSize+2;
-    const titleLines=item.title;
     let textY=rowY+titleSize;
-    titleLines.forEach((line,index)=>{
-      body+=`<text x="${contentX}" y="${textY+index*titleLH}" font-family="Arial, sans-serif" font-size="${titleSize}" font-style="italic" font-weight="900" fill="${WHITE}">${escText(line)}</text>`;
+
+    item.title.forEach((line,index)=>{
+      body+=\`<text x="\${contentX}" y="\${textY+index*titleLH}" font-family="Arial, sans-serif" font-size="\${titleSize}" font-style="italic" font-weight="900" fill="\${WHITE}">\${escText(line)}</text>\`;
     });
-    textY+=titleLines.length*titleLH;
+    textY+=item.title.length*titleLH;
 
     if(item.schedule.length){
       textY+=4;
       const sz=compact?12:14;
       item.schedule.forEach((line,index)=>{
-        body+=`<text x="${contentX}" y="${textY+sz+index*(sz+1)}" font-family="Arial, sans-serif" font-size="${sz}" font-style="italic" font-weight="700" fill="${WHITE}">${escText(line)}</text>`;
+        body+=\`<text x="\${contentX}" y="\${textY+sz+index*(sz+1)}" font-family="Arial, sans-serif" font-size="\${sz}" font-style="italic" font-weight="700" fill="\${WHITE}">\${escText(line)}</text>\`;
       });
       textY+=item.schedule.length*(sz+1);
     }
@@ -178,23 +195,22 @@ function makeSvg(events:MobilizationEvent[]){
     textY+=5;
     const vsz=compact?14:17;
     item.venue.forEach((line,index)=>{
-      body+=`<text x="${contentX}" y="${textY+vsz+index*(vsz+1)}" font-family="Arial, sans-serif" font-size="${vsz}" font-style="italic" font-weight="700" fill="${WHITE}">${escText(line)}</text>`;
+      body+=\`<text x="\${contentX}" y="\${textY+vsz+index*(vsz+1)}" font-family="Arial, sans-serif" font-size="\${vsz}" font-style="italic" font-weight="700" fill="\${WHITE}">\${escText(line)}</text>\`;
     });
     textY+=item.venue.length*(vsz+1)+5;
 
-    body+=`<text x="${contentX}" y="${textY+(compact?14:17)}" font-family="Arial, sans-serif" font-size="${compact?14:17}" font-style="italic" font-weight="900" fill="${YELLOW}">${escText(item.type)}</text>`;
+    body+=\`<text x="\${contentX}" y="\${textY+(compact?14:17)}" font-family="Arial, sans-serif" font-size="\${compact?14:17}" font-style="italic" font-weight="900" fill="\${YELLOW}">\${escText(item.type)}</text>\`;
   });
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}">
-    <rect width="${W}" height="${height}" fill="${BG}"/>
-    <image href="${HEADER}" x="231" y="52" width="${HEADER_W}" height="${HEADER_H}" preserveAspectRatio="none"/>
-    <rect x="${panelX}" y="${panelY}" width="${panelW}" height="${panelH}" rx="96" fill="${PANEL}"/>
-    ${body}
-    <image href="${FOOTER}" x="${(W-footerW)/2}" y="${footerY}" width="${footerW}" height="${footerH}" preserveAspectRatio="none"/>
-    <image href="${ICON}" x="0" y="${height-58}" width="42" height="42" preserveAspectRatio="xMidYMid meet" opacity="0"/>
-  </svg>`;
+  return \`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="\${W}" height="\${height}" viewBox="0 0 \${W} \${height}">
+    <rect width="\${W}" height="\${height}" fill="\${BG}"/>
+    <image href="\${HEADER}" x="\${(W-HEADER_W)/2}" y="52" width="\${HEADER_W}" height="\${HEADER_H}" preserveAspectRatio="xMidYMid meet"/>
+    <rect x="\${panelX}" y="\${panelY}" width="\${panelW}" height="\${panelH}" rx="96" fill="\${PANEL}"/>
+    \${body}
+    <image href="\${FOOTER}" x="\${(W-footerW)/2}" y="\${footerY}" width="\${footerW}" height="\${footerH}" preserveAspectRatio="xMidYMid meet"/>
+    <image href="\${ICON}" x="0" y="\${height-58}" width="42" height="42" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+  </svg>\`;
 }
-
 function svgData(svg:string){
   return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
 }

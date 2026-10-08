@@ -215,90 +215,91 @@ function drawPanelTemplate(
 }
 
 function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:string,headerImage?:HTMLImageElement,panelImage?:HTMLImageElement,footerImage?:HTMLImageElement){
-  const ordered=events.slice().sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
+  const ordered=groupSort(events);
   const dates=[...new Set(ordered.map(event=>event.date))];
-  const compact=ordered.length>=4;
-
-  canvas.width=CARD_WIDTH;
 
   const ctx=canvas.getContext('2d');
   if(!ctx)return;
 
-  const panelX=CARD_SIDE_MARGIN;
+  const panelX=103.5;
   const panelW=873;
   const headerW=618;
   const headerH=195;
-
-  // Margens do template: 3,67 cm nas bordas superior/inferior e
-  // 2,47 cm nas laterais. Com 1080 px de largura, 2,47 cm = 103,5 px,
-  // exatamente a largura externa observada no PNG do retângulo.
   const headerX=(CARD_WIDTH-headerW)/2;
-  const headerY=OUTER_MARGIN_Y;
-  const headerBottom=headerY+headerH;
-  const panelY=headerBottom+TEMPLATE_GAP;
+  const headerY=62;
 
-  const contentX=320;
-  const timeX=145;
+  // Posição-base retirada do template: painel escuro começa abaixo
+  // do cabeçalho e todo o conteúdo nasce no topo do painel.
+  const panelY=337;
+  const contentTop=375;
+  const timeX=112;
   const timeW=150;
-  const rightInset=50;
+  const contentX=318;
+  const rightInset=45;
   const maxTextWidth=panelX+panelW-rightInset-contentX;
 
+  const compact=ordered.length>=4;
   const dateW=282;
   const dateH=compact?46:52;
-  const dateEventGap=10;
-  const eventGap=TEMPLATE_GAP;
-  const eventMinH=compact?100:110;
+  const dateToEventGap=38;
+  const eventGap=66;
+  const eventMinH=compact?98:108;
 
-  // Mede todo o conteúdo primeiro. Assim o painel e o próprio card crescem
-  // quando necessário, em vez de espremer os eventos ou alinhá-los ao centro.
   const groups=dates.map(date=>({
     date,
     events:ordered.filter(event=>event.date===date).map(event=>{
       const info=eventMetrics(ctx,event,maxTextWidth,compact);
-      const rowH=Math.max(eventMinH,info.stackH+20);
-      return {event,info,rowH};
+      return {event,info,rowH:Math.max(eventMinH,info.stackH+24)};
     })
   }));
 
-  let cursor=panelY+38;
-  let eventCount=0;
-  let lastEventEnd=cursor;
+  // Mede o fluxo de cima para baixo antes de desenhar. Não há
+  // centralização vertical nem espaço vazio artificial entre os eventos.
+  let flowY=contentTop;
+  let count=0;
 
   for(const group of groups){
-    cursor+=dateH+dateEventGap;
+    flowY+=dateH+dateToEventGap;
     for(const item of group.events){
-      eventCount++;
-      lastEventEnd=cursor+item.rowH;
-      cursor=lastEventEnd;
-      if(eventCount<ordered.length)cursor+=eventGap;
+      flowY+=item.rowH;
+      count++;
+      if(count<ordered.length)flowY+=eventGap;
     }
   }
 
+  const footerW=541;
   const footerH=54;
-  const footerGap=28;
-  const panelBottomPadding=30;
-  const minPanelH=953;
-  const measuredPanelH=(lastEventEnd-panelY)+footerGap+footerH+panelBottomPadding;
-  const panelH=Math.max(minPanelH,measuredPanelH);
-  const panelBottom=panelY+panelH;
-  const footerY=panelBottom-footerGap-footerH;
-  const cardHeight=Math.ceil(panelBottom+OUTER_MARGIN_Y);
+  const footerBottomGap=30;
+  const footerTop=flowY+22;
+  const panelBottom=Math.max(
+    panelY+953,
+    footerTop+footerH+footerBottomGap
+  );
+  const panelH=panelBottom-panelY;
+  const cardBottom=panelBottom+152; // margem externa inferior do template
+  const cardHeight=Math.max(1378,Math.ceil(cardBottom));
 
+  canvas.width=CARD_WIDTH;
   canvas.height=cardHeight;
-  ctx.clearRect(0,0,CARD_WIDTH,cardHeight);
 
-  // Fundo externo vermelho do template.
+  ctx.clearRect(0,0,CARD_WIDTH,cardHeight);
   ctx.fillStyle=BG;
   ctx.fillRect(0,0,CARD_WIDTH,cardHeight);
 
-  // Cabeçalho original fornecido.
-  ctx.drawImage(headerImage!,headerX,headerY,headerW,headerH);
+  // Cabeçalho: SVG transparente, sem qualquer rasterização/reconstrução.
+  if(headerImage&&headerImage.complete){
+    ctx.drawImage(headerImage,headerX,headerY,headerW,headerH);
+  }
 
-  // Painel original fornecido, com expansão vertical sem deformar os cantos.
-  drawPanelTemplate(ctx,panelImage,panelX,panelY,panelW,panelH);
+  // Painel: usa a mesma geometria do template. Como ele é uma área sólida,
+  // apenas a altura muda quando a quantidade de eventos exige mais espaço.
+  ctx.fillStyle=PANEL;
+  roundRect(ctx,panelX,panelY,panelW,panelH,96);
+  ctx.fill();
 
-  let y=panelY+38;
-  eventCount=0;
+  // Fluxo real de conteúdo.
+  let y=contentTop;
+  count=0;
 
   for(const group of groups){
     const dateX=(CARD_WIDTH-dateW)/2;
@@ -312,15 +313,17 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
       '900 italic '+(compact?22:25)+'px "Arial Narrow", Arial, sans-serif'
     );
 
-    y+=dateH+dateEventGap;
+    y+=dateH+dateToEventGap;
 
     for(const item of group.events){
       const rowY=y;
       const rowH=item.rowH;
-      const rowCenter=rowY+rowH/2;
       const info=item.info;
 
-      const pillH=Math.min(compact?54:58,Math.max(44,rowH-30));
+      // O horário fica na coluna própria, alinhado ao centro vertical
+      // do bloco daquele evento.
+      const rowCenter=rowY+rowH/2;
+      const pillH=compact?54:58;
       pill(
         ctx,
         formatTime(item.event),
@@ -338,10 +341,12 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
       const venueLH=info.venue.size+1;
       const venueH=info.venue.lines.length*venueLH;
       const typeH=info.type.size+2;
-      const gapSchedule=info.schedule?4:0;
-      const stackH=titleH+gapSchedule+scheduleH+4+venueH+4+typeH;
+      const gaps=(info.schedule?4:0)+4+4;
+      const stackH=titleH+scheduleH+venueH+typeH+gaps;
 
-      let textY=rowCenter-stackH/2;
+      // O texto começa próximo do topo da faixa e nunca é centralizado
+      // na página inteira.
+      let textY=rowY+8;
 
       ctx.textAlign='left';
       ctx.textBaseline='alphabetic';
@@ -354,7 +359,7 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
       textY+=titleH;
 
       if(info.schedule){
-        textY+=gapSchedule;
+        textY+=4;
         ctx.fillStyle=WHITE;
         ctx.font='700 italic '+info.schedule.size+'px "Arial Narrow", Arial, sans-serif';
         info.schedule.lines.forEach((line,index)=>{
@@ -375,18 +380,19 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
       ctx.font='900 italic '+info.type.size+'px "Arial Narrow", Arial, sans-serif';
       ctx.fillText(info.type.text,contentX,textY+info.type.size);
 
-      eventCount++;
+      count++;
       y+=rowH;
-      if(eventCount<ordered.length)y+=eventGap;
+      if(count<ordered.length)y+=eventGap;
     }
   }
 
-  // Rodapé original fornecido. O fundo é transparente; só a linha do endereço
-  // é coberta pelo próprio vermelho do painel para trocar o domínio antigo.
+  // Rodapé alinhado ao centro do painel.
   if(footerImage&&footerImage.complete){
-    const footerW=541;
     const footerX=(CARD_WIDTH-footerW)/2;
+    const footerY=panelBottom-footerBottomGap-footerH;
     ctx.drawImage(footerImage,footerX,footerY,footerW,footerH);
+
+    // Atualiza somente o domínio, preservando a arte do PNG/SVG fornecido.
     ctx.fillStyle=PANEL;
     ctx.fillRect(footerX,footerY+25,footerW,29);
     ctx.textAlign='center';
@@ -453,9 +459,9 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
       img.onload=()=>{ready++;paint();};
       img.onerror=()=>{ready++;paint();};
     });
-    header.src='/agenda-card-header-exact.png';
-    panel.src='/agenda-card-panel-exact.png';
-    footer.src='/agenda-card-footer-exact.png';
+    header.src='/share-header.svg';
+    panel.src='/share-panel.svg';
+    footer.src='/share-footer.svg';
     return()=>{cancelled=true;};
   },[chosen]);
 

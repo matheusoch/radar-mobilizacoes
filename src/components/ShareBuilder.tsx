@@ -214,192 +214,106 @@ function drawPanelTemplate(
   ctx.fill();
 }
 
-function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:string,headerImage?:HTMLImageElement,panelImage?:HTMLImageElement,footerImage?:HTMLImageElement){
+function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:string,headerImage?:HTMLImageElement){
   const ordered=groupSort(events);
-  const dates=[...new Set(ordered.map(event=>event.date))];
+  const groups=[...new Set(ordered.map(event=>event.date))].map(date=>({
+    date,
+    events:ordered.filter(event=>event.date===date)
+  }));
   const ctx=canvas.getContext('2d');
   if(!ctx)return;
 
-  // Geometria retirada diretamente do card de referência 1080x1350.
-  const panelX=103;
-  const panelW=873;
-  const panelY=336;
-  const panelBaseH=953;
-  const headerW=618;
-  const headerH=195;
-  const headerX=(CARD_WIDTH-headerW)/2;
-  const headerY=74;
-
-  const timeX=143;
-  const timeW=149;
-  const contentX=318;
-  const maxTextWidth=panelX+panelW-36-contentX;
-
-  // Espaçamentos do template.
-  const panelTopInset=39;
-  const dateW=281;
-  const dateH=77;
-  const dateEventGap=35;
-  const eventGap=66;
-  const eventMinH=84;
-
+  const panelX=103,panelW=873,panelY=336;
+  const timeX=143,timeW=149,contentX=318;
+  const maxTextWidth=panelX+panelW-38-contentX;
   const compact=ordered.length>=4;
+  const dateW=281,dateH=77,dateGap=35,eventGap=66;
+  const headerX=231,headerY=74,headerW=618,headerH=195;
 
-  const groups=dates.map(date=>({
-    date,
-    events:ordered.filter(event=>event.date===date).map(event=>{
+  const metrics=groups.map(group=>({
+    ...group,
+    items:group.events.map(event=>{
       const info=eventMetrics(ctx,event,maxTextWidth,compact);
-      return {event,info,rowH:Math.max(eventMinH,info.stackH+10)};
+      return {event,info,rowH:Math.max(84,info.stackH+12)};
     })
   }));
 
-  // Primeiro evento sempre parte imediatamente abaixo da data.
-  // Depois disso, cada evento recebe o mesmo espaçamento vertical.
-  let flowY=panelY+panelTopInset+dateH+dateEventGap;
-  let count=0;
-
-  for(const group of groups){
-    for(const item of group.events){
-      flowY+=item.rowH;
-      count++;
-      if(count<ordered.length)flowY+=eventGap;
-    }
-    // espaço para a próxima etiqueta de dia
-    if(group!==groups[groups.length-1]){
-      flowY+=Math.max(0,dateH+dateEventGap);
-    }
+  let contentHeight=39;
+  for(const group of metrics){
+    contentHeight+=dateH+dateGap;
+    for(const item of group.items)contentHeight+=item.rowH+eventGap;
   }
-
-  const footerW=541;
-  const footerH=54;
-  const bottomGap=32;
-  const panelBottom=Math.max(
-    panelY+panelBaseH,
-    flowY+bottomGap+footerH
-  );
-  const panelH=panelBottom-panelY;
-  const cardHeight=Math.max(1350,Math.ceil(panelBottom+61));
+  contentHeight=Math.max(0,contentHeight-eventGap);
+  const footerH=54,footerGap=32;
+  const panelH=Math.max(953,contentHeight+footerGap+footerH+20);
+  const cardHeight=Math.max(1350,panelY+panelH+61);
 
   canvas.width=CARD_WIDTH;
   canvas.height=cardHeight;
-
   ctx.clearRect(0,0,CARD_WIDTH,cardHeight);
   ctx.fillStyle=BG;
   ctx.fillRect(0,0,CARD_WIDTH,cardHeight);
 
-  // PNG do cabeçalho fornecido, sem rasterização adicional.
-  if(headerImage&&headerImage.complete&&headerImage.naturalWidth>0){
+  if(headerImage?.complete&&headerImage.naturalWidth){
     ctx.drawImage(headerImage,headerX,headerY,headerW,headerH);
   }
 
-  // O painel mantém os mesmos cantos do template e só cresce verticalmente
-  // por meio de uma extensão sólida no centro.
   ctx.fillStyle=PANEL;
   roundRect(ctx,panelX,panelY,panelW,panelH,96);
   ctx.fill();
 
-  let y=panelY+panelTopInset;
-  count=0;
+  let y=panelY+39;
+  for(const group of metrics){
+    pill(ctx,formatDateLabel(group.date),(CARD_WIDTH-dateW)/2,y,dateW,dateH,'900 italic 28px "Arial Narrow", Arial, sans-serif');
+    y+=dateH+dateGap;
 
-  for(const groupIndex of groups.keys()){
-    const group=groups[groupIndex];
-
-    pill(
-      ctx,
-      formatDateLabel(group.date),
-      (CARD_WIDTH-dateW)/2,
-      y,
-      dateW,
-      dateH,
-      '900 italic 28px "Arial Narrow", Arial, sans-serif'
-    );
-
-    y+=dateH+dateEventGap;
-
-    for(const item of group.events){
+    for(const item of group.items){
       const rowY=y;
-      const rowH=item.rowH;
       const info=item.info;
-
-      // O horário acompanha verticalmente o evento, e nunca a página inteira.
-      const rowCenter=rowY+rowH/2;
       const pillH=77;
-      pill(
-        ctx,
-        formatTime(item.event),
-        timeX,
-        rowCenter-pillH/2,
-        timeW,
-        pillH,
-        '900 italic '+(compact?28:31)+'px "Arial Narrow", Arial, sans-serif'
-      );
+      pill(ctx,formatTime(item.event),timeX,rowY+(item.rowH-pillH)/2,timeW,pillH,'900 italic '+(compact?28:31)+'px "Arial Narrow", Arial, sans-serif');
 
-      let textY=rowY+8;
-
+      let textY=rowY+6;
       const titleLH=info.title.size+2;
-      const titleH=info.title.lines.length*titleLH;
       ctx.textAlign='left';
       ctx.textBaseline='alphabetic';
       ctx.fillStyle=WHITE;
       ctx.font='900 italic '+info.title.size+'px "Arial Narrow", Arial, sans-serif';
-      info.title.lines.forEach((line,index)=>{
-        ctx.fillText(line,contentX,textY+info.title.size+index*titleLH);
-      });
-      textY+=titleH;
+      info.title.lines.forEach((line,index)=>ctx.fillText(line,contentX,textY+info.title.size+index*titleLH));
+      textY+=info.title.lines.length*titleLH;
 
       if(info.schedule){
         textY+=4;
-        const scheduleLH=info.schedule.size+1;
-        ctx.fillStyle=WHITE;
+        const lh=info.schedule.size+1;
         ctx.font='700 italic '+info.schedule.size+'px "Arial Narrow", Arial, sans-serif';
-        info.schedule.lines.forEach((line,index)=>{
-          ctx.fillText(line,contentX,textY+info.schedule.size+index*scheduleLH);
-        });
-        textY+=info.schedule.lines.length*scheduleLH;
+        info.schedule.lines.forEach((line,index)=>ctx.fillText(line,contentX,textY+info.schedule.size+index*lh));
+        textY+=info.schedule.lines.length*lh;
       }
 
       textY+=4;
       const venueLH=info.venue.size+1;
-      ctx.fillStyle=WHITE;
       ctx.font='700 italic '+info.venue.size+'px "Arial Narrow", Arial, sans-serif';
-      info.venue.lines.forEach((line,index)=>{
-        ctx.fillText(line,contentX,textY+info.venue.size+index*venueLH);
-      });
+      info.venue.lines.forEach((line,index)=>ctx.fillText(line,contentX,textY+info.venue.size+index*venueLH));
       textY+=info.venue.lines.length*venueLH+4;
 
       ctx.fillStyle=YELLOW;
       ctx.font='900 italic '+info.type.size+'px "Arial Narrow", Arial, sans-serif';
       ctx.fillText(info.type.text,contentX,textY+info.type.size);
 
-      count++;
-      y+=rowH;
-      if(count<ordered.length){
-        y+=eventGap;
-      }
-    }
-
-    if(groupIndex<groups.length-1){
-      y+=Math.max(0,dateH+dateEventGap);
+      y+=item.rowH+eventGap;
     }
   }
 
-  // Rodapé fica preso ao fundo do painel, sempre centralizado.
-  if(footerImage&&footerImage.complete&&footerImage.naturalWidth>0){
-    const footerX=(CARD_WIDTH-footerW)/2;
-    const footerY=panelBottom-bottomGap-footerH;
-    ctx.drawImage(footerImage,footerX,footerY,footerW,footerH);
-    ctx.fillStyle=PANEL;
-    ctx.fillRect(footerX,footerY+25,footerW,29);
-    ctx.textAlign='center';
-    ctx.fillStyle=WHITE;
-    ctx.font='700 italic 15px "Arial Narrow", Arial, sans-serif';
-    ctx.fillText('Confira os demais eventos em:',CARD_WIDTH/2,footerY+37);
-    ctx.font='900 italic 15px "Arial Narrow", Arial, sans-serif';
-    ctx.fillText('agenda-mobilizacoes.participa.workers.dev',CARD_WIDTH/2,footerY+52);
-  }
-
+  const footerY=panelY+panelH-footerGap-footerH;
+  ctx.textAlign='center';
+  ctx.fillStyle=WHITE;
+  ctx.font='900 italic 18px "Arial Narrow", Arial, sans-serif';
+  ctx.fillText('Participe da mobilização e ajude a ocupar as ruas.',CARD_WIDTH/2,footerY+17);
+  ctx.font='700 italic 15px "Arial Narrow", Arial, sans-serif';
+  ctx.fillText('Confira os demais eventos em:',CARD_WIDTH/2,footerY+38);
+  ctx.font='900 italic 15px "Arial Narrow", Arial, sans-serif';
+  ctx.fillText(host,CARD_WIDTH/2,footerY+54);
   ctx.textAlign='left';
-  ctx.textBaseline='alphabetic';
 }
 
 function groupSort(events:MobilizationEvent[]){
@@ -409,10 +323,10 @@ function groupSort(events:MobilizationEvent[]){
 export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   const params=new URLSearchParams(window.location.search);
   const initialIds=(params.get('eventos')||'').split(',').map(decodeURIComponent).filter(Boolean);
-  const[query,setQuery]=useState('');
-  const[selected,setSelected]=useState<string[]>(initialIds.slice(0,MAX_EVENTS));
-  const[feedback,setFeedback]=useState('');
-  const canvasRef=useRef<HTMLCanvasElement>(null);
+  const [query,setQuery]=useState('');
+  const [selected,setSelected]=useState<string[]>(initialIds.slice(0,MAX_EVENTS));
+  const [feedback,setFeedback]=useState('');
+  const [downloadReady,setDownloadReady]=useState(false);
 
   const candidates=useMemo(()=>{
     const today=new Date().toISOString().slice(0,10);
@@ -420,50 +334,23 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
     return groupSort(events.filter(event=>{
       if(!event.public||event.date<today)return false;
       if(!q)return true;
-      return [event.title,event.city,event.state,event.venue,event.type]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(q);
+      return [event.title,event.city,event.state,event.venue,event.type].filter(Boolean).join(' ').toLowerCase().includes(q);
     }));
   },[events,query]);
 
-  const chosen=groupSort(
-    selected
-      .map(id=>events.find(event=>event.id===id))
-      .filter((event):event is MobilizationEvent=>Boolean(event))
-  );
+  const chosen=groupSort(selected.map(id=>events.find(event=>event.id===id)).filter((event):event is MobilizationEvent=>Boolean(event)));
 
   useEffect(()=>{
-    if(!canvasRef.current||!chosen.length)return;
     let cancelled=false;
-    const header=new Image();
-    const panel=new Image();
-    const footer=new Image();
-    let ready=0;
-    const paint=()=>{
-      if(cancelled||!canvasRef.current||ready<3)return;
-      try{
-        renderCard(canvasRef.current,chosen,window.location.host,header,panel,footer);
-        setFeedback('');
-      }catch{
-        setFeedback('A prévia visual não pôde ser gerada neste navegador.');
-      }
-    };
-    [header,panel,footer].forEach(img=>{
-      img.onload=()=>{ready++;paint();};
-      img.onerror=()=>{ready++;paint();};
-    });
-    header.src='/agenda-header-exact.png?v=2';
-    panel.src='/share-panel.svg';
-    footer.src='/share-footer.svg';
+    const img=new Image();
+    img.onload=()=>{if(!cancelled)setDownloadReady(true);};
+    img.onerror=()=>{if(!cancelled)setDownloadReady(false);};
+    img.src='/agenda-header-exact.png';
     return()=>{cancelled=true;};
-  },[chosen]);
+  },[]);
 
   useEffect(()=>{
-    const next=selected.length
-      ?'/divulgar?eventos='+selected.map(encodeURIComponent).join(',')
-      :'/divulgar';
+    const next=selected.length?'/divulgar?eventos='+selected.map(encodeURIComponent).join(','):'/divulgar';
     window.history.replaceState(null,'',next);
   },[selected]);
 
@@ -480,33 +367,36 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
     try{
       await navigator.clipboard.writeText(window.location.href);
       setFeedback('Link do painel copiado.');
-    }catch{
-      setFeedback('Não foi possível copiar automaticamente.');
-    }
+    }catch{setFeedback('Não foi possível copiar automaticamente.');}
     window.setTimeout(()=>setFeedback(''),2500);
   };
 
   const share=async()=>{
     if(navigator.share){
-      try{
-        await navigator.share({
-          title:'Agenda de Mobilizações',
-          text:'Confira este painel de mobilizações na Agenda.',
-          url:window.location.href
-        });
-      }catch{}
-    }else{
-      await copyLink();
-    }
+      try{await navigator.share({title:'Agenda de Mobilizações',text:'Confira este painel de mobilizações na Agenda.',url:window.location.href});}
+      catch{}
+    }else await copyLink();
   };
 
-  const download=()=>{
-    if(!canvasRef.current)return;
-    const link=document.createElement('a');
-    link.download='agenda-de-mobilizacoes.png';
-    link.href=canvasRef.current.toDataURL('image/png');
-    link.click();
+  const download=async()=>{
+    if(!chosen.length||!downloadReady)return;
+    const header=new Image();
+    header.onload=()=>{
+      const canvas=document.createElement('canvas');
+      renderCard(canvas,chosen,window.location.host,header);
+      const link=document.createElement('a');
+      link.download='agenda-de-mobilizacoes.png';
+      link.href=canvas.toDataURL('image/png');
+      link.click();
+    };
+    header.onerror=()=>setFeedback('Não foi possível carregar o elemento gráfico do card.');
+    header.src='/agenda-header-exact.png';
   };
+
+  const dateGroups=[...new Set(chosen.map(event=>event.date))].map(date=>({
+    date,
+    events:chosen.filter(event=>event.date===date)
+  }));
 
   return <div className='container page share-builder-page'>
     <div className='eyebrow'>
@@ -517,65 +407,30 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
     <div className='share-builder-heading'>
       <div>
         <h1>Crie seu painel de mobilizações.</h1>
-        <p className='page-lead'>
-          Escolha até {MAX_EVENTS} eventos e gere uma peça pronta para compartilhar.
-          Cada card mostra data, horário, cidade, local e tipo de mobilização.
-        </p>
+        <p className='page-lead'>Escolha até {MAX_EVENTS} eventos e gere uma peça pronta para compartilhar. Cada card mostra data, horário, cidade, local e tipo de mobilização.</p>
       </div>
-      <div className='share-counter'>
-        <strong>{selected.length}/{MAX_EVENTS}</strong>
-        <span>selecionados</span>
-      </div>
+      <div className='share-counter'><strong>{selected.length}/{MAX_EVENTS}</strong><span>selecionados</span></div>
     </div>
 
     <div className='share-builder-layout'>
       <section className='share-picker'>
-        <div className='share-picker-head'>
-          <strong>Escolha os eventos</strong>
-          <span>{candidates.length} disponíveis</span>
-        </div>
-
+        <div className='share-picker-head'><strong>Escolha os eventos</strong><span>{candidates.length} disponíveis</span></div>
         <div className='share-search'>
-          <input
-            value={query}
-            onChange={e=>setQuery(e.target.value)}
-            placeholder='Buscar cidade, estado ou evento...'
-            aria-label='Buscar eventos para divulgação'
-          />
-          {query&&
-            <button type='button' onClick={()=>setQuery('')} aria-label='Limpar busca'>
-              <X size={16}/>
-            </button>
-          }
+          <input value={query} onChange={e=>setQuery(e.target.value)} placeholder='Buscar cidade, estado ou evento...' aria-label='Buscar eventos para divulgação'/>
+          {query&&<button type='button' onClick={()=>setQuery('')} aria-label='Limpar busca'><X size={16}/></button>}
         </div>
 
         <div className='share-selected-list'>
-          {chosen.length
-            ? chosen.map(event=>
-                <button
-                  className='share-selected-chip'
-                  type='button'
-                  key={event.id}
-                  onClick={()=>toggle(event.id)}
-                >
-                  <span>{displayLocation(event)} · {formatTime(event)}</span>
-                  <X size={15}/>
-                </button>
-              )
-            : <div className='share-empty'>Selecione eventos abaixo para começar.</div>}
+          {chosen.length?chosen.map(event=><button className='share-selected-chip' type='button' key={event.id} onClick={()=>toggle(event.id)}>
+            <span>{displayLocation(event)} · {formatTime(event)}</span><X size={15}/>
+          </button>):<div className='share-empty'>Selecione eventos abaixo para começar.</div>}
         </div>
 
         <div className='share-event-list'>
           {candidates.map(event=>{
             const isSelected=selected.includes(event.id);
             const disabled=!isSelected&&selected.length>=MAX_EVENTS;
-            return <button
-              key={event.id}
-              type='button'
-              className={isSelected?'share-event selected':'share-event'}
-              onClick={()=>toggle(event.id)}
-              disabled={disabled}
-            >
+            return <button key={event.id} type='button' className={isSelected?'share-event selected':'share-event'} onClick={()=>toggle(event.id)} disabled={disabled}>
               <span className='share-event-check'>{isSelected?<Check size={15}/>:<span/>}</span>
               <span className='share-event-copy'>
                 <strong>{displayLocation(event)}</strong>
@@ -593,45 +448,53 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
 
       <aside className='share-preview-panel'>
         <div className='share-preview-head'>
-          <div>
-            <div className='eyebrow'>PRÉVIA</div>
-            <strong>Seu painel</strong>
-          </div>
+          <div><div className='eyebrow'>PRÉVIA</div><strong>Seu painel</strong></div>
           <ImageIcon size={19}/>
         </div>
 
         <div className='share-canvas-wrap'>
-          {chosen.length
-            ? <canvas ref={canvasRef} className='share-canvas'/>
-            : <div className='share-canvas-placeholder'>
-                <CalendarDays size={30}/>
-                <strong>Seu painel aparecerá aqui</strong>
-                <span>Selecione pelo menos um evento.</span>
-              </div>}
+          {chosen.length?
+            <div className='share-card-art' aria-label='Prévia do card de divulgação'>
+              <img className='share-card-header' src='/agenda-header-exact.png' alt='' draggable='false'/>
+              <div className='share-card-panel'>
+                {dateGroups.map((group,groupIndex)=><div className='share-card-group' key={group.date}>
+                  <div className='share-card-date'>{formatDateLabel(group.date)}</div>
+                  <div className='share-card-events'>
+                    {group.events.map(event=>{
+                      const time=getTimeInfo(event);
+                      return <div className='share-card-event' key={event.id}>
+                        <div className='share-card-time'>{time.primary}</div>
+                        <div className='share-card-info'>
+                          <div className='share-card-title'>{event.title}{displayLocation(event)?' - '+displayLocation(event):''}</div>
+                          {time.detail&&<div className='share-card-schedule'>{time.detail}</div>}
+                          <div className='share-card-venue'>{event.venue||'Local não informado'}</div>
+                          <div className='share-card-type'>{(event.type||'Mobilização').toUpperCase()}</div>
+                        </div>
+                      </div>;
+                    })}
+                  </div>
+                </div>)}
+                <div className='share-card-footer'>
+                  <strong>Participe da mobilização e ajude a ocupar as ruas.</strong>
+                  <span>Confira os demais eventos em:</span>
+                  <b>{window.location.host}</b>
+                </div>
+              </div>
+            </div>
+          :
+            <div className='share-canvas-placeholder'><CalendarDays size={30}/><strong>Seu painel aparecerá aqui</strong><span>Selecione pelo menos um evento.</span></div>}
         </div>
 
         <div className='share-actions'>
-          <button className='button primary' type='button' onClick={download} disabled={!chosen.length}>
-            <Download size={17}/>Baixar PNG
-          </button>
-          <button className='button ghost' type='button' onClick={share} disabled={!chosen.length}>
-            <Share2 size={17}/>Compartilhar
-          </button>
-          <button className='button ghost' type='button' onClick={copyLink} disabled={!chosen.length}>
-            <LinkIcon size={17}/>Copiar link
-          </button>
+          <button className='button primary' type='button' onClick={download} disabled={!chosen.length||!downloadReady}><Download size={17}/>Baixar PNG</button>
+          <button className='button ghost' type='button' onClick={share} disabled={!chosen.length}><Share2 size={17}/>Compartilhar</button>
+          <button className='button ghost' type='button' onClick={copyLink} disabled={!chosen.length}><LinkIcon size={17}/>Copiar link</button>
         </div>
 
-        {feedback&&
-          <div className='share-feedback' aria-live='polite'>
-            <LinkIcon size={14}/>{feedback}
-          </div>}
-
-        <p className='share-help'>
-          O painel segue a identidade visual da Agenda e fica vinculado a um link próprio,
-          para facilitar a circulação nas redes.
-        </p>
+        {feedback&&<div className='share-feedback' aria-live='polite'><LinkIcon size={14}/>{feedback}</div>}
+        <p className='share-help'>A prévia usa diretamente os elementos gráficos do template e reorganiza o conteúdo de cima para baixo conforme a quantidade de eventos.</p>
       </aside>
     </div>
   </div>;
 }
+

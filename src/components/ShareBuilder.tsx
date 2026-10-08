@@ -454,7 +454,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
       img.onload=()=>{ready++;paint();};
       img.onerror=()=>{ready++;paint();};
     });
-    header.src='/agenda-header-exact.png';
+    header.src='/agenda-header-exact.png?v=2';
     panel.src='/share-panel.svg';
     footer.src='/share-footer.svg';
     return()=>{cancelled=true;};

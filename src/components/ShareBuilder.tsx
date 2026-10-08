@@ -158,7 +158,7 @@ function eventMetrics(ctx:CanvasRenderingContext2D,event:MobilizationEvent,maxWi
   return {title,schedule,venue,type};
 }
 
-function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:string,headerImage?:HTMLImageElement,footerImage?:HTMLImageElement){
+function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:string,headerImage?:HTMLImageElement,panelImage?:HTMLImageElement,footerImage?:HTMLImageElement){
   const ordered=events.slice().sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
   const dates=[...new Set(ordered.map(event=>event.date))];
 
@@ -195,9 +195,13 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
   const panelH=953;
   const panelBottom=panelY+panelH;
 
-  ctx.fillStyle=PANEL;
-  roundRect(ctx,panelX,panelY,panelW,panelH,108);
-  ctx.fill();
+  if(panelImage&&panelImage.complete){
+    ctx.drawImage(panelImage,panelX,panelY,panelW,panelH);
+  }else{
+    ctx.fillStyle=PANEL;
+    roundRect(ctx,panelX,panelY,panelW,panelH,96);
+    ctx.fill();
+  }
 
   // Colunas do template.
   const timeX=145;
@@ -361,29 +365,25 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
     if(!canvasRef.current||!chosen.length)return;
     let cancelled=false;
     const header=new Image();
+    const panel=new Image();
     const footer=new Image();
-    let headerReady=false;
-    let footerReady=false;
+    let ready=0;
     const paint=()=>{
-      if(!cancelled&&!canvasRef.current) return;
-      if(!cancelled&&(headerReady||header.complete)&&(footerReady||footer.complete)){
-        try{
-          renderCard(canvasRef.current,chosen,window.location.host,header,footer);
-          setFeedback('');
-        }catch{
-          setFeedback('A prévia visual não pôde ser gerada neste navegador.');
-        }
+      if(cancelled||!canvasRef.current||ready<3)return;
+      try{
+        renderCard(canvasRef.current,chosen,window.location.host,header,panel,footer);
+        setFeedback('');
+      }catch{
+        setFeedback('A prévia visual não pôde ser gerada neste navegador.');
       }
     };
-    header.onload=()=>{headerReady=true;paint();};
-    header.onerror=()=>{headerReady=true;paint();};
-    footer.onload=()=>{footerReady=true;paint();};
-    footer.onerror=()=>{footerReady=true;paint();};
+    [header,panel,footer].forEach(img=>{
+      img.onload=()=>{ready++;paint();};
+      img.onerror=()=>{ready++;paint();};
+    });
     header.src='/share-header.svg';
+    panel.src='/share-panel.svg';
     footer.src='/share-footer.svg';
-    if(header.complete)headerReady=true;
-    if(footer.complete)footerReady=true;
-    paint();
     return()=>{cancelled=true;};
   },[chosen]);
 

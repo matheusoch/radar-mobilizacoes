@@ -122,13 +122,13 @@ function eventMetrics(ctx:CanvasRenderingContext2D,event:MobilizationEvent,maxWi
   );
   const timeInfo=getTimeInfo(event);
   const schedule=timeInfo.detail
-    ? fitSingleLine(ctx,timeInfo.detail,maxWidth,compact?12:14,10,'700')
+    ? fitWrappedText(ctx,timeInfo.detail,maxWidth,2,compact?11:13,9,'"Arial Narrow", Arial, sans-serif')
     : null;
   const venue=fitSingleLine(ctx,event.venue||'Local não informado',maxWidth,compact?15:20,11);
   const type=fitSingleLine(ctx,(event.type||'Mobilização').toUpperCase(),maxWidth,compact?13:17,10,'900');
 
   const titleHeight=title.lines.length*(title.size+2);
-  const scheduleHeight=schedule?(schedule.size+2):0;
+  const scheduleHeight=schedule?schedule.lines.length*(schedule.size+1):0;
   const venueHeight=venue.size+2;
   const typeHeight=type.size+2;
   const gaps=(schedule?4:0)+3+4;
@@ -148,7 +148,7 @@ function eventMetrics(ctx:CanvasRenderingContext2D,event:MobilizationEvent,maxWi
       '"Arial Narrow", Arial, sans-serif'
     );
     const schedule2=timeInfo.detail
-      ? fitSingleLine(ctx,timeInfo.detail,maxWidth,Math.max(10,Math.floor((schedule?.size||12)*scale)),9,'700')
+      ? fitWrappedText(ctx,timeInfo.detail,maxWidth,2,Math.max(10,Math.floor((schedule?.size||11)*scale)),9,'"Arial Narrow", Arial, sans-serif')
       : null;
     const venue2=fitSingleLine(ctx,event.venue||'Local não informado',maxWidth,Math.max(11,Math.floor(venue.size*scale)),10);
     const type2=fitSingleLine(ctx,(event.type||'Mobilização').toUpperCase(),maxWidth,Math.max(10,Math.floor(type.size*scale)),9,'900');
@@ -260,7 +260,7 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
 
       const titleLH=info.title.size+2;
       const titleH=info.title.lines.length*titleLH;
-      const scheduleH=info.schedule?info.schedule.size+2:0;
+      const scheduleH=info.schedule?info.schedule.lines.length*(info.schedule.size+1):0;
       const venueH=info.venue.size+2;
       const typeH=info.type.size+2;
       const scheduleGap=info.schedule?3:0;
@@ -283,7 +283,9 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
         textY+=scheduleGap;
         ctx.fillStyle=WHITE;
         ctx.font='700 italic '+info.schedule.size+'px "Arial Narrow", Arial, sans-serif';
-        ctx.fillText(info.schedule.text,contentX,textY+info.schedule.size);
+        info.schedule.lines.forEach((line,index)=>{
+          ctx.fillText(line,contentX,textY+info.schedule.size+index*(info.schedule.size+1));
+        });
         textY+=scheduleH;
       }
 

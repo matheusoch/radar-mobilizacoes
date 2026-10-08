@@ -409,3 +409,30 @@ body{background:var(--page);color:var(--ink)}
   .share-canvas-wrap{padding:7px}
   .share-card-art{width:100%;max-width:540px}
 }
+
+
+/* Prévia do card: SVG responsivo, preservando os PNGs originais. */
+.share-svg-preview{
+  width:100%;
+  max-width:540px;
+  line-height:0;
+  flex:0 1 auto;
+}
+.share-svg-preview svg{
+  display:block;
+  width:100%;
+  height:auto;
+  max-width:100%;
+  border-radius:0;
+}
+.share-canvas-wrap{
+  width:100%;
+  box-sizing:border-box;
+  padding:12px;
+  overflow:hidden;
+  align-items:flex-start;
+}
+@media(max-width:620px){
+  .share-svg-preview{max-width:100%}
+  .share-canvas-wrap{padding:8px}
+}

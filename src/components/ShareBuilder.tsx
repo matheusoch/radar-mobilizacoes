@@ -189,12 +189,13 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
   const panelH=953;
   const panelBottom=panelY+panelH;
 
+  // O painel escuro é a base. O PNG fornecido é uma camada transparente decorativa,
+  // portanto ele deve ser aplicado POR CIMA da base, e não substituir a base inteira.
+  ctx.fillStyle=PANEL;
+  roundRect(ctx,panelX,panelY,panelW,panelH,96);
+  ctx.fill();
   if(panelImage&&panelImage.complete&&panelImage.naturalWidth>0){
     ctx.drawImage(panelImage,panelX,panelY,panelW,panelH);
-  }else{
-    ctx.fillStyle='#951010';
-    roundRect(ctx,panelX,panelY,panelW,panelH,96);
-    ctx.fill();
   }
 
   // Grades do conteúdo dentro do retângulo.
@@ -220,8 +221,9 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
     dates.length*(dateH+dateGap+groupGap)+
     Math.max(0,ordered.length-dates.length)*eventGap;
 
-  const computedRow=(availableHeight-fixedHeight)/Math.max(1,ordered.length);
-  const rowH=Math.max(88,computedRow);
+  // Não esticamos uma única mobilização para ocupar todo o painel.
+  // Cada evento recebe uma faixa própria; o espaço restante fica limpo dentro do template.
+  const rowH=compact?128:150;
 
   let y=contentTop;
 
@@ -368,7 +370,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
       img.onload=()=>{ready++;paint();};
       img.onerror=()=>{ready++;paint();};
     });
-    header.src='/agenda-card-header.png';
+    header.src='/agenda-header-exact.png';
     panel.src='/agenda-card-panel.png';
     footer.src='/agenda-card-footer.png';
     return()=>{cancelled=true;};

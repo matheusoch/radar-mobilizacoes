@@ -91,7 +91,7 @@ function prepareEvent(event:MobilizationEvent,compact:boolean):CardEvent{
   const scheduleLH=compact?13:15;
   const venueLH=compact?15:17;
   const typeH=compact?15:18;
-  const stack=title.length*titleLH+(schedule.length?schedule.length*scheduleLH+5:0)+venue.length*venueLH+5+typeH;
+  const stack=title.lines.length*titleLH+(schedule.length?schedule.length*scheduleLH+5:0)+venue.length*venueLH+5+typeH;
   return {event,title:title.lines,schedule,venue,type,rowH:Math.max(compact?82:92,stack+10)};
 }
 

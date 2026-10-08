@@ -50,7 +50,7 @@ function Layout({children}:{children:ReactNode}){
     <header className="site-header">
       <div className="container nav">
         <Link to="/" className="brand" onClick={()=>setOpen(false)}>
-          <span className="brand-mark"><img src="/agenda-card-icon.png" alt="" width="30" height="30"/></span>
+          <span className="brand-mark"><img src="/agenda-fist-original.png" alt="" width="30" height="30"/></span>
           <span>Agenda de Mobilizações</span>
         </Link>
         <button className="mobile-menu" onClick={()=>setOpen(!open)} aria-label={open?'Fechar menu':'Abrir menu'} aria-expanded={open}>{open?<X/>:<Menu/>}</button>

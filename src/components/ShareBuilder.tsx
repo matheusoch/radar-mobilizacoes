@@ -9,9 +9,9 @@ const PANEL='#951010';
 const WHITE='#fff';
 const YELLOW='#f7db26';
 
-const HEADER='/agenda-header-exact.png';
+const HEADER='/agenda-card-header-exact.png';
 const HEADER_W=618;
-const HEADER_H=195;
+const HEADER_H=451;
 const FOOTER='/agenda-card-footer-exact.png';
 const ICON='/agenda-card-icon.png';
 
@@ -109,7 +109,7 @@ function makeSvg(events:MobilizationEvent[]){
 
   const panelX=103;
   const panelW=874;
-  const panelY=320;
+  const panelY=563;
   const dateW=281;
   const dateH=77;
   const dateGap=28;
@@ -132,8 +132,8 @@ function makeSvg(events:MobilizationEvent[]){
 
   const footerH=54;
   const footerW=541;
-  const footerGap=42;
-  const panelPaddingBottom=34;
+  const footerGap=96;
+  const panelPaddingBottom=42;
   const contentBottom=y-eventGap;
   const footerY=contentBottom+footerGap;
   const panelBottom=footerY+footerH+panelPaddingBottom;

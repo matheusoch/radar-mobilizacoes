@@ -21,10 +21,10 @@ function displayLocation(event:MobilizationEvent){
 
 function timeInfo(event:MobilizationEvent){
   const raw=(event.time_label||event.time||'').trim();
-  const times=[...raw.matchAll(/\\d{1,2}:\\d{2}/g)].map(m=>m[0]);
+  const times=[...raw.matchAll(/\d{1,2}:\d{2}/g)].map(m=>m[0]);
   if(!times.length)return {primary:'—',detail:''};
   if(times.length===1)return {primary:times[0],detail:''};
-  const detail=raw.replace(times[0],'').replace(/\\s*\\/\\s*/g,' · ').replace(/\\s+/g,' ').replace(/^[\\s·\\-–—]+/,'').trim();
+  const detail=raw.replace(times[0],'').replace(/\s*\/\s*/g,' · ').replace(/\s+/g,' ').replace(/^[\s·\\-–—]+/,'').trim();
   return {primary:times[0],detail};
 }
 
@@ -38,7 +38,7 @@ function escapeXml(value:string){
 }
 
 function measureWrap(text:string,maxChars:number,maxLines=2){
-  const words=text.trim().split(/\\s+/).filter(Boolean);
+  const words=text.trim().split(/\s+/).filter(Boolean);
   const lines:string[]=[];
   let line='';
   for(const word of words){
@@ -49,7 +49,7 @@ function measureWrap(text:string,maxChars:number,maxLines=2){
   if(line)lines.push(line);
   if(lines.length<=maxLines)return lines;
   const clipped=lines.slice(0,maxLines);
-  clipped[maxLines-1]=clipped[maxLines-1].slice(0,Math.max(1,maxChars-1)).replace(/\\s+$/,'')+'…';
+  clipped[maxLines-1]=clipped[maxLines-1].slice(0,Math.max(1,maxChars-1)).replace(/\s+$/,'')+'…';
   return clipped;
 }
 
@@ -264,7 +264,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   const download=async()=>{
     if(!svg)return;
     try{
-      const data=await svgToPng(svg,W,Number(svg.match(/height="(\\d+)"/)?.[1]||1350));
+      const data=await svgToPng(svg,W,Number(svg.match(/height="(\d+)"/)?.[1]||1350));
       const a=document.createElement('a');
       a.download='agenda-de-mobilizacoes.png';
       a.href=data;

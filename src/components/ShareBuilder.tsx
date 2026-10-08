@@ -441,20 +441,20 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
               </button>
             }
           </div>
-          <label className='share-date-filter'>
-            <span>Data</span>
+          <div className='share-date-filter'>
+            <CalendarDays size={17} aria-hidden='true'/>
             <input
               type='date'
               value={dateFilter}
               onChange={e=>setDateFilter(e.target.value)}
               aria-label='Filtrar eventos por data'
             />
-          </label>
-          {dateFilter&&
-            <button type='button' className='share-date-clear' onClick={()=>setDateFilter('')} aria-label='Limpar filtro de data'>
-              <X size={16}/>
-            </button>
-          }
+            {dateFilter&&
+              <button type='button' className='share-date-clear' onClick={()=>setDateFilter('')} aria-label='Limpar filtro de data'>
+                <X size={15}/>
+              </button>
+            }
+          </div>
         </div>
 
         <div className='share-selected-list'>

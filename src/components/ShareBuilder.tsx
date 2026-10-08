@@ -190,10 +190,10 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],template
 
   const dates=[...new Set(ordered.map(event=>event.date))];
   const compact=ordered.length>=4;
-  // Cinco eventos em cinco dias distintos precisam compartilhar a mesma
-  // área vertical. Nesse caso reduzimos apenas o espaçamento/altura das
-  // linhas; o template e a ordem de cima para baixo permanecem iguais.
-  const ultraCompact=dates.length>=5;
+  // Com cinco eventos, a compactação precisa depender do total de eventos,
+  // e não da quantidade de datas. Se dois eventos caem no mesmo dia, eles
+  // continuam ocupando duas linhas e também precisam caber no painel.
+  const ultraCompact=ordered.length>=5;
   const rowH=ultraCompact?110:(compact?128:150);
   const eventGap=ultraCompact?2:(compact?6:9);
   const dateH=ultraCompact?36:(compact?46:52);

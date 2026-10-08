@@ -207,9 +207,6 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
 
   const contentTop=377;
   const footerY=panelBottom-74;
-  const footerReserved=66;
-  const contentBottom=footerY-footerReserved;
-  const availableHeight=contentBottom-contentTop;
 
   const compact=ordered.length>=4;
   const dateH=compact?46:52;
@@ -217,11 +214,7 @@ function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],host:str
   const groupGap=compact?12:16;
   const eventGap=compact?6:9;
 
-  const fixedHeight=
-    dates.length*(dateH+dateGap+groupGap)+
-    Math.max(0,ordered.length-dates.length)*eventGap;
-
-  // Não esticamos uma única mobilização para ocupar todo o painel.
+    // Não esticamos uma única mobilização para ocupar todo o painel.
   // Cada evento recebe uma faixa própria; o espaço restante fica limpo dentro do template.
   const rowH=compact?128:150;
 

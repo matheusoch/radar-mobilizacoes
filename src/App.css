@@ -250,3 +250,5 @@ body{background:var(--page);color:var(--ink)}
 .footer{background:#f5e7e4;border-top:2px solid #edcfca}
 .footer-inner{color:#765f5b}
 .red-star{color:var(--accent)}
+
+.share-canvas{border-radius:0;box-shadow:none}

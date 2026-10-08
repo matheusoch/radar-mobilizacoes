@@ -9,9 +9,9 @@ const PANEL='#951010';
 const WHITE='#fff';
 const YELLOW='#f7db26';
 
-const HEADER='/agenda-card-header-exact.png';
+const HEADER='/agenda-header-exact.png';
 const HEADER_W=618;
-const HEADER_H=451;
+const HEADER_H=195;
 const FOOTER='/agenda-card-footer-exact.png';
 const ICON='/agenda-card-icon.png';
 

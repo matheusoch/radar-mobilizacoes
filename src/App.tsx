@@ -264,14 +264,20 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
 
 function CalendarPage({events}:{events:MobilizationEvent[]}){
   const publicEvents=events.filter(e=>e.public);
-  const today=new Date().toISOString().slice(0,10);
+  const getLocalDateKey=()=>{
+    const d=new Date();
+    return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
+  };
+  const[today]=useState(getLocalDateKey);
   const[selectedDate,setSelectedDate]=useState(today);
   const[query,setQuery]=useState('');
 
   const shiftDate=(days:number)=>{
-    const d=new Date(selectedDate+'T12:00:00');
-    d.setDate(d.getDate()+days);
-    setSelectedDate(d.toISOString().slice(0,10));
+    setSelectedDate(current=>{
+      const d=new Date(current+'T12:00:00');
+      d.setDate(d.getDate()+days);
+      return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
+    });
   };
 
   const selectedDateObj=new Date(selectedDate+'T12:00:00');
@@ -288,9 +294,9 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
         <p className="page-lead">Navegue dia a dia e encontre rapidamente uma cidade, estado, local ou evento.</p>
       </div>
       <div className="calendar-nav" aria-label="Navegação do calendário">
-        <button type="button" className="button ghost" onClick={()=>shiftDate(-1)} aria-label="Dia anterior"><ChevronLeft size={17}/></button>
-        <button type="button" className="button ghost" onClick={()=>setSelectedDate(today)}>Hoje</button>
-        <button type="button" className="button ghost" onClick={()=>shiftDate(1)} aria-label="Próximo dia"><ChevronRight size={17}/></button>
+        <button type="button" className="button ghost" onClick={e=>{e.preventDefault();shiftDate(-1)}} aria-label="Dia anterior" title="Dia anterior"><ChevronLeft size={17}/></button>
+        <button type="button" className="button ghost" onClick={e=>{e.preventDefault();setSelectedDate(today)}} title="Voltar para hoje">Hoje</button>
+        <button type="button" className="button ghost" onClick={e=>{e.preventDefault();shiftDate(1)}} aria-label="Próximo dia" title="Próximo dia"><ChevronRight size={17}/></button>
       </div>
     </div>
     <div className="calendar-search">

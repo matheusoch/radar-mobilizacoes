@@ -49,17 +49,17 @@ const stateDirectory=[
 ];
 const stateCodeByName=new Map(stateDirectory.map(([code,name])=>[norm(name),code]));
 let ibgeMunicipalitiesPromise=null;
-let lastNominatimRequestAt=0;
-let nominatimQueue=Promise.resolve();
-async function fetchNominatimSerialized(url,options){
+let lastPhotonRequestAt=0;
+let photonQueue=Promise.resolve();
+async function fetchPhotonSerialized(url,options){
  let release;
- const previous=nominatimQueue;
- nominatimQueue=new Promise(resolve=>{release=resolve});
+ const previous=photonQueue;
+ photonQueue=new Promise(resolve=>{release=resolve});
  await previous;
  try{
-  const wait=Math.max(0,1100-(Date.now()-lastNominatimRequestAt));
+  const wait=Math.max(0,1100-(Date.now()-lastPhotonRequestAt));
   if(wait)await new Promise(resolve=>setTimeout(resolve,wait));
-  lastNominatimRequestAt=Date.now();
+  lastPhotonRequestAt=Date.now();
   return await fetch(url,options);
  }finally{release()}
 }
@@ -252,66 +252,80 @@ function osmPlaceComponents(address){
  return items;
 }
 async function searchOpenStreetMap(query,venue,city,state,municipalities){
- const params=new URLSearchParams({q:query,format:"jsonv2",addressdetails:"1",namedetails:"1",limit:"5",countrycodes:"br","accept-language":"pt-BR"});
- const url="https://nominatim.openstreetmap.org/search?"+params.toString();
+ const params=new URLSearchParams({q:query,limit:"5",lang:"pt"});
+ const url="https://photon.komoot.io/api/?"+params.toString();
  const cacheKey=new Request(url,{method:"GET"});
- let rows=null;
+ let features=null;
  try{
   if(typeof caches!=="undefined"&&caches.default){
    const cached=await caches.default.match(cacheKey);
-   if(cached)rows=await cached.json();
+   if(cached)features=await cached.json();
   }
  }catch{}
- if(!Array.isArray(rows)){
-  const wait=Math.max(0,1100-(Date.now()-lastNominatimRequestAt));
-  if(wait)await new Promise(resolve=>setTimeout(resolve,wait));
-  lastNominatimRequestAt=Date.now();
+ if(!Array.isArray(features)){
   try{
-   const response=await fetchNominatimSerialized(url,{
-    headers:{
-     "accept":"application/json",
-     "accept-language":"pt-BR",
-     "user-agent":"AgendaDeMobilizacoes/1.0 (+https://agenda-mobilizacoes.participa.workers.dev/; event-location-verification)"
-    },
+   const response=await fetchPhotonSerialized(url,{
+    headers:{"accept":"application/json","user-agent":"AgendaDeMobilizacoes/1.0 (+https://agenda-mobilizacoes.participa.workers.dev/; event-location-verification)"},
     signal:AbortSignal.timeout(8000)
    });
-   if(!response.ok)return {configured:true,items:[],source:"OpenStreetMap/Nominatim",error:"OpenStreetMap respondeu HTTP "+response.status};
-   const raw=await response.text();
-   try{rows=JSON.parse(raw)}catch{return {configured:true,items:[],source:"OpenStreetMap/Nominatim",error:"A resposta cartográfica não pôde ser lida."}}
-   if(!Array.isArray(rows))rows=[];
+   if(!response.ok)return {configured:true,items:[],source:"OpenStreetMap/Photon",error:"Photon respondeu HTTP "+response.status};
+   const data=await response.json();
+   features=Array.isArray(data.features)?data.features:[];
    try{
     if(typeof caches!=="undefined"&&caches.default){
-     await caches.default.put(cacheKey,new Response(JSON.stringify(rows),{headers:{"content-type":"application/json; charset=utf-8","cache-control":"public, max-age=604800"}}));
+     await caches.default.put(cacheKey,new Response(JSON.stringify(features),{headers:{"content-type":"application/json; charset=utf-8","cache-control":"public, max-age=604800"} }));
     }
    }catch{}
-  }catch{return {configured:true,items:[],source:"OpenStreetMap/Nominatim",error:"Não foi possível consultar o OpenStreetMap nesta tentativa."}}
+  }catch{return {configured:true,items:[],source:"OpenStreetMap/Photon",error:"Não foi possível consultar o Photon nesta tentativa."}}
  }
- const items=rows.filter(row=>{
-  const addr=row.address||{};
-  if(geoNorm(addr.country_code||"")!=="br"&&!/brasil|brazil/i.test(addr.country||""))return false;
-  const type=geoNorm(row.type||"");
-  const addressType=geoNorm(row.addresstype||"");
-  if(["state","country","county","municipality","administrative"].includes(type)||["state","country","county","municipality","administrative"].includes(addressType))return false;
-  return Boolean(row.lat&&row.lon&&row.display_name);
- }).map(row=>{
-  const name=clean(row.name||String(row.display_name).split(",")[0]);
-  const title=name||clean(String(row.display_name).split(",")[0]);
-  const address=clean(row.display_name);
-  const components=osmPlaceComponents(row.address||{});
-  const lat=Number(row.lat),lng=Number(row.lon);
-  const mapUrl=Number.isFinite(lat)&&Number.isFinite(lng)?"https://www.openstreetmap.org/?mlat="+encodeURIComponent(lat)+"&mlon="+encodeURIComponent(lng)+"#map=17/"+encodeURIComponent(lat)+"/"+encodeURIComponent(lng):"";
+ const items=features.map(feature=>{
+  const props=feature?.properties||{},coords=feature?.geometry?.coordinates||[];
+  const countryName=clean(props.country||"");
+  const countryCode=geoNorm(props.countrycode||props.country_code||"");
+  if(countryCode!=="br"&&!/brasil|brazil/i.test(countryName))return null;
+  const geoType=geoNorm(props.type||"");
+  const osmKey=geoNorm(props.osm_key||"");
+  const osmValue=geoNorm(props.osm_value||"");
+  if(["state","country","county","municipality","administrative","region","city"].includes(geoType))return null;
+  if(osmKey==="place"&&["state","country","county","municipality","city","town","village"].includes(osmValue))return null;
+  const stateText=clean(props.state||"");
+  const stateCode=validState(stateText)||stateCodeByName.get(norm(stateText))||"";
+  const cityValues=[props.city,props.town,props.village,props.municipality,props.locality,props.county].map(value=>clean(value||"")).filter(Boolean);
+  let municipality=null;
+  for(const cityValue of cityValues){
+   const match=getMunicipalityMatch(cityValue,municipalities,stateCode||state);
+   if(match.match){municipality=match.match;break}
+  }
+  const cityName=municipality?.name||"";
+  const resolvedState=municipality?.uf||stateCode||"";
+  const canonicalStateName=stateDirectory.find(([code])=>code===resolvedState)?.[1]||stateText;
+  const street=clean(props.street||"");
+  const house=clean(props.housenumber||"");
+  const road=street?(house?street+", "+house:street):"";
+  const addressParts=[road,clean(props.district||props.neighbourhood||""),cityName,canonicalStateName,countryName||"Brasil"].filter(Boolean);
+  const address=addressParts.filter((part,index)=>index===0||norm(part)!==norm(addressParts[index-1])).join(", ");
+  const title=clean(props.name||road||"");
+  const lat=Number(coords[1]),lng=Number(coords[0]);
+  const mapUrl=Number.isFinite(lat)&&Number.isFinite(lng)
+   ?"https://www.openstreetmap.org/?mlat="+encodeURIComponent(lat)+"&mlon="+encodeURIComponent(lng)+"#map=17/"+encodeURIComponent(lat)+"/"+encodeURIComponent(lng)
+   :"";
+  const components=osmPlaceComponents({
+   state:canonicalStateName,city:cityName,country:countryName||"Brasil",country_code:countryCode||"br",
+   county:clean(props.county||""),city_district:clean(props.district||"")
+  });
   return {
-   id:"osm-"+String(row.osm_type||"item")+"-"+String(row.osm_id||row.place_id||""),
-   displayName:{text:title},formattedAddress:address,
+   id:"photon-"+String(props.osm_key||"item")+"-"+String(props.osm_id||props.name||""),
+   displayName:{text:title||clean(props.street||"Local no OpenStreetMap")},
+   formattedAddress:address||[cityName,canonicalStateName,countryName||"Brasil"].filter(Boolean).join(", "),
    location:{latitude:lat,longitude:lng},addressComponents:components,
    types:["point_of_interest"],googleMapsUri:mapUrl,
-   _source:"OpenStreetMap/Nominatim",_osmType:row.type,_osmCategory:row.category
+   _source:"OpenStreetMap/Photon",_osmType:props.type,_osmKey:props.osm_key,_osmValue:props.osm_value
   };
- });
+ }).filter(place=>place&&Number.isFinite(place.location.latitude)&&Number.isFinite(place.location.longitude)&&place.displayName.text);
  const scored=items.map(place=>({...place,...scorePlaceResult(place,query,venue,city,state,municipalities)}))
   .filter(place=>place.geo!==null)
   .sort((a,b)=>b.score-a.score);
- return {configured:true,items:scored,source:"OpenStreetMap/Nominatim",error:""};
+ return {configured:true,items:scored,source:"OpenStreetMap/Photon",error:""};
 }
 async function searchPlacesWithFallback(query,venue,city,state,env,municipalities,allowOSMFallback=true){
  const google=await searchGooglePlaces(query,env);
@@ -320,7 +334,7 @@ async function searchPlacesWithFallback(query,venue,city,state,env,municipalitie
  const osm=await searchOpenStreetMap(query,venue,city,state,municipalities);
  if(osm.items.length)return osm;
  if(google.configured)return {...google,source:"Google Maps / Places API",fallbackError:osm.error||""};
- return {...osm,configured:false,source:"OpenStreetMap/Nominatim",error:osm.error||"Nenhum resultado foi encontrado no OpenStreetMap."};
+ return {...osm,configured:false,source:"OpenStreetMap/Photon",error:osm.error||"Nenhum resultado foi encontrado no OpenStreetMap."};
 }
 function scorePlaceResult(place,query,venue,city,state,municipalities){
  const queryKey=norm(query),venueKey=norm(venue),name=norm(place.displayName?.text||"");
@@ -474,7 +488,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
     result.geography_source=places.source||"Google Maps / Places API";
     result.geography_confidence="alta";
     result.geography_options=[];
-    warnings.push(places.source==="OpenStreetMap/Nominatim"
+    warnings.push(places.source==="OpenStreetMap/Photon"
      ?"O ponto foi associado a uma referência do OpenStreetMap por correspondência do nome e compatibilidade geográfica. Confira o ponto no mapa antes de publicar."
      :"O ponto foi associado a um resultado do Google Maps por correspondência do nome e compatibilidade geográfica. Confira o link antes de publicar.");
    }else{
@@ -483,7 +497,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
     result.geography_source=places.source||"Google Maps / Places API";
     result.geography_confidence="baixa";
     warnings.push(options.length
-     ?(places.source==="OpenStreetMap/Nominatim"?"O OpenStreetMap retornou opções possivelmente relacionadas; escolha manualmente o ponto correto.":"O Google Maps retornou opções possivelmente relacionadas; escolha manualmente o local correto.")
+     ?(places.source==="OpenStreetMap/Photon"?"O OpenStreetMap retornou opções possivelmente relacionadas; escolha manualmente o ponto correto.":"O Google Maps retornou opções possivelmente relacionadas; escolha manualmente o local correto.")
      :(places.error||"Nenhuma fonte cartográfica confirmou esse ponto com segurança."));
    }
   }else if(!places.configured){

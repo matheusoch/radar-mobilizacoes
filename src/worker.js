@@ -51,7 +51,7 @@ const stateCodeByName=new Map(stateDirectory.map(([code,name])=>[norm(name),code
 let ibgeMunicipalitiesPromise=null;
 const regexSpecials=new Set([".", "*", "+", "?", "^", "$", "|", "(", ")", "{", "}", "[", "]", String.fromCharCode(92)]);
 const escapeRegex=value=>Array.from(value).map(char=>regexSpecials.has(char)?String.fromCharCode(92)+char:char).join("");
-const geoNorm=value=>typeof value==="string"?value.normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim():"";
+const geoNorm=value=>typeof value==="string"?value.normalize("NFD").replace(new RegExp("["+String.fromCharCode(768)+"-"+String.fromCharCode(879)+"]","g"),"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim():"";
 async function getIBGEMunicipalities(){
  if(!ibgeMunicipalitiesPromise){
   ibgeMunicipalitiesPromise=(async()=>{
@@ -71,8 +71,12 @@ async function getIBGEMunicipalities(){
  return ibgeMunicipalitiesPromise;
 }
 function stateHints(text){
- const t=geoNorm(text),found=[];
+ const t=geoNorm(text),found=[],raw=String(text||"");
  for(const [code,name] of stateDirectory){
+  if(code==="PA"){
+   if(/\bpará\b/i.test(raw))found.push({code,name});
+   continue;
+  }
   const nameNorm=norm(name);
   if(nameNorm&&new RegExp("(^| )"+escapeRegex(nameNorm)+"( |$)").test(t))found.push({code,name});
  }
@@ -235,7 +239,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
  }
  let queryVenue=clean(result.venue||"");
  if(!queryVenue){
-  const clue=extractVenueClue([context.evidence||[],context.cityEvidence||"",context.posterText||"",context.postText||""].flat().join("\\n"));
+  const clue=extractVenueClue([context.evidence||[],context.cityEvidence||"",context.posterText||"",context.postText||""].flat().join(String.fromCharCode(10)));
   if(clue){
    queryVenue=titleCase(clue);result.venue=queryVenue;
    warnings.push("O ponto de encontro foi extraído de uma expressão contextual (como 'concentração em...'); confirme se corresponde ao local correto.");

@@ -781,7 +781,7 @@ const blank=():MobilizationEvent=>({
     const titleMatches=Boolean(candidate.title&&normalizeText(candidate.title)===normalizeText(editing?.title||''));
     const venueMatches=Boolean(candidate.venue&&normalizeText(candidate.venue)===normalizeText(editing?.venue||''));
     const timeMatches=Boolean(candidate.time&&editing?.time&&candidate.time.slice(0,5)===editing.time.slice(0,5));
-    const sameEvent=Boolean(editing?.db_id&&sameDate&&sameCity&&(titleMatches&&(venueMatches||timeMatches||!candidate.venue)||venueMatches&&timeMatches));
+    const sameEvent=Boolean(editing?.db_id&&sameDate&&sameCity&&(titleMatches&&(venueMatches||timeMatches)||venueMatches&&timeMatches));
     const evidenceNotes=[
       candidate.source_url?'Fonte original: '+candidate.source_url:'',
       candidate.organization?'Organização mencionada: '+candidate.organization:'',

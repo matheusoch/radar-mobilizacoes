@@ -52,7 +52,7 @@ function prettyCity(s:string){
 }
 function inferType(s:string):string|undefined{
  const t=norm(s);
- if(/lambe|colagem de cartaz|colar cartaz|colagem de cartazes|panfletagem|distribuicao de material|distribuicao de panfleto|entrega de material|entrega de panfleto|distribuicao de jornal|entrega de jornal|abordagem de rua/.test(t))return 'Panfletagem';
+ if(/lambe|lambes|lambe lambe|colagem de cartaz|colar cartaz|colagem de cartazes|colar lambes|colagem de lambe|colagem de lambes|panfletagem|distribuicao de material|distribuicao de panfleto|entrega de material|entrega de panfleto|distribuicao de jornal|entrega de jornal|abordagem de rua|brigada de material|agitacao de rua/.test(t))return 'Panfletagem';
  if(/brigada de rua|blitz/.test(t))return 'Mobilização de rua';
  if(/mutirao/.test(t))return 'Mutirão';
  if(/caminhada|passeata|marcha/.test(t))return 'Caminhada';

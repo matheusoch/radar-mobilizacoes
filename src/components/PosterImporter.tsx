@@ -43,7 +43,10 @@ function possibleDuplicates(candidate:PosterCandidate,events:MobilizationEvent[]
 export default function PosterImporter({currentImage,existingEvents,onFileSelected,onCandidatesFound,onUseCandidate,getAuthToken}:Props){
  const [preview,setPreview]=useState<string|null>(null),[dimensions,setDimensions]=useState<{width:number;height:number}|null>(null),[status,setStatus]=useState(''),[rawText,setRawText]=useState('');
  const [busy,setBusy]=useState(false),[selected,setSelected]=useState<File|null>(null),[candidates,setCandidates]=useState<PosterCandidate[]>([]),[fileHash,setFileHash]=useState('');
- const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiBusy,setAiBusy]=useState(false),[aiStatus,setAiStatus]=useState('');
+ type ResearchResult={platform:string;title:string;text:string;url:string;author?:string;handle?:string;publishedAt?:string;likes?:number;reposts?:number;relevance?:number};
+type ResearchProvider={platform:string;status:string;message:string;count:number};
+const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiBusy,setAiBusy]=useState(false),[aiStatus,setAiStatus]=useState('');
+ const [researchBusy,setResearchBusy]=useState(false),[researchStatus,setResearchStatus]=useState(''),[researchResults,setResearchResults]=useState<ResearchResult[]>([]),[researchProviders,setResearchProviders]=useState<ResearchProvider[]>([]);
  const processFile=useCallback(async(file:File)=>{
   const ext=(file.name.split('.').pop()||'').toLowerCase();
   const supported=file.type.startsWith('image/')||['jpg','jpeg','jfif','png','webp','gif'].includes(ext);

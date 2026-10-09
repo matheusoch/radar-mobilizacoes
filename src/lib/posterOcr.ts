@@ -109,7 +109,7 @@ function makeCandidate(local:string[],all:string[],date:string|undefined,index:n
  let title=bestTitle(l,type)||bestTitle(contextLines,type)||bestTitle(all,type);
  if(title&&/agenda da semana|programacao semanal|agenda de mobilizacoes/.test(norm(title))&&loc.venue)title=(type||'Mobilização')+' — '+loc.venue;
  if(!title&&loc.venue)title=(type||'Mobilização')+' — '+loc.venue;
- return {id:'suggestion-'+index+'-'+(date||'sem-data'),title,type,date,time:sch[0]?.time,time_label:scheduleLines.map(clean).join(' / ').slice(0,180)||undefined,city:loc.city,state:loc.state,venue:loc.venue,address:loc.address,confidence,sourceLines:l};
+ return {id:'suggestion-'+index+'-'+(date||'sem-data'),title,type,date,time:sch[0]?.time,time_label:sch.map(item=>item.label).join(' / ').slice(0,180)||undefined,city:loc.city,state:loc.state,venue:loc.venue,address:loc.address,confidence,sourceLines:l};
 }
 function detect(text:string,confidence?:number):PosterCandidate[]{
  const lines=text.split(/\r?\n/).map(clean).filter(x=>x.length>1);

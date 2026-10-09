@@ -16,9 +16,10 @@ function tokenSimilarity(a:string,b:string){
  if(!x.size||!y.size)return 0;let inter=0;x.forEach(t=>{if(y.has(t))inter++});
  return inter/(x.size+y.size-inter);
 }
-function possibleDuplicates(candidate:PosterCandidate,events:MobilizationEvent[]){
+function possibleDuplicates(candidate:PosterCandidate,events:MobilizationEvent[],fileHash:string){
  const city=normalized(candidate.city||''),venue=normalized(candidate.venue||''),title=normalized(candidate.title||'');
  return events.filter(event=>{
+  if(fileHash&&event.poster_sha256===fileHash)return true;
   if(candidate.date&&event.date!==candidate.date)return false;
   const sameCity=city&&normalized(event.city||'')===city;
   const sameVenue=venue&&normalized(event.venue||'')===venue;
@@ -29,13 +30,14 @@ function possibleDuplicates(candidate:PosterCandidate,events:MobilizationEvent[]
 }
 export default function PosterImporter({currentImage,existingEvents,onFileSelected,onCandidatesFound,onUseCandidate}:Props){
  const [preview,setPreview]=useState<string|null>(null),[dimensions,setDimensions]=useState(''),[status,setStatus]=useState(''),[rawText,setRawText]=useState('');
- const [busy,setBusy]=useState(false),[selected,setSelected]=useState<File|null>(null),[candidates,setCandidates]=useState<PosterCandidate[]>([]);
+ const [busy,setBusy]=useState(false),[selected,setSelected]=useState<File|null>(null),[candidates,setCandidates]=useState<PosterCandidate[]>([]),[fileHash,setFileHash]=useState('');
  const processFile=useCallback(async(file:File)=>{
   const ext=(file.name.split('.').pop()||'').toLowerCase();
   const supported=file.type.startsWith('image/')||['jpg','jpeg','jfif','png','webp','gif'].includes(ext);
   if(!supported){setStatus('Formato não reconhecido. Use JPG/JPEG/JFIF, PNG, WEBP ou GIF.');return}
   if(file.size>8*1024*1024){setStatus('O pôster deve ter no máximo 8 MB.');return}
-  const url=URL.createObjectURL(file);setPreview(url);setSelected(file);setDimensions('');setRawText('');setCandidates([]);
+  const url=URL.createObjectURL(file);setPreview(url);setSelected(file);setDimensions('');setRawText('');setCandidates([]);setFileHash('');
+  try{const digest=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());setFileHash(Array.from(new Uint8Array(digest)).map(value=>value.toString(16).padStart(2,'0')).join(''))}catch{setFileHash('')}
   onFileSelected(file,url);
   const probe=new Image();probe.onload=()=>setDimensions(probe.naturalWidth+' × '+probe.naturalHeight+' px');probe.src=url;
   setBusy(true);setStatus('Pôster anexado. Lendo o texto e procurando uma ou várias atividades…');
@@ -69,11 +71,12 @@ export default function PosterImporter({currentImage,existingEvents,onFileSelect
    <div className="poster-candidates-heading"><strong>Possíveis eventos encontrados</strong><span>{candidates.length} sugestão(ões)</span></div>
    <p className="poster-import-help">Confira todas as linhas. Se o cartaz listar uma semana inteira, escolha só as atividades que deseja cadastrar. “Possível duplicado” é um alerta, não uma exclusão automática.</p>
    {candidates.map((candidate,index)=>{
-    const duplicates=possibleDuplicates(candidate,existingEvents);
+    const duplicates=possibleDuplicates(candidate,existingEvents,fileHash);
+    const samePoster=Boolean(fileHash&&duplicates.some(event=>event.poster_sha256===fileHash));
     return <article className="poster-candidate" key={candidate.id}>
      <div className="poster-candidate-top"><strong>{index+1}. {candidate.title||'Título não identificado — revisar'}</strong>{duplicates.length>0?<span className="poster-duplicate"><AlertTriangle size={13}/> Possível duplicado</span>:<span className="poster-new"><CheckCircle2 size={13}/> Sem correspondência óbvia</span>}</div>
      <p>{[candidate.date,candidate.time_label||candidate.time,candidate.city&&candidate.state?candidate.city+' / '+candidate.state:candidate.city,candidate.venue].filter(Boolean).join(' · ')||'Poucos campos reconhecidos; revise manualmente.'}</p>
-     {duplicates.length>0&&<div className="poster-duplicate-details">Comparar com: {duplicates.map(e=>e.title+' ('+e.city+', '+e.date+')').join(' · ')}</div>}
+     {duplicates.length>0&&<div className="poster-duplicate-details">{samePoster?'O arquivo original com esta mesma impressão digital já aparece em: ':'Possível coincidência pelos dados do evento: '}{duplicates.map(e=>e.title+' ('+e.city+', '+e.date+')').join(' · ')}</div>}
      {candidate.sourceLines.length>0&&<details><summary>Linhas usadas nesta sugestão</summary><p>{candidate.sourceLines.join(' / ')}</p></details>}
      <button type="button" className="button ghost" disabled={!selected||busy} onClick={()=>selected&&preview&&onUseCandidate(candidate,selected,preview)}>Usar esta sugestão no editor</button>
     </article>

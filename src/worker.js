@@ -78,7 +78,7 @@ function stateHints(text){
 }
 function looksLikePlaceName(value){
  const v=norm(value);
- return /\b(palacio|palace|sede|tre|tribunal|masp|praca|largo|caixa dagua|caixas dagua|campus|rodoviaria|estacao|terminal|sindicato|auditorio|teatro|assembleia|catedral|igreja|parque|mercado|estadio|centro|escola|universidade|prefeitura|camara|congresso|monumento|viaduto|ponte|farol|quadra|ginasio|pavilhao|ponto de encontro|predio|edificio|secretaria|forum)\b/.test(v);
+ return /\b(palacio|palace|sede|tre|tribunal|masp|praca|largo|caixa d agua|caixas d agua|campus|rodoviaria|estacao|terminal|sindicato|auditorio|teatro|assembleia|catedral|igreja|parque|mercado|estadio|centro|escola|universidade|prefeitura|camara|congresso|monumento|viaduto|ponte|farol|quadra|ginasio|pavilhao|ponto de encontro|predio|edificio|secretaria|forum)\b/.test(v);
 }
 function cityMatchesForText(text,municipalities,state){
  const t=norm(text);

@@ -403,6 +403,8 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
  const cityEvidenceText=[result.city,result.title,result.description,result.organization,result.venue,result.address,(context.evidence||[]).join("\n"),context.cityEvidence||"",context.postText||"",context.posterText||""].filter(Boolean).join("\n");
  const identityClue=(city)=>new RegExp("(?:^| )(?:juventude|jovens|estudantes|estudantil|trabalhadores|trabalhadoras|moradores|moradoras|militantes|povo|coletivo|coletiva|alunos|alunas|professores|professoras|comunidade|sindicato|movimento|organizacao|grupo) (?:de|do|da|dos|das|em) "+escapeRegex(geoNorm(city))+"(?: |$)").test(geoNorm(sourceText));
  const hints=stateHints([result.state,sourceText].filter(Boolean).join(" "));
+ const originCityHints=municipalityGroupOriginHints(sourceText,municipalities);
+ const originCityHint=originCityHints.length===1?originCityHints[0]:null;
  let state=validState(result.state);
  if(!state&&hints.length===1)state=hints[0].code;
  result.state=state;
@@ -481,11 +483,12 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
  const shouldSearchPlace=Boolean(queryVenue||result.address);
  if(allowMaps&&shouldSearchPlace){
   const groupStateClue=stateMentionAsGroupClue(sourceText);
-  const reliableCity=result.city_inferred_from_context?"":result.city;
+  const reliableCity=result.city_inferred_from_context?"":(result.city||(!result.city?originCityHint?.name:""));
   const reliableState=result.city_inferred_from_context?"":(stateDirectory.find(([code])=>code===result.state)?.[1]||"");
-  const stateSearchHint=reliableState||(groupStateClue&&!result.state?groupStateClue.name:"");
+  const originStateName=originCityHint?stateDirectory.find(([code])=>code===originCityHint.uf)?.[1]||"": "";
+  const stateSearchHint=reliableState||(originStateName&&!result.state?originStateName:"")||(groupStateClue&&!result.state?groupStateClue.name:"");
   const query=[queryVenue,result.address,reliableCity,stateSearchHint,"Brasil"].filter(Boolean).join(", ");
-  const places=await searchGooglePlaces(query,env);
+  const places=await searchPlacesWithFallback(query,queryVenue,result.city||originCityHint?.name||"",result.state||originCityHint?.uf||"",env,municipalities);
   if(places.configured&&places.items.length&&places.items.some(place=>getPlaceCityAndState(place,municipalities,result.state)!==null)){
    const scored=places.items.map(place=>({...place,...scorePlaceResult(place,query,queryVenue,result.city,result.state,municipalities)})).filter(place=>place.geo!==null).sort((a,b)=>b.score-a.score);
    const options=scored.map(place=>({
@@ -501,10 +504,12 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
    const preciseName=norm(top.displayName?.text||"");
    const requestedName=norm(queryVenue);
    const nameSupported=requestedName&&(preciseName===requestedName||preciseName.includes(requestedName)||requestedName.includes(preciseName));
-   const regionSupported=result.city
-    ?Boolean(top.geo?.city&&norm(top.geo.city)===norm(result.city)&&(!result.state||top.geo?.state===result.state))
-    :result.state
-     ?top.geo?.state===result.state
+   const expectedCity=result.city||originCityHint?.name||"";
+   const expectedState=result.state||originCityHint?.uf||"";
+   const regionSupported=expectedCity
+    ?Boolean(top.geo?.city&&norm(top.geo.city)===norm(expectedCity)&&(!expectedState||top.geo?.state===expectedState))
+    :expectedState
+     ?top.geo?.state===expectedState
      :false;
    const gap=!next||top.score-(next.score||0)>=15;
    if(topOption&&top.score>=70&&nameSupported&&regionSupported&&gap){
@@ -514,25 +519,29 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
     result.lat=topOption.lat;result.lng=topOption.lng;
     result.maps_url=topOption.maps_url||"https://www.google.com/maps/dir/?api=1&destination_place_id="+encodeURIComponent(topOption.id);
     result.geography_status="verified_place";
-    result.geography_source="Google Maps / Places API";
+    result.geography_source=places.source||"Google Maps / Places API";
     result.geography_confidence="alta";
     result.geography_options=[];
-    warnings.push("O ponto foi associado a um resultado do Google Maps por correspondência do nome e compatibilidade geográfica. Confira o link antes de publicar.");
+    warnings.push(places.source==="OpenStreetMap/Nominatim"
+     ?"O ponto foi associado a uma referência do OpenStreetMap por correspondência do nome e compatibilidade geográfica. Confira o ponto no mapa antes de publicar."
+     :"O ponto foi associado a um resultado do Google Maps por correspondência do nome e compatibilidade geográfica. Confira o link antes de publicar.");
    }else{
     result.geography_options=options;
     result.geography_status=options.length?"multiple_places":"place_not_found";
-    result.geography_source="Google Maps / Places API";
+    result.geography_source=places.source||"Google Maps / Places API";
     result.geography_confidence="baixa";
-    warnings.push(options.length?"O Google Maps retornou opções possivelmente relacionadas; escolha manualmente o local correto.":"O Google Maps não confirmou esse ponto com segurança.");
+    warnings.push(options.length
+     ?(places.source==="OpenStreetMap/Nominatim"?"O OpenStreetMap retornou opções possivelmente relacionadas; escolha manualmente o ponto correto.":"O Google Maps retornou opções possivelmente relacionadas; escolha manualmente o local correto.")
+     :(places.error||"Nenhuma fonte cartográfica confirmou esse ponto com segurança."));
    }
   }else if(!places.configured){
    result.geography_status="maps_not_configured";
-   result.geography_source="IBGE";
-   warnings.push("O município é validado pelo IBGE; endereço e coordenadas exatas exigem configurar GOOGLE_MAPS_API_KEY no Cloudflare.");
+   result.geography_source="IBGE + OpenStreetMap";
+   warnings.push("O município foi comparado com o IBGE, mas nenhum ponto foi confirmado no mapa. Confira o nome do local e tente novamente. Para resultados premium, configure GOOGLE_MAPS_API_KEY no Cloudflare.");
   }else{
    result.geography_status="place_not_found";
-   result.geography_source="Google Maps / Places API";
-   warnings.push(places.error||"Nenhum ponto correspondente foi confirmado no Google Maps.");
+   result.geography_source=places.source||"Google Maps / Places API";
+   warnings.push(places.error||"Nenhum ponto correspondente foi confirmado nas fontes cartográficas.");
   }
  }else if(!allowMaps&&Boolean(queryVenue||result.address)){
   result.geography_status="maps_search_skipped";

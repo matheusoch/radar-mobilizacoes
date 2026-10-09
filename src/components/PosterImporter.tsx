@@ -65,10 +65,10 @@ const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiB
   }catch(error){setStatus(error instanceof Error?error.message:'Falha no OCR. O pôster foi anexado e você pode preencher manualmente.')}
   finally{setBusy(false)}
  },[onCandidatesFound,onFileSelected]);
- const interpretCombined=async()=>{
+ const interpretCombined=async(extraResearchResults:ResearchResult[]=[] )=>{
   const combinedPost=postText.trim();
   const combinedPoster=rawText.trim();
-  if(!combinedPost&&!combinedPoster&&!postUrl.trim()){
+  if(!combinedPost&&!combinedPoster&&!postUrl.trim()&&!candidates.length){
    setAiStatus('Cole o texto da publicação, informe o link de um post público ou selecione um pôster.');
    return;
   }
@@ -79,7 +79,7 @@ const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiB
    const response=await fetch('/api/interpret-events',{
     method:'POST',
     headers:{'content-type':'application/json','authorization':'Bearer '+token},
-    body:JSON.stringify({postText:combinedPost,postUrl:postUrl.trim(),posterText:combinedPoster})
+    body:JSON.stringify({postText:combinedPost,postUrl:postUrl.trim(),posterText:combinedPoster,researchResults:extraResearchResults.slice(0,20).map(result=>({platform:result.platform,title:result.title,url:result.url,author:result.author,publishedAt:result.publishedAt,text:result.text}))})
    });
    const payload=await response.json().catch(()=>({}));
    if(!response.ok)throw new Error(typeof payload.error==='string'?payload.error:'A interpretação por IA não está disponível no momento.');

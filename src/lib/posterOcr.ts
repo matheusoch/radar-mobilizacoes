@@ -23,7 +23,7 @@ const clean=(s:string)=>s.replace(/[•●▪■]+/g,' ').replace(/\s+/g,' ').re
 const SMALL_TITLE_WORDS=new Set(['a','as','o','os','um','uma','uns','umas','de','da','das','do','dos','e','em','no','na','nos','nas','por','para','com','pelo','pela','pelos','pelas','ao','à','às','ou']);
 const TITLE_ACRONYMS:Record<string,string>={ufmg:'UFMG',dce:'DCE',mst:'MST',pt:'PT',psol:'PSOL',pcb:'PCB',pcdob:'PCdoB',pstu:'PSTU',cut:'CUT',une:'UNE',bh:'BH',stf:'STF',tse:'TSE',ufrj:'UFRJ',unesp:'Unesp',usp:'USP',uol:'UOL'};
 export function normalizePtTitle(value:string):string{
- const words=value.replace(/\\s+/g,' ').trim().toLocaleLowerCase('pt-BR').split(' ');
+ const words=value.replace(/\s+/g,' ').trim().toLocaleLowerCase('pt-BR').split(' ');
  return words.map((word,index)=>{
   const hyphenated=word.split('-').map(part=>{
    const key=norm(part);
@@ -34,8 +34,8 @@ export function normalizePtTitle(value:string):string{
  }).join(' ');
 }
 export function normalizePtSentence(value:string):string{
- return value.replace(/\\s+/g,' ').trim().toLocaleLowerCase('pt-BR')
-  .replace(/(^|[.!?]\\s+)([a-záàâãéêíóôõúüç])/gu,(_m,lead,letter)=>lead+letter.toLocaleUpperCase('pt-BR'));
+ return value.replace(/\s+/g,' ').trim().toLocaleLowerCase('pt-BR')
+  .replace(/(^|[.!?]\s+)([a-záàâãéêíóôõúüç])/gu,(_m,lead,letter)=>lead+letter.toLocaleUpperCase('pt-BR'));
 }
 const TIME_RE=/\b([01]?\d|2[0-3])\s*(?:h\s*([0-5]\d)?|:([0-5]\d))\b/gi;
 function prettyCity(s:string){

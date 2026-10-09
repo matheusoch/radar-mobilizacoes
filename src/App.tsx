@@ -869,7 +869,9 @@ const blank=():MobilizationEvent=>({
       candidate.hashtags?.length?'Hashtags encontradas: '+candidate.hashtags.join(' '):'',
       candidate.evidence?.length?'Evidências da extração: '+candidate.evidence.join(' | '):'',
       candidate.missing_fields?.length?'Campos a confirmar: '+candidate.missing_fields.join(', '):'',
-      candidate.inferred_title?'Título sintetizado a partir do contexto; confirmar se representa o nome oficial.':''
+      candidate.inferred_title?'Título sintetizado a partir do contexto; confirmar se representa o nome oficial.':'',
+      candidate.sourceLines?.length?'Texto reconhecido do pôster: '+candidate.sourceLines.slice(0,12).join(' | ').slice(0,1800):'',
+      candidate.geography_warnings?.length?'Observações geográficas: '+candidate.geography_warnings.join(' | '):''
     ].filter(Boolean).join('\n');
     setEditing(prev=>{
       const target=sameEvent&&prev?prev:blank();

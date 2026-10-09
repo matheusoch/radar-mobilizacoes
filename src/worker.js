@@ -82,6 +82,24 @@ function looksLikePlaceName(value){
  const v=norm(value);
  return /\b(palacio|palace|sede|tre|tribunal|masp|praca|largo|caixa d agua|caixas d agua|campus|rodoviaria|estacao|terminal|sindicato|auditorio|teatro|assembleia|catedral|igreja|parque|mercado|estadio|centro|escola|universidade|prefeitura|camara|congresso|monumento|viaduto|ponte|farol|quadra|ginasio|pavilhao|ponto de encontro|predio|edificio|secretaria|forum)\b/.test(v);
 }
+function extractVenueClue(text){
+ const lines=String(text||"").split(/\r?\n/).map(clean).filter(Boolean);
+ const patterns=[
+  /\b(?:local|ponto de encontro|concentra[cç][aã]o|encontro|sa[ií]da|partida)\s*[:–—-]\s*([^,;|()]{3,90})/i,
+  /\b(?:concentra[cç][aã]o|ponto de encontro|encontro|sa[ií]da|partida|local do ato|local)\b.*?\b(?:em frente ao|em frente à|em frente a|perto do|perto da|perto de|nas|nos|na|no|em|ao|à)\s+([^,;|()]{3,90})/i
+ ];
+ for(const line of lines){
+  for(const pattern of patterns){
+   const match=line.match(pattern);
+   if(!match)continue;
+   let candidate=clean(match[1]).replace(/\s+(?:às?|as?)\s+\d{1,2}(?::\d{2}|h\d{0,2})?.*$/i,"").trim();
+   candidate=candidate.replace(/\s+(?:dia\s+)?\d{1,2}[/.]\d{1,2}(?:[/.]\d{2,4})?.*$/i,"").trim();
+   candidate=candidate.replace(/^(?:a|o|as|os|uma|um)\s+/i,"").trim();
+   if(candidate.length>=3&&candidate.length<=90&&looksLikePlaceName(candidate))return candidate;
+  }
+ }
+ return "";
+}
 function cityMatchesForText(text,municipalities,state){
  const t=geoNorm(text);
  const found=municipalities.filter(item=>item.key.length>3&&new RegExp("(^| )"+escapeRegex(item.key)+"( |$)").test(t));
@@ -208,7 +226,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   const inferredCities=cityMatchesForText(cityEvidenceText,municipalities,state);
   const contextMatches=inferredCities.filter(item=>{
    const re=new RegExp("(?:de|do|da|dos|das|em|na|no|para|a|ao)\s+"+escapeRegex(item.key)+"(?:\s|$)");
-   return re.test(norm(sourceText));
+   return re.test(geoNorm(sourceText));
   });
   const choices=contextMatches;
   const unique=[...new Map(choices.map(item=>[item.key+"|"+item.uf,item])).values()];
@@ -216,6 +234,13 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   else if(unique.length>1&&!state)warnings.push("O texto cita mais de um município; não foi possível escolher a cidade do evento com segurança.");
  }
  let queryVenue=clean(result.venue||"");
+ if(!queryVenue){
+  const clue=extractVenueClue([context.evidence||[],context.cityEvidence||"",context.posterText||"",context.postText||""].flat().join("\\n"));
+  if(clue){
+   queryVenue=titleCase(clue);result.venue=queryVenue;
+   warnings.push("O ponto de encontro foi extraído de uma expressão contextual (como 'concentração em...'); confirme se corresponde ao local correto.");
+  }
+ }
  if(!queryVenue&&looksLikePlaceName(result.city)){
   queryVenue=titleCase(result.city);result.venue=queryVenue;result.city="";result.city_needs_clear=true;
   warnings.push("O nome do ponto de encontro foi movido para Local e será validado geograficamente.");

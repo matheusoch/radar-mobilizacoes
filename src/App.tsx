@@ -702,7 +702,7 @@ const blank=():MobilizationEvent=>({
         const hours=Number(match[1]),minutes=Number(match[2]||match[3]||0);
         normalizedTime=`${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:00`;
       }
-      const posterSha256=posterFile?await sha256File(posterFile):(editing.poster_sha256||null);
+      const posterSha256=posterFile?await sha256File(posterFile).catch(()=>editing.poster_sha256||null):(editing.poster_sha256||null);
       const payload={slug:editing.db_id?editing.id:baseSlug,title:editing.title,type:editing.type,date:editing.date,time:normalizedTime,time_label:editing.time_label?.trim()||null,city:editing.city,state:editing.state,venue:editing.venue,address:editing.address||null,description:editing.description||null,status:editing.status,is_public:editing.public,lat:editing.lat??null,lng:editing.lng??null,image_url:editing.image_url||null,poster_sha256:posterFile?(editing.poster_sha256||null):posterSha256,notes:editing.notes||null};
       let savedId:string;
       let savedSlug:string;
@@ -721,7 +721,7 @@ const blank=():MobilizationEvent=>({
         if(posterFile.size>8*1024*1024)throw new Error('O pôster deve ter no máximo 8 MB.');
         const ext=(posterFile.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
         const path=`events/${savedId}-${Date.now()}.${ext}`;
-        const{error:upErr}=await db.storage.from(ADMIN_STORAGE_BUCKET).upload(path,posterFile,{upsert:true,contentType:posterFile.type||(({jfif:'image/jpeg',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp',png:'image/png',gif:'image/gif'} as Record<string,string>)[ext]||'application/octet-stream')});
+        const{error:upErr}=await db.storage.from(ADMIN_STORAGE_BUCKET).upload(path,posterFile,{upsert:true,contentType:(ext==='jfif'||ext==='jpg'||ext==='jpeg')?'image/jpeg':ext==='webp'?'image/webp':ext==='png'?'image/png':ext==='gif'?'image/gif':posterFile.type||'application/octet-stream'});
         if(upErr)throw upErr;
         const{data:pub}=db.storage.from(ADMIN_STORAGE_BUCKET).getPublicUrl(path);
         const{error:urlErr}=await db.from('events').update({image_url:pub.publicUrl,poster_sha256:posterSha256}).eq('id',savedId);

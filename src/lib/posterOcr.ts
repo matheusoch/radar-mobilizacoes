@@ -64,7 +64,7 @@ function parseTimes(lines:string[]):Array<{time:string;line:string;label:string}
  }
  return out;
 }
-function locate(lines:string[],contextLines:string[]=[]){
+function locate(lines:string[],contextLines:string[]=[],allLines:string[]=[]){
  let city:string|undefined,state:string|undefined;
  const findCityState=(source:string[])=>{
   for(const line of source){
@@ -83,7 +83,7 @@ function locate(lines:string[],contextLines:string[]=[]){
  };
  const local=findCityState(lines)||findKnownCity(lines);
  const context=[...contextLines].reverse();
- const fallback=local||findCityState(context)||findKnownCity(context);
+ const fallback=local||findCityState(context)||findKnownCity(context)||findCityState(allLines)||findKnownCity(allLines);
  city=fallback?.city;state=fallback?.state;
  const combined=[...lines,...contextLines];
  const address=combined.find(x=>/\b(rua|avenida|av\.|travessa|alameda|rodovia|endereco|endereço|cep)\b/i.test(x));
@@ -105,7 +105,7 @@ function bestTitle(lines:string[],type?:string):string|undefined{
 function makeCandidate(local:string[],all:string[],date:string|undefined,index:number,confidence?:number,contextLines:string[]=[]):PosterCandidate{
  const l=local.map(clean).filter(x=>x.length>1), text=l.join(' ');
  const scheduleLines=l.filter(line=>parseTimes([line]).length>0);
- const sch=parseTimes(l), loc=locate(l,contextLines.length?contextLines:all), type=inferType(text)||inferType(all.join(' '));
+ const sch=parseTimes(l), loc=locate(l,contextLines,all), type=inferType(text)||inferType(all.join(' '));
  let title=bestTitle(l,type)||bestTitle(contextLines,type)||bestTitle(all,type);
  if(title&&/agenda da semana|programacao semanal|agenda de mobilizacoes/.test(norm(title))&&loc.venue)title=(type||'Mobilização')+' — '+loc.venue;
  if(!title&&loc.venue)title=(type||'Mobilização')+' — '+loc.venue;

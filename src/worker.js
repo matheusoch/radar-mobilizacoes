@@ -50,6 +50,19 @@ const stateDirectory=[
 const stateCodeByName=new Map(stateDirectory.map(([code,name])=>[norm(name),code]));
 let ibgeMunicipalitiesPromise=null;
 let lastNominatimRequestAt=0;
+let nominatimQueue=Promise.resolve();
+async function fetchNominatimSerialized(url,options){
+ let release;
+ const previous=nominatimQueue;
+ nominatimQueue=new Promise(resolve=>{release=resolve});
+ await previous;
+ try{
+  const wait=Math.max(0,1100-(Date.now()-lastNominatimRequestAt));
+  if(wait)await new Promise(resolve=>setTimeout(resolve,wait));
+  lastNominatimRequestAt=Date.now();
+  return await fetch(url,options);
+ }finally{release()}
+}
 const regexSpecials=new Set([".", "*", "+", "?", "^", "$", "|", "(", ")", "{", "}", "[", "]", String.fromCharCode(92)]);
 const escapeRegex=value=>Array.from(value).map(char=>regexSpecials.has(char)?String.fromCharCode(92)+char:char).join("");
 const geoNorm=value=>typeof value==="string"?value.normalize("NFD").replace(new RegExp("["+String.fromCharCode(768)+"-"+String.fromCharCode(879)+"]","g"),"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim():"";
@@ -254,7 +267,7 @@ async function searchOpenStreetMap(query,venue,city,state,municipalities){
   if(wait)await new Promise(resolve=>setTimeout(resolve,wait));
   lastNominatimRequestAt=Date.now();
   try{
-   const response=await fetch(url,{
+   const response=await fetchNominatimSerialized(url,{
     headers:{
      "accept":"application/json",
      "accept-language":"pt-BR",

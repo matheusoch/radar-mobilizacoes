@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useState} from 'react';
 import {AlertTriangle,CheckCircle2,ClipboardPaste,Image as ImageIcon,RefreshCw,Upload} from 'lucide-react';
-import {extractPosterEvents,extractPosterEventsFromText,type PosterCandidate} from '../lib/posterOcr';
+import {extractPosterEvents,extractPosterEventsFromText,normalizePtSentence,normalizePtTitle,type PosterCandidate} from '../lib/posterOcr';
 import type {MobilizationEvent} from '../types';
 
 type Props={
@@ -12,6 +12,18 @@ type Props={
   getAuthToken:()=>Promise<string|null>;
 };
 const normalized=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+function normalizeCandidate(candidate:PosterCandidate):PosterCandidate{
+ return {...candidate,
+  title:candidate.title?normalizePtTitle(candidate.title):candidate.title,
+  type:candidate.type?normalizePtTitle(candidate.type):candidate.type,
+  city:candidate.city?normalizePtTitle(candidate.city):candidate.city,
+  venue:candidate.venue?normalizePtTitle(candidate.venue):candidate.venue,
+  address:candidate.address?normalizePtTitle(candidate.address):candidate.address,
+  organization:candidate.organization?normalizePtTitle(candidate.organization):candidate.organization,
+  description:candidate.description?normalizePtSentence(candidate.description):candidate.description,
+  time_label:candidate.time_label?normalizePtSentence(candidate.time_label):candidate.time_label
+ };
+}
 function tokenSimilarity(a:string,b:string){
  const x=new Set(normalized(a).split(' ').filter(t=>t.length>2)),y=new Set(normalized(b).split(' ').filter(t=>t.length>2));
  if(!x.size||!y.size)return 0;let inter=0;x.forEach(t=>{if(y.has(t))inter++});
@@ -43,10 +55,10 @@ export default function PosterImporter({currentImage,existingEvents,onFileSelect
   const probe=new Image();probe.onload=()=>setDimensions({width:probe.naturalWidth,height:probe.naturalHeight});probe.src=url;
   setBusy(true);setStatus('Pôster anexado. Lendo o texto e procurando uma ou várias atividades…');
   try{
-   const result=await extractPosterEvents(file);setRawText(result.text);setCandidates(result.candidates);onCandidatesFound(result.candidates,result.text);
+   const result=await extractPosterEvents(file);const normalizedCandidates=result.candidates.map(normalizeCandidate);setRawText(result.text);setCandidates(normalizedCandidates);onCandidatesFound(normalizedCandidates,result.text);
    const confidence=typeof result.confidence==='number'?' · confiança OCR média '+Math.round(result.confidence)+'%':'';
-   if(!result.candidates.length)setStatus('O OCR não encontrou campos estruturados. O pôster está anexado; confira o texto reconhecido e preencha o formulário manualmente.');
-   else setStatus('Leitura concluída: '+result.candidates.length+' sugestão(ões) de evento detectada(s)'+confidence+'. Campos são provisórios; confira antes de salvar.');
+   if(!normalizedCandidates.length)setStatus('O OCR não encontrou campos estruturados. O pôster está anexado; confira o texto reconhecido e preencha o formulário manualmente.');
+   else setStatus('Leitura concluída: '+normalizedCandidates.length+' sugestão(ões) de evento detectada(s)'+confidence+'. Campos são provisórios; confira antes de salvar.');
   }catch(error){setStatus(error instanceof Error?error.message:'Falha no OCR. O pôster foi anexado e você pode preencher manualmente.')}
   finally{setBusy(false)}
  },[onCandidatesFound,onFileSelected]);
@@ -70,21 +82,21 @@ export default function PosterImporter({currentImage,existingEvents,onFileSelect
    if(!response.ok)throw new Error(typeof payload.error==='string'?payload.error:'A interpretação por IA não está disponível no momento.');
    const mapped:PosterCandidate[]=(Array.isArray(payload.events)?payload.events:[]).map((event:any,index:number)=>({
     id:String(event.id||'ai-suggestion-'+index),
-    title:typeof event.title==='string'?event.title:undefined,
-    type:typeof event.type==='string'?event.type:undefined,
+    title:typeof event.title==='string'?normalizePtTitle(event.title):undefined,
+    type:typeof event.type==='string'?normalizePtTitle(event.type):undefined,
     date:typeof event.date==='string'&&event.date?event.date:undefined,
     time:typeof event.time==='string'&&event.time?event.time:undefined,
-    time_label:typeof event.time_label==='string'&&event.time_label?event.time_label:undefined,
-    city:typeof event.city==='string'&&event.city?event.city:undefined,
+    time_label:typeof event.time_label==='string'&&event.time_label?normalizePtSentence(event.time_label):undefined,
+    city:typeof event.city==='string'&&event.city?normalizePtTitle(event.city):undefined,
     state:typeof event.state==='string'&&event.state?event.state:undefined,
-    venue:typeof event.venue==='string'&&event.venue?event.venue:undefined,
-    address:typeof event.address==='string'&&event.address?event.address:undefined,
-    organization:typeof event.organization==='string'&&event.organization?event.organization:undefined,
+    venue:typeof event.venue==='string'&&event.venue?normalizePtTitle(event.venue):undefined,
+    address:typeof event.address==='string'&&event.address?normalizePtTitle(event.address):undefined,
+    organization:typeof event.organization==='string'&&event.organization?normalizePtTitle(event.organization):undefined,
     hashtags:Array.isArray(event.hashtags)?event.hashtags.filter((value:unknown)=>typeof value==='string'):[],
     evidence:Array.isArray(event.evidence)?event.evidence.filter((value:unknown)=>typeof value==='string'):[],
     missing_fields:Array.isArray(event.missing_fields)?event.missing_fields.filter((value:unknown)=>typeof value==='string'):[],
     inferred_title:Boolean(event.inferred_title),
-    ai_confidence:typeof event.confidence==='string'?event.confidence:'baixa',
+    description:typeof event.description==='string'&&event.description?normalizePtSentence(event.description):undefined,\n    ai_confidence:typeof event.confidence==='string'?event.confidence:'baixa',
     source_url:typeof event.source_url==='string'&&event.source_url?event.source_url:(typeof payload.sourceUrl==='string'&&payload.sourceUrl?payload.sourceUrl:postUrl.trim()||undefined),
     sourceLines:Array.isArray(event.evidence)?event.evidence.filter((value:unknown)=>typeof value==='string'):[],
   }));

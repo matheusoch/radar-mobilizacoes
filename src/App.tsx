@@ -692,14 +692,16 @@ const blank=():MobilizationEvent=>({
     if(!editing)return;
     setSaving(true);
     setMessage('');
+    let eventDataSaved=false;
     try{
       const baseSlug=slugify(`${editing.date}-${editing.city}-${editing.title}`)||crypto.randomUUID();
       const rawTime=(editing.time??'').trim();
       let normalizedTime:string|null=null;
       if(rawTime){
-        const match=rawTime.match(/^(\d{1,2})(?:(?::([0-5]\d))|[hH]([0-5]\d)?)?$/);
-        if(!match)throw new Error('No campo Hora, informe HH:MM, 16h ou 16h30; o horário descritivo fica no campo Rótulo do horário.');
+        const match=rawTime.match(/^(\d{1,2})(?:(?::([0-5]\d)(?::[0-5]\d)?)|[hH]([0-5]\d)?)?$/);
+        if(!match)throw new Error('No campo Hora, informe HH:MM, HH:MM:SS, 16h ou 16h30; o horário descritivo fica no campo Rótulo do horário.');
         const hours=Number(match[1]),minutes=Number(match[2]||match[3]||0);
+        if(hours>23)throw new Error('Hora inválida. Use um horário entre 00:00 e 23:59.');
         normalizedTime=`${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:00`;
       }
       const posterSha256=posterFile?await sha256File(posterFile).catch(()=>editing.poster_sha256||null):(editing.poster_sha256||null);
@@ -711,11 +713,13 @@ const blank=():MobilizationEvent=>({
         if(error)throw error;
         savedId=data.id;
         savedSlug=data.slug;
+        eventDataSaved=true;
       }else{
         const{data,error}=await db.from('events').insert(payload).select().single();
         if(error)throw error;
         savedId=data.id;
         savedSlug=data.slug;
+        eventDataSaved=true;
       }
       if(posterFile){
         if(posterFile.size>8*1024*1024)throw new Error('O pôster deve ter no máximo 8 MB.');
@@ -741,7 +745,10 @@ const blank=():MobilizationEvent=>({
       setPosterPreview(null);
       await loadAdmin();
     }catch(error){
-      const detail=error&&typeof error==='object'&&'message' in error&&typeof error.message==='string'?error.message:error instanceof Error?error.message:'';setMessage(detail||'Não foi possível salvar. Confira os dados e tente novamente.');
+      const detail=error&&typeof error==='object'&&'message' in error&&typeof error.message==='string'?error.message:error instanceof Error?error.message:'';
+      if(eventDataSaved){
+        setMessage('Os dados básicos do evento já foram salvos, mas uma etapa posterior falhou: '+(detail||'erro não identificado')+'. Reabra o mesmo registro para corrigir a etapa pendente; não crie outro evento. Se foi o envio da imagem, selecione o pôster novamente.');
+      }else setMessage(detail||'Não foi possível salvar. Confira os dados e tente novamente.');
     }finally{
       setSaving(false);
     }

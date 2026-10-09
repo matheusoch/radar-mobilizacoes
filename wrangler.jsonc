@@ -1,9 +1,21 @@
 {
   "$schema": "https://unpkg.com/wrangler@latest/config-schema.json",
   "name": "agenda-mobilizacoes",
+  "main": "src/worker.js",
   "compatibility_date": "2026-10-07",
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/api/*"
+    ],
     "not_found_handling": "single-page-application"
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "vars": {
+    "SUPABASE_URL": "https://yyyqwiauonyonnqvoozu.supabase.co",
+    "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_Pr-YAWBnzp9_Qjnf5cFqJw_cjdr0WsJ"
   }
 }

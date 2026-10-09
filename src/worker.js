@@ -71,14 +71,12 @@ async function getIBGEMunicipalities(){
  return ibgeMunicipalitiesPromise;
 }
 function stateHints(text){
- const t=geoNorm(text),found=[],raw=String(text||"");
+ const t=geoNorm(text),found=[];
  for(const [code,name] of stateDirectory){
-  if(code==="PA"){
-   if(/\bpará\b/i.test(raw))found.push({code,name});
-   continue;
-  }
-  const nameNorm=norm(name);
-  if(nameNorm&&new RegExp("(^| )"+escapeRegex(nameNorm)+"( |$)").test(t))found.push({code,name});
+  const nameNorm=geoNorm(name);
+  if(!nameNorm)continue;
+  const pattern=new RegExp("(?:^| )(?:em|no estado de|na regiao de|estado de|local em|acontece em|ocorre em|sera em|sera realizado em|cidade de|municipio de|no|na) "+escapeRegex(nameNorm)+"(?: |$)");
+  if(pattern.test(t))found.push({code,name});
  }
  return [...new Map(found.map(x=>[x.code,x])).values()];
 }
@@ -199,7 +197,8 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
  const result={...event};
  const warnings=[];
  const sourceText=[context.postText,context.posterText,context.title,context.description,context.organization,context.venue,context.address,context.city,(context.evidence||[]).join(" ")].filter(Boolean).join(" ");
- const cityEvidenceText=[result.city,result.title,result.description,result.organization,result.venue,result.address,(context.evidence||[]).join(" "),context.cityEvidence||""].filter(Boolean).join(" ");
+ const cityEvidenceText=[result.city,result.title,result.description,result.organization,result.venue,result.address,(context.evidence||[]).join(" "),context.cityEvidence||"",context.postText||"",context.posterText||""].filter(Boolean).join(" ");
+ const identityClue=(city)=>new RegExp("(?:^| )(?:juventude|jovens|estudantes|estudantil|trabalhadores|trabalhadoras|moradores|moradoras|militantes|povo|coletivo|coletiva|alunos|alunas|professores|professoras|comunidade|sindicato|movimento|organizacao|grupo) (?:de|do|da|dos|das|em) "+escapeRegex(geoNorm(city))+"(?: |$)").test(geoNorm(sourceText));
  const hints=stateHints([result.state,sourceText].filter(Boolean).join(" "));
  let state=validState(result.state);
  if(!state&&hints.length===1)state=hints[0].code;
@@ -213,13 +212,15 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   }
  }else{
   const cityValue=clean(result.city);
-  const stateOnly=hints.length===1&&norm(cityValue)===norm(hints[0].name);
+  const stateNameCode=stateCodeByName.get(geoNorm(cityValue))||"";
+  const stateOnly=Boolean(stateNameCode)||Boolean(hints.length===1&&geoNorm(cityValue)===geoNorm(hints[0].name));
   if(cityValue&&looksLikePlaceName(cityValue)&&!result.venue){
    result.venue=titleCase(cityValue);result.city="";result.city_needs_clear=true;
    warnings.push("O texto que estava no campo Cidade parece ser um ponto de referência/local, não um município.");
   }else if(cityValue&&stateOnly){
    result.city="";result.city_needs_clear=true;
-   warnings.push("O texto identificado em Cidade é o nome de um estado; não é um município.");
+   if(!result.state&&stateNameCode)result.state=stateNameCode;
+   warnings.push("O texto identificado em Cidade é o nome de um estado, não de um município; a UF foi mantida apenas como pista, confirme se o evento ocorre nesse estado.");
   }else if(cityValue&&hints.length===1&&norm(cityValue).includes(norm(hints[0].name))&&!looksLikePlaceName(cityValue)){
    result.city="";result.city_needs_clear=true;
    warnings.push("O campo Cidade parece conter o nome de uma organização/grupo e uma UF, não um município; a UF fica como pista de pesquisa.");
@@ -230,12 +231,12 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
  if(!result.city){
   const inferredCities=cityMatchesForText(cityEvidenceText,municipalities,state);
   const contextMatches=inferredCities.filter(item=>{
-   const re=new RegExp("(?:de|do|da|dos|das|em|na|no|para|a|ao)\s+"+escapeRegex(item.key)+"(?:\s|$)");
+   const re=new RegExp("(?:de|do|da|dos|das|em|na|no|para|a|ao)\\s+"+escapeRegex(item.key)+"(?:\\s|$)");
    return re.test(geoNorm(sourceText));
   });
   const choices=contextMatches;
   const unique=[...new Map(choices.map(item=>[item.key+"|"+item.uf,item])).values()];
-  if(unique.length===1){result.city=unique[0].name;result.state=unique[0].uf;state=unique[0].uf;warnings.push("Cidade sugerida pelo contexto textual e confirmada na base do IBGE; confira se é a cidade do evento, não apenas a origem do grupo.");}
+  if(unique.length===1){result.city=unique[0].name;result.state=unique[0].uf;state=unique[0].uf;result.city_inferred_from_context=true;warnings.push("Cidade sugerida pelo contexto textual e confirmada na base do IBGE; confira se é a cidade do evento, não apenas a origem do grupo.");}
   else if(unique.length>1&&!state)warnings.push("O texto cita mais de um município; não foi possível escolher a cidade do evento com segurança.");
  }
  let queryVenue=clean(result.venue||"");
@@ -250,6 +251,8 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   queryVenue=titleCase(result.city);result.venue=queryVenue;result.city="";result.city_needs_clear=true;
   warnings.push("O nome do ponto de encontro foi movido para Local e será validado geograficamente.");
  }
+ const cityCouldBeGroupOrigin=Boolean(result.city&&identityClue(result.city)&&!result.venue&&!result.address&&!result.lat&&!result.lng);
+ if(cityCouldBeGroupOrigin){result.city_inferred_from_context=true;warnings.push("O nome do município também aparece como origem de um grupo/organização; não o trate como local confirmado sem endereço ou ponto de encontro.");}
  const shouldSearchPlace=Boolean(queryVenue||result.address);
  if(allowMaps&&shouldSearchPlace){
   const stateName=stateDirectory.find(([code])=>code===result.state)?.[1]||"";
@@ -275,7 +278,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
    if(topOption&&top.score>=70&&nameSupported&&regionSupported&&gap){
     result.venue=topOption.title;
     result.address=topOption.address;
-    if(topOption.city){result.city=topOption.city;result.state=topOption.state||result.state;}
+    if(topOption.city){result.city=topOption.city;result.state=topOption.state||result.state;result.city_inferred_from_context=false;}
     result.lat=topOption.lat;result.lng=topOption.lng;
     result.maps_url=topOption.maps_url||"https://www.google.com/maps/dir/?api=1&destination_place_id="+encodeURIComponent(topOption.id);
     result.geography_status="verified_place";
@@ -303,6 +306,10 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   result.geography_status=result.city?"city_verified":"needs_review";
   result.geography_source="IBGE";
   result.geography_confidence=result.city?"alta":"baixa";
+ }
+ if(result.city_inferred_from_context&&result.geography_status!=="verified_place"){
+  result.geography_status="needs_review";
+  result.geography_confidence="média";
  }
  if(result.city&&!municipalities.some(item=>item.key===norm(result.city)&&item.uf===result.state)){
   warnings.push("A cidade e a UF ainda não formam uma combinação confirmada na base do IBGE.");

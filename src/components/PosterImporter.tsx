@@ -47,6 +47,7 @@ export default function PosterImporter({currentImage,existingEvents,onFileSelect
 type ResearchProvider={platform:string;status:string;message:string;count:number};
 const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiBusy,setAiBusy]=useState(false),[aiStatus,setAiStatus]=useState('');
  const [researchBusy,setResearchBusy]=useState(false),[researchStatus,setResearchStatus]=useState(''),[researchResults,setResearchResults]=useState<ResearchResult[]>([]),[researchProviders,setResearchProviders]=useState<ResearchProvider[]>([]);
+ const [geoBusyCandidateId,setGeoBusyCandidateId]=useState<string|null>(null),[geoMessages,setGeoMessages]=useState<Record<string,string>>({});
  const processFile=useCallback(async(file:File)=>{
   setResearchResults([]);setResearchProviders([]);setResearchStatus('');
   const ext=(file.name.split('.').pop()||'').toLowerCase();
@@ -185,6 +186,62 @@ const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiB
    setResearchStatus(error instanceof Error?error.message:'Falha ao pesquisar outras redes. Tente novamente.');
   }finally{setResearchBusy(false)}
  };
+ const resolveCandidateGeography=async(candidate:PosterCandidate)=>{
+  if(geoBusyCandidateId)return;
+  setGeoBusyCandidateId(candidate.id);
+  setGeoMessages(previous=>({...previous,[candidate.id]:'Validando município no IBGE e procurando o local nas fontes cartográficas…'}));
+  try{
+   const token=await getAuthToken();
+   if(!token)throw new Error('A sessão expirou. Entre novamente no painel administrativo.');
+   const response=await fetch('/api/resolve-location',{
+    method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+token},
+    body:JSON.stringify({
+     title:candidate.title||'',description:candidate.description||'',organization:candidate.organization||'',
+     city:candidate.city||'',state:candidate.state||'',venue:candidate.venue||'',address:candidate.address||'',
+     postText:[postText,candidate.sourceLines?.join(' ')||''].filter(Boolean).join(' '),
+     posterText:rawText
+    })
+   });
+   const payload=await response.json().catch(()=>({}));
+   if(!response.ok)throw new Error(typeof payload.error==='string'?payload.error:'Não foi possível validar o local.');
+   const location=payload.location||{};
+   const options=(Array.isArray(location.geography_options)?location.geography_options:[]).filter((option:any)=>option&&typeof option.title==='string').map((option:any)=>({
+    id:String(option.id||''),title:String(option.title||''),address:String(option.address||''),
+    lat:typeof option.lat==='number'&&Number.isFinite(option.lat)?option.lat:null,
+    lng:typeof option.lng==='number'&&Number.isFinite(option.lng)?option.lng:null,
+    city:typeof option.city==='string'&&option.city?option.city:undefined,
+    state:typeof option.state==='string'&&option.state?option.state:undefined,
+    score:Number(option.score)||0,
+    maps_url:typeof option.maps_url==='string'&&option.maps_url.startsWith('https://')?option.maps_url:undefined,
+    types:Array.isArray(option.types)?option.types.filter((item:unknown)=>typeof item==='string'):[]
+   }));
+   const updated:PosterCandidate={
+    ...candidate,
+    city:location.city?normalizePtTitle(String(location.city)):(location.city_needs_clear?'':candidate.city),
+    city_needs_clear:Boolean(location.city_needs_clear),
+    state:location.state?String(location.state).toUpperCase():candidate.state,
+    venue:location.venue?normalizePtTitle(String(location.venue)):candidate.venue,
+    address:location.address?normalizePtTitle(String(location.address)):candidate.address,
+    lat:typeof location.lat==='number'&&Number.isFinite(location.lat)?location.lat:(location.city_needs_clear?null:candidate.lat),
+    lng:typeof location.lng==='number'&&Number.isFinite(location.lng)?location.lng:(location.city_needs_clear?null:candidate.lng),
+    maps_url:typeof location.maps_url==='string'&&location.maps_url.startsWith('https://')?location.maps_url:candidate.maps_url,
+    geography_status:typeof location.geography_status==='string'?location.geography_status:'needs_review',
+    geography_source:typeof location.geography_source==='string'?location.geography_source:undefined,
+    geography_confidence:typeof location.geography_confidence==='string'?location.geography_confidence:'baixa',
+    geography_warnings:Array.isArray(location.geography_warnings)?location.geography_warnings.filter((item:unknown)=>typeof item==='string'):[],
+    geography_options:options
+   };
+   setCandidates(previous=>previous.map(item=>item.id===candidate.id?updated:item));
+   const message=location.geography_status==='verified_place'
+    ?'Ponto localizado; endereço, município e coordenadas foram associados. Confira o resultado antes de usar.'
+    :options.length?'Há mais de uma possibilidade. Escolha o ponto correto na lista desta sugestão.'
+    :location.geography_status==='city_verified'?'Município validado na base do IBGE. O ponto exato ainda não foi confirmado.'
+    :'A verificação não confirmou um ponto único. Revise os avisos e os campos manualmente.';
+   setGeoMessages(previous=>({...previous,[candidate.id]:message}));
+  }catch(error){
+   setGeoMessages(previous=>({...previous,[candidate.id]:error instanceof Error?error.message:'Falha na validação geográfica.'}));
+  }finally{setGeoBusyCandidateId(null)}
+ };
  const loadPastedImageUrl=useCallback(async(url:string)=>{
   try{
    const response=await fetch(url,{mode:'cors'});
@@ -249,7 +306,7 @@ const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiB
      <p>{[candidate.date,candidate.time_label||candidate.time,candidate.city&&candidate.state?candidate.city+' / '+candidate.state:candidate.city,candidate.venue].filter(Boolean).join(' · ')||'Poucos campos reconhecidos; revise manualmente.'}</p>
      {duplicates.length>0&&<div className="poster-duplicate-details">Possível coincidência pelos dados do evento: {duplicates.map(e=>e.title+' ('+e.city+', '+e.date+')').join(' · ')}</div>}{samePosterEvents.length>0&&<div className="poster-meta">Este mesmo arquivo de pôster já está associado a: {samePosterEvents.map(e=>e.title+' ('+e.city+', '+e.date+')').join(' · ')}. Isso não significa, por si só, que este evento seja duplicado.</div>}
      {candidate.sourceLines.length>0&&<details><summary>Linhas / evidências desta sugestão</summary><p>{candidate.sourceLines.join(' / ')}</p></details>}{candidate.ai_confidence&&<small className={candidate.ai_confidence==='baixa'?'poster-quality-warning':'poster-meta'}>Confiança indicada pela IA: <strong>{candidate.ai_confidence}</strong>{candidate.inferred_title?' · título sintetizado a partir do contexto':''}</small>}{candidate.missing_fields&&candidate.missing_fields.length>0&&<div className="poster-duplicate-details">Conferir: {candidate.missing_fields.join(' · ')}</div>}{candidate.organization&&<small>Organização identificada: {candidate.organization}</small>}{candidate.hashtags&&candidate.hashtags.length>0&&<small>Hashtags: {candidate.hashtags.join(' ')}</small>}{candidate.source_url&&<small>Fonte: <a href={candidate.source_url} target="_blank" rel="noreferrer">abrir publicação</a></small>}
-     {candidate.geography_status&&<div className={candidate.geography_status==='verified_place'?'geography-note verified':candidate.geography_status==='city_verified'?'geography-note':'geography-note warning'}><strong>Verificação geográfica: {candidate.geography_status==='verified_place'?'ponto identificado no mapa':candidate.geography_status==='city_verified'?'município conferido no IBGE':candidate.geography_status==='maps_not_configured'?'resolução cartográfica pendente':candidate.geography_status==='multiple_places'?'mais de um local possível':candidate.geography_status==='ibge_unavailable'?'base geográfica indisponível':'revisão necessária'}</strong>{candidate.geography_source&&<small>Fonte: {candidate.geography_source}</small>}{candidate.maps_url&&<small><a href={candidate.maps_url} target="_blank" rel="noreferrer">{candidate.maps_url.includes('openstreetmap.org')?'Abrir este ponto no OpenStreetMap':'Abrir este local no Google Maps'}</a></small>}{candidate.lat!==null&&candidate.lat!==undefined&&candidate.lng!==null&&candidate.lng!==undefined&&<small>Coordenadas: {candidate.lat.toFixed(5)}, {candidate.lng.toFixed(5)}</small>}{candidate.geography_warnings?.map((warning,warningIndex)=><small key={warningIndex}>{warning}</small>)}</div>}
+     <button type="button" className="button ghost geography-lookup-button" disabled={aiBusy||busy||researchBusy||geoBusyCandidateId!==null} onClick={()=>void resolveCandidateGeography(candidate)}><MapPinned size={15}/>{geoBusyCandidateId===candidate.id?'Validando local…':'Validar cidade, local e coordenadas'}</button>{geoMessages[candidate.id]&&<small className="poster-ocr-status">{geoMessages[candidate.id]}</small>}{candidate.geography_status&&<div className={candidate.geography_status==='verified_place'?'geography-note verified':candidate.geography_status==='city_verified'?'geography-note':'geography-note warning'}><strong>Verificação geográfica: {candidate.geography_status==='verified_place'?'ponto identificado no mapa':candidate.geography_status==='city_verified'?'município conferido no IBGE':candidate.geography_status==='maps_not_configured'?'resolução cartográfica pendente':candidate.geography_status==='multiple_places'?'mais de um local possível':candidate.geography_status==='ibge_unavailable'?'base geográfica indisponível':'revisão necessária'}</strong>{candidate.geography_source&&<small>Fonte: {candidate.geography_source}</small>}{candidate.maps_url&&<small><a href={candidate.maps_url} target="_blank" rel="noreferrer">{candidate.maps_url.includes('openstreetmap.org')?'Abrir este ponto no OpenStreetMap':'Abrir este local no Google Maps'}</a></small>}{candidate.lat!==null&&candidate.lat!==undefined&&candidate.lng!==null&&candidate.lng!==undefined&&<small>Coordenadas: {candidate.lat.toFixed(5)}, {candidate.lng.toFixed(5)}</small>}{candidate.geography_warnings?.map((warning,warningIndex)=><small key={warningIndex}>{warning}</small>)}</div>}
      {candidate.geography_options&&candidate.geography_options.length>0&&<div className="geography-options"><strong>Resultados cartográficos — escolha o ponto correto</strong>{candidate.geography_options.slice(0,5).map(option=><div className="geography-option" key={option.id||option.title}><div><b>{option.title}</b><small>{option.address||'Endereço não informado'}{option.city?' · '+option.city:''}{option.state?' / '+option.state:''}</small><small>Correspondência textual: {option.score}%</small></div><div className="geography-option-actions"><button type="button" className="button ghost" disabled={aiBusy||busy} onClick={()=>onUseCandidate({...candidate,venue:normalizePtTitle(option.title),address:normalizePtTitle(option.address),city:option.city?normalizePtTitle(option.city):candidate.city,state:option.state||candidate.state,lat:option.lat,lng:option.lng,maps_url:option.maps_url,geography_status:'verified_place',geography_source:option.maps_url?.includes('openstreetmap.org')?'OpenStreetMap/Photon (escolha manual)':'Google Maps / Places API (escolha manual)',geography_confidence:'alta',geography_options:[],geography_warnings:[option.maps_url?.includes('openstreetmap.org')?'Local escolhido no OpenStreetMap. Dados cartográficos © OpenStreetMap contributors.':'Local escolhido manualmente na lista de resultados geográficos.']},selected||undefined,preview||undefined)}>Usar este local</button>{option.maps_url&&<a href={option.maps_url} target="_blank" rel="noreferrer">Ver no Maps</a>}</div></div>)}</div>}
      <button type="button" className="button ghost" disabled={aiBusy||busy||researchBusy} onClick={()=>onUseCandidate(candidate,selected||undefined,preview||undefined)}>Usar esta sugestão no editor</button>
     </article>

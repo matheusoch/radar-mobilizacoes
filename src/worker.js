@@ -49,16 +49,34 @@ const stateDirectory=[
 ];
 const stateCodeByName=new Map(stateDirectory.map(([code,name])=>[norm(name),code]));
 let ibgeMunicipalitiesPromise=null;
+let lastNominatimRequestAt=0;
 const regexSpecials=new Set([".", "*", "+", "?", "^", "$", "|", "(", ")", "{", "}", "[", "]", String.fromCharCode(92)]);
 const escapeRegex=value=>Array.from(value).map(char=>regexSpecials.has(char)?String.fromCharCode(92)+char:char).join("");
 const geoNorm=value=>typeof value==="string"?value.normalize("NFD").replace(new RegExp("["+String.fromCharCode(768)+"-"+String.fromCharCode(879)+"]","g"),"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim():"";
 async function getIBGEMunicipalities(){
  if(!ibgeMunicipalitiesPromise){
   ibgeMunicipalitiesPromise=(async()=>{
-   const response=await fetch("https://servicodados.ibge.gov.br/api/v1/localidades/municipios?orderBy=nome",{headers:{"accept":"application/json"},signal:AbortSignal.timeout(9000)});
-   if(!response.ok)throw new Error("IBGE indisponível");
-   const rows=await response.json();
-   if(!Array.isArray(rows)||rows.length<5000)throw new Error("Base municipal incompleta");
+   const url="https://servicodados.ibge.gov.br/api/v1/localidades/municipios?orderBy=nome";
+   const cacheKey=new Request(url,{method:"GET"});
+   let rows=null;
+   try{
+    if(typeof caches!=="undefined"&&caches.default){
+     const cached=await caches.default.match(cacheKey);
+     if(cached)rows=await cached.json();
+    }
+   }catch{}
+   if(!Array.isArray(rows)||rows.length<5000){
+    const response=await fetch(url,{headers:{"accept":"application/json"},signal:AbortSignal.timeout(9000)});
+    if(!response.ok)throw new Error("IBGE indisponível");
+    const raw=await response.text();
+    try{rows=JSON.parse(raw)}catch{throw new Error("Resposta do IBGE inválida")}
+    if(!Array.isArray(rows)||rows.length<5000)throw new Error("Base municipal incompleta");
+    try{
+     if(typeof caches!=="undefined"&&caches.default){
+      await caches.default.put(cacheKey,new Response(raw,{headers:{"content-type":"application/json; charset=utf-8","cache-control":"public, max-age=86400"}}));
+     }
+    }catch{}
+   }
    return rows.map(row=>({
     id:String(row.id||""),
     name:clean(row.nome),
@@ -117,6 +135,16 @@ function cityMatchesForText(text,municipalities,state){
  const found=municipalities.filter(item=>item.key.length>3&&t.includes(" "+item.key+" "));
  const filtered=state?found.filter(item=>item.uf===state):found;
  return [...new Map(filtered.map(item=>[item.key+"|"+item.uf,item])).values()].sort((a,b)=>b.key.length-a.key.length);
+}
+function municipalityGroupOriginHints(text,municipalities){
+ const t=" "+geoNorm(text)+" ";
+ const identity="(?:juventude|jovens|estudantes|estudantil|trabalhadores|trabalhadoras|moradores|moradoras|militantes|povo|coletivo|coletiva|alunos|alunas|professores|professoras|comunidade|sindicato|movimento|organizacao|grupo)";
+ const matches=municipalities.filter(item=>{
+  if(item.key.length<4)return false;
+  const pattern=new RegExp("(?:^| )"+identity+" (?:de|do|da|dos|das|em) "+escapeRegex(item.key)+"(?: |$)");
+  return pattern.test(t);
+ });
+ return [...new Map(matches.map(item=>[item.key+"|"+item.uf,item])).values()].sort((a,b)=>b.key.length-a.key.length);
 }
 function municipalityAppearsOnlyAsGroupOrigin(text,municipality){
  const city=geoNorm(municipality);

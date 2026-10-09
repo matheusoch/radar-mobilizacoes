@@ -39,7 +39,7 @@ export function normalizePtTitle(value:string):string{
   }).join('-');
   return index>0&&SMALL_TITLE_WORDS.has(word)?word:hyphenated;
  }).join(' ');
- return result.replace(/\\bD'([a-záàâãéêíóôõúüç])/gu,(_m,letter)=>"d'"+letter.toLocaleUpperCase('pt-BR'));
+ return result.replace(/\bD'([a-záàâãéêíóôõúüç])/gu,(_m,letter)=>"d'"+letter.toLocaleUpperCase('pt-BR'));
 }
 export function normalizePtSentence(value:string):string{
  return value.replace(/\s+/g,' ').trim().toLocaleLowerCase('pt-BR')
@@ -125,7 +125,7 @@ function locate(lines:string[],contextLines:string[]=[],allLines:string[]=[]){
  city=fallback?.city;state=fallback?.state;
  const combined=[...lines,...contextLines];
  const address=combined.find(x=>/\b(rua|avenida|av\.|travessa|alameda|rodovia|endereco|endereço|cep)\b/i.test(x));
- const venue=combined.find(x=>/\\b(praca|praça|largo|campus|uf[a-z]{2}|masp|tre|tribunal|pal[aá]cio|sede|caixas? d[’']?[áa]gua|esta[cç][aã]o|terminal|sindicato|audit[oó]rio|teatro|reitoria|rodovi[aá]ria|dce|hotel|parque|mercado|centro|ponto de encontro|shopping|anfiteatro|samb[oó]dromo|museu|memorial|biblioteca|prefeitura|c[aâ]mara|congresso|monumento|viaduto|ponte|quadra|ginasio|rua|avenida|travessa|alameda|rodovia)\\b/i.test(x));
+ const venue=combined.find(x=>/\b(praca|praça|largo|campus|uf[a-z]{2}|masp|tre|tribunal|pal[aá]cio|sede|caixas? d[’']?[áa]gua|esta[cç][aã]o|terminal|sindicato|audit[oó]rio|teatro|reitoria|rodovi[aá]ria|dce|hotel|parque|mercado|centro|ponto de encontro|shopping|anfiteatro|samb[oó]dromo|museu|memorial|biblioteca|prefeitura|c[aâ]mara|congresso|monumento|viaduto|ponte|quadra|ginasio|rua|avenida|travessa|alameda|rodovia)\b/i.test(x));
  return {city,state,venue:venue?clean(venue):address?clean(address):undefined,address:address?clean(address):undefined};
 }
 function bestTitle(lines:string[],type?:string):string|undefined{

@@ -1,165 +1,121 @@
-export type PosterExtractedFields = {
-  title?: string;
-  type?: string;
-  date?: string;
-  time?: string;
-  time_label?: string;
-  city?: string;
-  state?: string;
-  venue?: string;
-  address?: string;
+export type PosterCandidate = {
+  id: string; title?: string; type?: string; date?: string; time?: string; time_label?: string;
+  city?: string; state?: string; venue?: string; address?: string; confidence?: number; sourceLines: string[];
 };
-
-type OcrWorker = {
-  recognize: (image: File) => Promise<{ data: { text: string; confidence?: number } }>;
-  terminate: () => Promise<void>;
-};
-type TesseractApi = { createWorker: (languages: string, oem?: number) => Promise<OcrWorker> };
-
-declare global {
-  interface Window { Tesseract?: TesseractApi; }
-}
-
-let tesseractPromise: Promise<TesseractApi> | null = null;
-
-function loadTesseract(): Promise<TesseractApi> {
-  if (window.Tesseract) return Promise.resolve(window.Tesseract);
-  if (!tesseractPromise) {
-    tesseractPromise = new Promise((resolve, reject) => {
-      const existing = document.querySelector<HTMLScriptElement>('script[data-poster-ocr]');
-      const script = existing || document.createElement('script');
-      const fail = () => { tesseractPromise = null; reject(new Error('Não foi possível carregar o OCR. Confira a conexão e tente novamente.')); };
-      script.addEventListener('error', fail, { once: true });
-      script.addEventListener('load', () => {
-        if (window.Tesseract) resolve(window.Tesseract);
-        else fail();
-      }, { once: true });
-      if (!existing) {
-        script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-        script.async = true;
-        script.dataset.posterOcr = 'true';
-        document.head.appendChild(script);
-      } else if (window.Tesseract) resolve(window.Tesseract);
-    });
-  }
+type OcrWorker = { recognize:(image:File)=>Promise<{data:{text:string;confidence?:number}}>; terminate:()=>Promise<void> };
+type TesseractApi = { createWorker:(languages:string,oem?:number)=>Promise<OcrWorker> };
+declare global { interface Window { Tesseract?:TesseractApi } }
+let tesseractPromise:Promise<TesseractApi>|null=null;
+function loadTesseract():Promise<TesseractApi>{
+  if(window.Tesseract)return Promise.resolve(window.Tesseract);
+  if(!tesseractPromise)tesseractPromise=new Promise((resolve,reject)=>{
+    const fail=()=>{tesseractPromise=null;reject(new Error('Não foi possível carregar o OCR. Confira a conexão e tente novamente.'))};
+    const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';script.async=true;
+    script.onload=()=>window.Tesseract?resolve(window.Tesseract):fail();script.onerror=fail;document.head.appendChild(script);
+  });
   return tesseractPromise;
 }
-
-const states = new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']);
-const knownCities: Record<string,string> = {
-  'belo horizonte':'MG','sao paulo':'SP','rio de janeiro':'RJ','duque de caxias':'RJ','nova iguacu':'RJ','niteroi':'RJ','sao goncalo':'RJ','campinas':'SP','sao jose dos campos':'SP','santos':'SP','brasilia':'DF','goiania':'GO','cuiaba':'MT','campo grande':'MS','palmas':'TO','belem':'PA','braganca':'PA','manaus':'AM','fortaleza':'CE','caucaia':'CE','salvador':'BA','feira de santana':'BA','recife':'PE','serra talhada':'PE','natal':'RN','teresina':'PI','sao luis':'MA','macapa':'AP','curitiba':'PR','maringa':'PR','ponta grossa':'PR','florianopolis':'SC','balneario camboriu':'SC','porto alegre':'RS','rio grande':'RS','vitoria':'ES','sao mateus':'ES','ouro preto':'MG','uberlandia':'MG','sao joao del rei':'MG','arapiraca':'AL','boa vista':'RR','blumenau':'SC','seropedica':'RJ','tres rios':'RJ'
-};
-const normalize = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-const clean = (s: string) => s.replace(/[•●▪■]+/g, ' ').replace(/\s+/g, ' ').replace(/^[\s:|–—-]+|[\s|]+$/g, '').trim();
-
-function inferType(text: string): string | undefined {
-  const t = normalize(text);
-  if (/caminhada|passeata/.test(t)) return 'Caminhada';
-  if (/panfletagem|bandeiracao|distribuicao de panfletos/.test(t)) return 'Panfletagem';
-  if (/plenaria/.test(t)) return 'Plenária';
-  if (/assembleia/.test(t)) return 'Assembleia';
-  if (/oficina|colagem de lambes/.test(t)) return 'Oficina';
-  if (/debate|roda de conversa/.test(t)) return 'Debate';
-  if (/reuniao|reunião/.test(t)) return 'Reunião';
-  if (/ato publico|ato político|ato politico/.test(t)) return 'Ato';
-  if (/manifestacao|manifestação|protesto/.test(t)) return 'Manifestação';
-  if (/universidade|universitario|universitária|estudantes|campus|uf[a-z]{2}/.test(t)) return 'Atividade universitária';
-  if (/samba|show|cultural/.test(t)) return 'Atividade cultural/política';
-  return /mobilizacao|mobilização/.test(t) ? 'Mobilização' : undefined;
+const states=new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']);
+const cityUF:Record<string,string>={'belo horizonte':'MG','sao paulo':'SP','rio de janeiro':'RJ','duque de caxias':'RJ','nova iguacu':'RJ','niteroi':'RJ','sao goncalo':'RJ','campinas':'SP','sao jose dos campos':'SP','santos':'SP','brasilia':'DF','goiania':'GO','cuiaba':'MT','campo grande':'MS','palmas':'TO','belem':'PA','braganca':'PA','manaus':'AM','fortaleza':'CE','caucaia':'CE','salvador':'BA','feira de santana':'BA','recife':'PE','serra talhada':'PE','natal':'RN','teresina':'PI','sao luis':'MA','macapa':'AP','curitiba':'PR','maringa':'PR','ponta grossa':'PR','florianopolis':'SC','balneario camboriu':'SC','porto alegre':'RS','rio grande':'RS','vitoria':'ES','sao mateus':'ES','ouro preto':'MG','uberlandia':'MG','sao joao del rei':'MG','arapiraca':'AL','boa vista':'RR','blumenau':'SC','seropedica':'RJ','tres rios':'RJ','campo mourao':'PR'};
+const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+const clean=(s:string)=>s.replace(/[•●▪■]+/g,' ').replace(/\s+/g,' ').replace(/^[\s:|–—-]+|[\s|]+$/g,'').trim();
+const TIME_RE=/\b([01]?\d|2[0-3])\s*(?:h\s*([0-5]\d)?|:([0-5]\d))\b/gi;
+function prettyCity(s:string){
+ const map:Record<string,string>={'sao paulo':'São Paulo','rio de janeiro':'Rio de Janeiro','belo horizonte':'Belo Horizonte','duque de caxias':'Duque de Caxias','nova iguacu':'Nova Iguaçu','sao luis':'São Luís','sao goncalo':'São Gonçalo','feira de santana':'Feira de Santana','campo grande':'Campo Grande','campo mourao':'Campo Mourão','ouro preto':'Ouro Preto','ponta grossa':'Ponta Grossa','balneario camboriu':'Balneário Camboriú','sao jose dos campos':'São José dos Campos','sao joao del rei':'São João del-Rei','rio grande':'Rio Grande','sao mateus':'São Mateus','goiania':'Goiânia','cuiaba':'Cuiabá','belem':'Belém','braganca':'Bragança','macapa':'Macapá','niteroi':'Niterói','maringa':'Maringá','brasilia':'Brasília','vitoria':'Vitória','uberlandia':'Uberlândia','arapiraca':'Arapiraca','florianopolis':'Florianópolis','seropedica':'Seropédica','tres rios':'Três Rios'};
+ return map[norm(s)]||clean(s);
 }
-
-function extractDate(lines: string[]): string | undefined {
-  const candidates = lines.join('\n').match(/\b(\d{1,2})[/. -](\d{1,2})(?:[/. -](20\d{2}))?\b/g) || [];
-  const now = new Date();
-  for (const candidate of candidates) {
-    const m = candidate.match(/^(\d{1,2})[/. -](\d{1,2})(?:[/. -](20\d{2}))?$/);
-    if (!m) continue;
-    const day = Number(m[1]), month = Number(m[2]);
-    const year = Number(m[3] || now.getFullYear());
-    const d = new Date(year, month - 1, day);
-    if (d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day) {
-      return [year, String(month).padStart(2,'0'), String(day).padStart(2,'0')].join('-');
-    }
-  }
-  const monthNames: Record<string,number> = {janeiro:1,fevereiro:2,marco:3,abril:4,maio:5,junho:6,julho:7,agosto:8,setembro:9,outubro:10,novembro:11,dezembro:12};
-  for (const line of lines) {
-    const n = normalize(line);
-    const m = n.match(/\b(\d{1,2})\s+de\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)(?:\s+de\s+(20\d{2}))?/);
-    if (m) return [Number(m[3] || now.getFullYear()),String(monthNames[m[2]]).padStart(2,'0'),String(Number(m[1])).padStart(2,'0')].join('-');
-  }
-  return undefined;
+function inferType(s:string):string|undefined{
+ const t=norm(s);
+ if(/caminhada|passeata/.test(t))return 'Caminhada';
+ if(/panfletagem|bandeiracao/.test(t))return 'Panfletagem';
+ if(/plenaria/.test(t))return 'Plenária';
+ if(/assembleia/.test(t))return 'Assembleia';
+ if(/oficina|colagem de lambes/.test(t))return 'Oficina';
+ if(/debate|roda de conversa/.test(t))return 'Debate';
+ if(/reuniao/.test(t))return 'Reunião';
+ if(/ato publico|ato político|ato politico|\bato\b/.test(t))return 'Ato';
+ if(/manifestacao|protesto/.test(t))return 'Manifestação';
+ if(/universidade|universitario|estudantes|campus|uf[a-z]{2}/.test(t))return 'Atividade universitária';
+ if(/samba|show|cultural/.test(t))return 'Atividade cultural/política';
+ return /mobilizacao/.test(t)?'Mobilização':undefined;
 }
-
-function extractTimes(lines: string[]): { time?: string; label?: string } {
-  const scheduleLines = lines.filter(line => /\b(?:\d{1,2}\s*h(?:\s*\d{2})?|\d{1,2}:\d{2})\b/i.test(line) && !/\d{1,2}[/.]\d{1,2}/.test(line));
-  const all = scheduleLines.join(' · ');
-  const explicit: Array<{ match: string; index: number; h:number; m:number }> = [];
-  const re = /\b([01]?\d|2[0-3])\s*(?:h\s*([0-5]\d)?|:([0-5]\d))\b/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(all))) explicit.push({match:m[0],index:m.index,h:Number(m[1]),m:Number(m[2] || m[3] || 0)});
-  if (!explicit.length) return {};
-  const first = explicit[0];
-  const time = String(first.h).padStart(2,'0')+':'+String(first.m).padStart(2,'0');
-  const label = scheduleLines.length ? clean(scheduleLines.join(' / ')) : first.match;
-  return {time, label: label.length > 180 ? label.slice(0,177)+'…' : label};
+function dateInLine(line:string):string|undefined{
+ const n=norm(line);
+ if(/\b\d{1,2}\s*[/.]\s*\d{1,2}\s*(?:a|ate|–|—|-)\s*\d{1,2}\s*[/.]\s*\d{1,2}\b/.test(n))return undefined;
+ const m=line.match(/\b(\d{1,2})\s*[/. -]\s*(\d{1,2})(?:\s*[/. -]\s*(20\d{2}))?\b/);
+ if(!m)return undefined;
+ const d=Number(m[1]),mo=Number(m[2]),y=Number(m[3]||new Date().getFullYear());
+ const dt=new Date(y,mo-1,d);if(dt.getFullYear()!==y||dt.getMonth()!==mo-1||dt.getDate()!==d)return undefined;
+ return [y,String(mo).padStart(2,'0'),String(d).padStart(2,'0')].join('-');
 }
-
-function extractLocation(lines: string[]): { city?: string; state?: string; venue?: string; address?: string } {
-  let city: string | undefined, state: string | undefined;
-  const full = lines.join('\n');
-  const explicit = full.match(/(?:cidade|localidade)\s*[:\-]\s*([^\n,|]+)(?:[,/\-]\s*([A-Z]{2})\b)?/i);
-  if (explicit) {
-    city = clean(explicit[1]);
-    const candidateState = (explicit[2] || '').toUpperCase();
-    if (states.has(candidateState)) state = candidateState;
-  }
-  for (const line of lines) {
-    const m = line.match(/(?:^|[|,;])\s*([^|,;\n]{2,45}?)\s*[-/·]\s*([A-Z]{2})\b/);
-    if (!state && m && states.has(m[2].toUpperCase())) { city = clean(m[1]); state = m[2].toUpperCase(); }
-  }
-  if (city) {
-    const uf=knownCities[normalize(city)];
-    if (!state && uf) state=uf;
-  }
-  if (!city) {
-    for (const line of lines) {
-      const n = normalize(line);
-      for (const [name, uf] of Object.entries(knownCities)) {
-        if (n.includes(name)) { city = name.replace(/\b\w/g, c=>c.toUpperCase()).replace('Sao ','São ').replace('Belo horizonte','Belo Horizonte').replace('Rio de janeiro','Rio de Janeiro').replace('Duque de caxias','Duque de Caxias').replace('Nova iguacu','Nova Iguaçu').replace('Sao paulo','São Paulo').replace('Sao luis','São Luís').replace('Sao goncalo','São Gonçalo').replace('Feira de santana','Feira de Santana').replace('Campo grande','Campo Grande').replace('Campo mourao','Campo Mourão').replace('Ouro preto','Ouro Preto').replace('Ponta grossa','Ponta Grossa').replace('Balneario camboriu','Balneário Camboriú').replace('Sao jose dos campos','São José dos Campos').replace('Sao joao del rei','São João del-Rei').replace('Rio grande','Rio Grande').replace('Sao mateus','São Mateus'); state=uf; break; }
-      }
-      if(city) break;
-    }
-  }
-  const addressLine = lines.find(line => /\b(endereco|endereço|rua|avenida|av\.|travessa|alameda|rodovia|numero)\b/i.test(line));
-  const venueLine = lines.find(line => /\b(praca|praça|largo|campus|uf[a-z]{2}|masp|estacao|estação|terminal|sindicato|audit[oó]rio|teatro|reitoria|rodoviaria|rodoviária|concentracao|concentração|esquina|centro)\b/i.test(line));
-  return {city, state, address: addressLine ? clean(addressLine) : undefined, venue: venueLine ? clean(venueLine) : addressLine ? clean(addressLine) : undefined};
+function dateAnchors(lines:string[]){const result:Array<{index:number;date:string}>=[];lines.forEach((line,index)=>{const date=dateInLine(line);if(date)result.push({index,date})});return result.filter((a,i,all)=>i===0||a.date!==all[i-1].date)}
+function parseTimes(lines:string[]):Array<{time:string;line:string}>{
+ const out:Array<{time:string;line:string}>=[];
+ for(const line of lines){
+  const matches=[...line.matchAll(new RegExp(TIME_RE.source,'gi'))];if(!matches.length)continue;
+  const first=matches[0];out.push({time:String(first[1]).padStart(2,'0')+':'+String(first[2]||first[3]||'00').padStart(2,'0'),line:clean(line)});
+ }
+ return out;
 }
-
-export async function extractPosterFields(file: File): Promise<{ text: string; confidence?: number; fields: PosterExtractedFields }> {
-  const tesseract = await loadTesseract();
-  const worker = await tesseract.createWorker('por+eng');
-  try {
-    const result = await worker.recognize(file);
-    const text = result.data.text || '';
-    const lines = text.split(/\r?\n/).map(clean).filter(line=>line.length>1);
-    const joined = lines.join(' ');
-    const excluded = /\b(\d{1,2}[/.]\d{1,2}|\d{1,2}\s*h|\d{1,2}:\d{2}|presencial|online|instagram|facebook|twitter|\bhttps?:|www\.)/i;
-    const titleCandidate = lines.find(line => line.length >= 5 && line.length <= 95 && !excluded.test(line) && !/^(local|endereco|endereço|data|horario|horário|hora|cidade|entrada|saida|saída)\b/i.test(line));
-    const loc = extractLocation(lines);
-    const schedule = extractTimes(lines);
-    const fields: PosterExtractedFields = {
-      title: titleCandidate ? clean(titleCandidate) : undefined,
-      type: inferType(joined),
-      date: extractDate(lines),
-      time: schedule.time,
-      time_label: schedule.label,
-      city: loc.city,
-      state: loc.state,
-      venue: loc.venue,
-      address: loc.address,
-    };
-    return {text, confidence: result.data.confidence, fields};
-  } finally {
-    await worker.terminate();
+function locate(lines:string[],allLines:string[]){
+ let city:string|undefined,state:string|undefined;
+ for(const line of allLines){
+  const m=line.match(/(?:^|[,;|])\s*([^,;|]{2,45}?)\s*[-/·]\s*([A-Z]{2})\b/);
+  if(m&&states.has(m[2].toUpperCase())){city=prettyCity(m[1]);state=m[2].toUpperCase();break}
+ }
+ if(!city){
+  for(const line of allLines){
+   const n=norm(line);const found=Object.keys(cityUF).sort((a,b)=>b.length-a.length).find(c=>n.includes(c));
+   if(found){city=prettyCity(found);state=cityUF[found];break}
   }
+ }
+ const address=lines.find(x=>/\b(rua|avenida|av\.|travessa|alameda|rodovia|endereco|endereço|cep)\b/i.test(x));
+ const venue=lines.find(x=>/\b(praca|praça|largo|campus|uf[a-z]{2}|masp|estacao|estação|terminal|sindicato|audit[oó]rio|teatro|reitoria|rodoviaria|rodoviária|dce|hotel|parque|mercado|centro|ponto de encontro)\b/i.test(x));
+ return {city,state,venue:venue?clean(venue):address?clean(address):undefined,address:address?clean(address):undefined};
+}
+function bestTitle(lines:string[],type?:string):string|undefined{
+ const candidates=lines.filter(line=>{
+  const n=norm(line);if(line.length<5||line.length>100)return false;
+  if(dateInLine(line)||TIME_RE.test(line)){TIME_RE.lastIndex=0;return false} TIME_RE.lastIndex=0;
+  if(/^(data|local|localizacao|endereco|horario|hora|cidade|presencial|instagram|facebook|twitter|www)\b/.test(n))return false;
+  if(/\b(rua|avenida|av\.|travessa|alameda|cep|bairro)\b/i.test(n))return false;
+  if(/^(segunda|terca|quarta|quinta|sexta|sabado|domingo)(-feira)?\b/.test(n))return false;
+  return true;
+ });
+ const score=(line:string)=>{const n=norm(line);let s=Math.min(line.length,70)/20;if(/agenda da semana|programacao semanal/.test(n))s-=2;if(/mobilizacao|manifestacao|protesto|marcha|caminhada|ato|plenaria|assembleia|reuniao|oficina|estudantes|democracia|virada/.test(n))s+=2;if(type&&n===norm(type))s-=2;return s};
+ return candidates.sort((a,b)=>score(b)-score(a))[0];
+}
+function makeCandidate(local:string[],all:string[],date:string|undefined,index:number,confidence?:number):PosterCandidate{
+ const l=local.map(clean).filter(x=>x.length>1), text=l.join(' ');
+ const sch=parseTimes(l), loc=locate(l,all), type=inferType(text)||inferType(all.join(' '));
+ let title=bestTitle(l,type)||bestTitle(all,type);
+ if(title&&/agenda da semana|programacao semanal/i.test(norm(title))&&loc.venue)title=(type||'Mobilização')+' — '+loc.venue;
+ if(!title&&loc.venue)title=(type||'Mobilização')+' — '+loc.venue;
+ return {id:'suggestion-'+index+'-'+(date||'sem-data'),title:type&&loc.venue&&title&&norm(title)===norm(loc.venue)?type+' — '+loc.venue:title,type,date,time:sch[0]?.time,time_label:sch.length?sch.map(x=>x.line).join(' / ').slice(0,180):undefined,city:loc.city,state:loc.state,venue:loc.venue,address:loc.address,confidence,sourceLines:l};
+}
+function detect(text:string,confidence?:number):PosterCandidate[]{
+ const lines=text.split(/\r?\n/).map(clean).filter(x=>x.length>1);if(!lines.length)return [];
+ const anchors=dateAnchors(lines), out:PosterCandidate[]=[];
+ if(anchors.length>=2){
+  anchors.forEach((a,index)=>{
+   const next=anchors[index+1],start=Math.max(0,a.index-1),end=next?next.index:Math.min(lines.length,a.index+7),group=lines.slice(start,end);
+   const times=group.filter(line=>parseTimes([line]).length>0);
+   const splitTimes=times.length>1&&!times.some(line=>/(concentra|sa[ií]da|partida|abertura|encerramento|encontro)/i.test(line));
+   if(splitTimes){
+    times.forEach(line=>{const i=group.indexOf(line);const local=group.slice(Math.max(0,i-2),Math.min(group.length,i+3));out.push(makeCandidate(local,lines,a.date,out.length,confidence))});
+   }else out.push(makeCandidate(group,lines,a.date,out.length,confidence));
+  });
+ }else{
+  const timeLines=lines.filter(line=>parseTimes([line]).length>0);
+  const splitTimes=timeLines.length>=2&&!timeLines.some(line=>/(concentra|sa[ií]da|partida|abertura|encerramento|encontro)/i.test(line));
+  if(splitTimes)timeLines.forEach(line=>{const i=lines.indexOf(line);out.push(makeCandidate(lines.slice(Math.max(0,i-2),Math.min(lines.length,i+3)),lines,anchors[0]?.date,out.length,confidence))});
+  else out.push(makeCandidate(lines,lines,anchors[0]?.date,out.length,confidence));
+ }
+ const unique:PosterCandidate[]=[];
+ for(const c of out){const key=[c.date||'',c.time||'',norm(c.city||''),norm(c.venue||''),norm(c.title||'')].join('|');if(!unique.some(x=>[x.date||'',x.time||'',norm(x.city||''),norm(x.venue||''),norm(x.title||'')].join('|')===key))unique.push({...c,id:'suggestion-'+unique.length})}
+ return unique;
+}
+export async function extractPosterEvents(file:File):Promise<{text:string;confidence?:number;candidates:PosterCandidate[]}>{
+ const api=await loadTesseract(),worker=await api.createWorker('por+eng');
+ try{const result=await worker.recognize(file);const text=result.data.text||'';return {text,confidence:result.data.confidence,candidates:detect(text,result.data.confidence)}}finally{await worker.terminate()}
 }

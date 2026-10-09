@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useState} from 'react';
 import {AlertTriangle,CheckCircle2,ClipboardPaste,Image as ImageIcon,RefreshCw,Upload} from 'lucide-react';
-import {extractPosterEvents,type PosterCandidate} from '../lib/posterOcr';
+import {extractPosterEvents,extractPosterEventsFromText,type PosterCandidate} from '../lib/posterOcr';
 import type {MobilizationEvent} from '../types';
 
 type Props={
@@ -8,7 +8,8 @@ type Props={
   existingEvents:MobilizationEvent[];
   onFileSelected:(file:File,previewUrl:string)=>void;
   onCandidatesFound:(candidates:PosterCandidate[],text:string)=>void;
-  onUseCandidate:(candidate:PosterCandidate,file:File,previewUrl:string)=>void;
+  onUseCandidate:(candidate:PosterCandidate,file?:File,previewUrl?:string)=>void;
+  getAuthToken:()=>Promise<string|null>;
 };
 const normalized=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 function tokenSimilarity(a:string,b:string){
@@ -28,9 +29,10 @@ function possibleDuplicates(candidate:PosterCandidate,events:MobilizationEvent[]
   return Boolean((sameCity&&(sameVenue||titleScore>=0.3||sameTime))||(sameVenue&&titleScore>=0.25)||(sameCity&&titleScore>=0.6));
  }).slice(0,3);
 }
-export default function PosterImporter({currentImage,existingEvents,onFileSelected,onCandidatesFound,onUseCandidate}:Props){
+export default function PosterImporter({currentImage,existingEvents,onFileSelected,onCandidatesFound,onUseCandidate,getAuthToken}:Props){
  const [preview,setPreview]=useState<string|null>(null),[dimensions,setDimensions]=useState<{width:number;height:number}|null>(null),[status,setStatus]=useState(''),[rawText,setRawText]=useState('');
  const [busy,setBusy]=useState(false),[selected,setSelected]=useState<File|null>(null),[candidates,setCandidates]=useState<PosterCandidate[]>([]),[fileHash,setFileHash]=useState('');
+ const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiBusy,setAiBusy]=useState(false),[aiStatus,setAiStatus]=useState('');
  const processFile=useCallback(async(file:File)=>{
   const ext=(file.name.split('.').pop()||'').toLowerCase();
   const supported=file.type.startsWith('image/')||['jpg','jpeg','jfif','png','webp','gif'].includes(ext);
@@ -49,6 +51,62 @@ export default function PosterImporter({currentImage,existingEvents,onFileSelect
   }catch(error){setStatus(error instanceof Error?error.message:'Falha no OCR. O pôster foi anexado e você pode preencher manualmente.')}
   finally{setBusy(false)}
  },[onCandidatesFound,onFileSelected]);
+ const interpretCombined=async()=>{
+  const combinedPost=postText.trim();
+  const combinedPoster=rawText.trim();
+  if(!combinedPost&&!combinedPoster&&!postUrl.trim()){
+   setAiStatus('Cole o texto da publicação, informe o link de um post público ou selecione um pôster.');
+   return;
+  }
+  setAiBusy(true);setAiStatus('Combinando o texto do post e o texto do pôster para identificar todas as mobilizações…');
+  try{
+   const token=await getAuthToken();
+   if(!token)throw new Error('A sessão expirou. Entre novamente no painel administrativo.');
+   const response=await fetch('/api/interpret-events',{
+    method:'POST',
+    headers:{'content-type':'application/json','authorization':'Bearer '+token},
+    body:JSON.stringify({postText:combinedPost,postUrl:postUrl.trim(),posterText:combinedPoster})
+   });
+   const payload=await response.json().catch(()=>({}));
+   if(!response.ok)throw new Error(typeof payload.error==='string'?payload.error:'A interpretação por IA não está disponível no momento.');
+   const mapped:PosterCandidate[]=(Array.isArray(payload.events)?payload.events:[]).map((event:any,index:number)=>({
+    id:String(event.id||'ai-suggestion-'+index),
+    title:typeof event.title==='string'?event.title:undefined,
+    type:typeof event.type==='string'?event.type:undefined,
+    date:typeof event.date==='string'&&event.date?event.date:undefined,
+    time:typeof event.time==='string'&&event.time?event.time:undefined,
+    time_label:typeof event.time_label==='string'&&event.time_label?event.time_label:undefined,
+    city:typeof event.city==='string'&&event.city?event.city:undefined,
+    state:typeof event.state==='string'&&event.state?event.state:undefined,
+    venue:typeof event.venue==='string'&&event.venue?event.venue:undefined,
+    address:typeof event.address==='string'&&event.address?event.address:undefined,
+    organization:typeof event.organization==='string'&&event.organization?event.organization:undefined,
+    hashtags:Array.isArray(event.hashtags)?event.hashtags.filter((value:unknown)=>typeof value==='string'):[],
+    evidence:Array.isArray(event.evidence)?event.evidence.filter((value:unknown)=>typeof value==='string'):[],
+    missing_fields:Array.isArray(event.missing_fields)?event.missing_fields.filter((value:unknown)=>typeof value==='string'):[],
+    inferred_title:Boolean(event.inferred_title),
+    ai_confidence:typeof event.confidence==='string'?event.confidence:'baixa',
+    source_url:typeof event.source_url==='string'&&event.source_url?event.source_url:(typeof payload.sourceUrl==='string'&&payload.sourceUrl?payload.sourceUrl:postUrl.trim()||undefined),
+    sourceLines:Array.isArray(event.evidence)?event.evidence.filter((value:unknown)=>typeof value==='string'):[],
+  }));
+  setCandidates(mapped);
+  onCandidatesFound(mapped,[combinedPost,combinedPoster].filter(Boolean).join('\n\n'));
+  const urlWarning=payload.urlError?' '+payload.urlError:'';
+  setAiStatus(mapped.length+' sugestão(ões) estruturada(s) pela IA. Confira evidências, campos ausentes e possíveis duplicatas antes de salvar.'+urlWarning);
+  if(!mapped.length)setAiStatus('A IA não encontrou um evento claro. Revise o texto bruto e acrescente contexto; nenhum evento foi salvo.');
+  }catch(error){
+   const sourceText=[combinedPost,combinedPoster].filter(Boolean).join('\n\n');
+   const fallback=sourceText?extractPosterEventsFromText(sourceText):[];
+   const tagged=fallback.map((candidate,index)=>({...candidate,id:'text-fallback-'+index,source_url:postUrl.trim()||undefined,sourceLines:candidate.sourceLines}));
+   setCandidates(tagged);
+   if(tagged.length){
+    onCandidatesFound(tagged,sourceText);
+    setAiStatus((error instanceof Error?error.message:'A IA não respondeu.')+' Usei uma leitura básica do texto como alternativa; confira tudo manualmente.');
+   }else{
+    setAiStatus(error instanceof Error?error.message:'A IA não respondeu. Tente novamente ou cole o texto da publicação.');
+   }
+  }finally{setAiBusy(false)}
+ };
  const loadPastedImageUrl=useCallback(async(url:string)=>{
   try{
    const response=await fetch(url,{mode:'cors'});
@@ -83,6 +141,14 @@ export default function PosterImporter({currentImage,existingEvents,onFileSelect
   <p className="poster-import-help">Cole uma imagem com Ctrl+V ou escolha um arquivo. A leitura tenta identificar título, data, horário, cidade, local e tipo. Em cartazes de programação coletiva, pode sugerir vários eventos. Nada é salvo/publicado até você conferir e clicar em “Salvar evento”.</p>
   {visibleImage&&<img src={visibleImage} alt="Pré-visualização do pôster original" className="poster-preview"/>}
   {dimensions&&<small className={shortSide<550?'poster-quality-warning':shortSide<800?'poster-quality-review':'poster-meta'}>Resolução do arquivo original: <strong>{dimensions.width} × {dimensions.height} px</strong> (menor lado: {shortSide} px). {shortSide<550?'Atenção: resolução baixa; procure a versão original maior antes de publicar.':shortSide<800?'Resolução intermediária; confira a nitidez do texto ampliado, especialmente em cartazes com muitas informações.':'Resolução adequada para conferência; o arquivo original será enviado sem recorte nem redimensionamento.'}</small>}
+  <div className="social-post-import">
+   <div className="poster-upload-label"><ClipboardPaste size={17}/><strong>Contexto do post / tweet (opcional, mas recomendado)</strong></div>
+   <p className="poster-import-help">Cole o texto da publicação para complementar o pôster. Se só tiver a URL pública do X/Twitter, a ferramenta tentará buscar o texto do post; se o acesso falhar, cole o texto manualmente. A URL, sozinha, não garante que o conteúdo esteja acessível.</p>
+   <label className="social-post-url">URL do post<input type="url" placeholder="https://x.com/conta/status/…" value={postUrl} onChange={e=>setPostUrl(e.target.value)}/></label>
+   <label className="social-post-text">Texto do post / tweet<textarea rows={4} placeholder="Cole aqui a legenda, a descrição ou o texto completo da publicação. Pode conter vários anúncios de mobilização." value={postText} onChange={e=>setPostText(e.target.value)}/></label>
+   <button type="button" className="button primary" disabled={aiBusy||busy} onClick={()=>void interpretCombined()}>{aiBusy?'Interpretando…':'Interpretar post + pôster com IA'}</button>
+   {aiStatus&&<small className={aiBusy?'poster-meta':'poster-ocr-status'}>{aiStatus}</small>}
+  </div>
   <label className="poster-file-button"><Upload size={16}/> Selecionar JPG / JFIF / PNG / WEBP / GIF<input type="file" accept=".jpg,.jpeg,.jfif,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif" onChange={e=>{const file=e.target.files?.[0];if(file)void processFile(file);e.currentTarget.value=''}}/></label>
   <div className="poster-paste-zone" tabIndex={0} onPaste={e=>{const item=Array.from(e.clipboardData.items).find(entry=>entry.kind==='file'&&entry.type.startsWith('image/'));const file=item?.getAsFile();if(file){e.preventDefault();e.stopPropagation();void processFile(file)}}}><ClipboardPaste size={17}/> Clique aqui e use <strong>Ctrl+V</strong> para colar um pôster copiado.</div>
   {selected&&<button type="button" className="button ghost poster-ocr-button" disabled={busy} onClick={()=>void processFile(selected)}><RefreshCw size={15}/>{busy?'Extraindo texto…':'Ler texto novamente'}</button>}
@@ -98,8 +164,8 @@ export default function PosterImporter({currentImage,existingEvents,onFileSelect
      <div className="poster-candidate-top"><strong>{index+1}. {candidate.title||'Título não identificado — revisar'}</strong>{duplicates.length>0?<span className="poster-duplicate"><AlertTriangle size={13}/> Possível duplicado</span>:<span className="poster-new"><CheckCircle2 size={13}/> Sem correspondência óbvia</span>}</div>
      <p>{[candidate.date,candidate.time_label||candidate.time,candidate.city&&candidate.state?candidate.city+' / '+candidate.state:candidate.city,candidate.venue].filter(Boolean).join(' · ')||'Poucos campos reconhecidos; revise manualmente.'}</p>
      {duplicates.length>0&&<div className="poster-duplicate-details">{samePoster?'O arquivo original com esta mesma impressão digital já aparece em: ':'Possível coincidência pelos dados do evento: '}{duplicates.map(e=>e.title+' ('+e.city+', '+e.date+')').join(' · ')}</div>}
-     {candidate.sourceLines.length>0&&<details><summary>Linhas usadas nesta sugestão</summary><p>{candidate.sourceLines.join(' / ')}</p></details>}
-     <button type="button" className="button ghost" disabled={!selected||busy} onClick={()=>selected&&preview&&onUseCandidate(candidate,selected,preview)}>Usar esta sugestão no editor</button>
+     {candidate.sourceLines.length>0&&<details><summary>Linhas / evidências desta sugestão</summary><p>{candidate.sourceLines.join(' / ')}</p></details>}{candidate.ai_confidence&&<small className={candidate.ai_confidence==='baixa'?'poster-quality-warning':'poster-meta'}>Confiança indicada pela IA: <strong>{candidate.ai_confidence}</strong>{candidate.inferred_title?' · título sintetizado a partir do contexto':''}</small>}{candidate.missing_fields&&candidate.missing_fields.length>0&&<div className="poster-duplicate-details">Conferir: {candidate.missing_fields.join(' · ')}</div>}{candidate.organization&&<small>Organização identificada: {candidate.organization}</small>}{candidate.hashtags&&candidate.hashtags.length>0&&<small>Hashtags: {candidate.hashtags.join(' ')}</small>}{candidate.source_url&&<small>Fonte: <a href={candidate.source_url} target="_blank" rel="noreferrer">abrir publicação</a></small>}
+     <button type="button" className="button ghost" disabled={aiBusy||busy} onClick={()=>onUseCandidate(candidate,selected||undefined,preview||undefined)}>Usar esta sugestão no editor</button>
     </article>
    })}
   </div>}

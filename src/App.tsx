@@ -247,8 +247,7 @@ function buildEventIcs(event:MobilizationEvent,eventUrl:string){
   return lines.map(foldIcsLine).join('\r\n')+'\r\n';
 }
 
-function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSource[]}){
-  const{id}=useParams();
+function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSource[]}){  const{id}=useParams();
   const event=events.find(e=>e.id===id);
   const[attendance,setAttendance]=useState({count:0,attending:false});
   const[attendanceBusy,setAttendanceBusy]=useState(false);
@@ -497,8 +496,7 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
         )}
       </div>
     </section>)}
-    {!groups.length&&<div className="empty calendar-empty">
-      <Search/><h3>Nenhum evento encontrado</h3>
+    {!groups.length&&<div className="empty calendar-empty">      <Search/><h3>Nenhum evento encontrado</h3>
       <p>{query?'Tente outro termo de busca.':'Não há eventos públicos nesta data.'}</p>
     </div>}
   </div>
@@ -730,7 +728,7 @@ const blank=():MobilizationEvent=>({
       setPosterPreview(null);
       await loadAdmin();
     }catch(error){
-      setMessage(error instanceof Error?error.message:'Não foi possível salvar.');
+      const detail=error&&typeof error==='object'&&'message' in error&&typeof error.message==='string'?error.message:error instanceof Error?error.message:'';setMessage(detail||'Não foi possível salvar. Confira os dados e tente novamente.');
     }finally{
       setSaving(false);
     }

@@ -188,6 +188,7 @@ function scorePlaceResult(place,query,venue,city,state,municipalities){
  if(tokens.length)score+=Math.round(20*tokens.filter(t=>name.includes(t)).length/tokens.length);
  if(city&&address.includes(norm(city)))score+=15;
  const cityState=getPlaceCityAndState(place,municipalities,state);
+ if(cityState===null)return {score:0,geo:null};
  if(state&&cityState?.state===state)score+=15;
  if(cityState?.country&&/brasil|brazil/i.test(cityState.country))score+=10;
  if((place.types||[]).some(t=>["establishment","tourist_attraction","point_of_interest","park","local_government_office","university","stadium","church","place_of_worship","premise"].includes(t)))score+=5;
@@ -254,7 +255,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   const stateName=stateDirectory.find(([code])=>code===result.state)?.[1]||"";
   const query=[queryVenue,result.address,result.city,stateName,"Brasil"].filter(Boolean).join(", ");
   const places=await searchGooglePlaces(query,env);
-  if(places.configured&&places.items.length){
+  if(places.configured&&places.items.length&&places.items.some(place=>getPlaceCityAndState(place,municipalities,result.state)!==null)){
    const scored=places.items.map(place=>({...place,...scorePlaceResult(place,query,queryVenue,result.city,result.state,municipalities)})).filter(place=>place.geo!==null).sort((a,b)=>b.score-a.score);
    const options=scored.map(place=>({
     id:clean(place.id),title:clean(place.displayName?.text)||"Local no Google Maps",

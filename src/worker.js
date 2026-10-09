@@ -311,7 +311,11 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
    const preciseName=norm(top.displayName?.text||"");
    const requestedName=norm(queryVenue);
    const nameSupported=requestedName&&(preciseName===requestedName||preciseName.includes(requestedName)||requestedName.includes(preciseName));
-   const regionSupported=result.city_inferred_from_context||((!result.state||top.geo?.state===result.state)&&(!result.city||!top.geo?.city||norm(top.geo.city)===norm(result.city)));
+   const regionSupported=result.city
+    ?Boolean(top.geo?.city&&norm(top.geo.city)===norm(result.city)&&(!result.state||top.geo?.state===result.state))
+    :result.state
+     ?top.geo?.state===result.state
+     :false;
    const gap=!next||top.score-(next.score||0)>=15;
    if(topOption&&top.score>=70&&nameSupported&&regionSupported&&gap){
     result.venue=topOption.title;
@@ -340,6 +344,11 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
    result.geography_source="Google Maps / Places API";
    warnings.push(places.error||"Nenhum ponto correspondente foi confirmado no Google Maps.");
   }
+ }else if(!allowMaps&&Boolean(queryVenue||result.address)){
+  result.geography_status="maps_search_skipped";
+  result.geography_source=result.city?"IBGE":"";
+  result.geography_confidence="baixa";
+  warnings.push("A busca automática no Maps foi limitada nesta análise; use Validar cidade, local e coordenadas no editor para procurar este ponto.");
  }else{
   result.geography_status=result.city?"city_verified":"needs_review";
   result.geography_source="IBGE";

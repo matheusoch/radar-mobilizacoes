@@ -29,7 +29,7 @@ function possibleDuplicates(candidate:PosterCandidate,events:MobilizationEvent[]
  }).slice(0,3);
 }
 export default function PosterImporter({currentImage,existingEvents,onFileSelected,onCandidatesFound,onUseCandidate}:Props){
- const [preview,setPreview]=useState<string|null>(null),[dimensions,setDimensions]=useState(''),[status,setStatus]=useState(''),[rawText,setRawText]=useState('');
+ const [preview,setPreview]=useState<string|null>(null),[dimensions,setDimensions]=useState<{width:number;height:number}|null>(null),[status,setStatus]=useState(''),[rawText,setRawText]=useState('');
  const [busy,setBusy]=useState(false),[selected,setSelected]=useState<File|null>(null),[candidates,setCandidates]=useState<PosterCandidate[]>([]),[fileHash,setFileHash]=useState('');
  const processFile=useCallback(async(file:File)=>{
   const ext=(file.name.split('.').pop()||'').toLowerCase();
@@ -39,7 +39,7 @@ export default function PosterImporter({currentImage,existingEvents,onFileSelect
   const url=URL.createObjectURL(file);setPreview(url);setSelected(file);setDimensions('');setRawText('');setCandidates([]);setFileHash('');
   try{const digest=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());setFileHash(Array.from(new Uint8Array(digest)).map(value=>value.toString(16).padStart(2,'0')).join(''))}catch{setFileHash('')}
   onFileSelected(file,url);
-  const probe=new Image();probe.onload=()=>setDimensions(probe.naturalWidth+' × '+probe.naturalHeight+' px');probe.src=url;
+  const probe=new Image();probe.onload=()=>setDimensions({width:probe.naturalWidth,height:probe.naturalHeight});probe.src=url;
   setBusy(true);setStatus('Pôster anexado. Lendo o texto e procurando uma ou várias atividades…');
   try{
    const result=await extractPosterEvents(file);setRawText(result.text);setCandidates(result.candidates);onCandidatesFound(result.candidates,result.text);
@@ -77,11 +77,12 @@ export default function PosterImporter({currentImage,existingEvents,onFileSelect
   window.addEventListener('paste',onPaste);return()=>window.removeEventListener('paste',onPaste);
  },[processFile,loadPastedImageUrl]);
  const visibleImage=preview||currentImage||null;
+ const shortSide=dimensions?Math.min(dimensions.width,dimensions.height):0;
  return <div className="poster-upload full">
   <div className="poster-upload-label"><ImageIcon size={17}/><strong>Importar pôster e extrair eventos</strong></div>
   <p className="poster-import-help">Cole uma imagem com Ctrl+V ou escolha um arquivo. A leitura tenta identificar título, data, horário, cidade, local e tipo. Em cartazes de programação coletiva, pode sugerir vários eventos. Nada é salvo/publicado até você conferir e clicar em “Salvar evento”.</p>
   {visibleImage&&<img src={visibleImage} alt="Pré-visualização do pôster original" className="poster-preview"/>}
-  {dimensions&&<small className={Number(dimensions.split(' × ')[0])<700?'poster-quality-warning':Number(dimensions.split(' × ')[0])<900?'poster-quality-review':'poster-meta'}>Resolução do arquivo: <strong>{dimensions}</strong>. {Number(dimensions.split(' × ')[0])<700?'Atenção: resolução baixa; prefira baixar o pôster original em maior tamanho antes de publicar.':Number(dimensions.split(' × ')[0])<900?'Vale conferir a nitidez em tamanho grande.':'Resolução adequada para conferência; o arquivo original será enviado sem recorte nem redimensionamento.'}</small>}
+  {dimensions&&<small className={shortSide<550?'poster-quality-warning':shortSide<800?'poster-quality-review':'poster-meta'}>Resolução do arquivo original: <strong>{dimensions.width} × {dimensions.height} px</strong> (menor lado: {shortSide} px). {shortSide<550?'Atenção: resolução baixa; procure a versão original maior antes de publicar.':shortSide<800?'Resolução intermediária; confira a nitidez do texto ampliado, especialmente em cartazes com muitas informações.':'Resolução adequada para conferência; o arquivo original será enviado sem recorte nem redimensionamento.'}</small>}
   <label className="poster-file-button"><Upload size={16}/> Selecionar JPG / JFIF / PNG / WEBP / GIF<input type="file" accept=".jpg,.jpeg,.jfif,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif" onChange={e=>{const file=e.target.files?.[0];if(file)void processFile(file);e.currentTarget.value=''}}/></label>
   <div className="poster-paste-zone" tabIndex={0} onPaste={e=>{const item=Array.from(e.clipboardData.items).find(entry=>entry.kind==='file'&&entry.type.startsWith('image/'));const file=item?.getAsFile();if(file){e.preventDefault();e.stopPropagation();void processFile(file)}}}><ClipboardPaste size={17}/> Clique aqui e use <strong>Ctrl+V</strong> para colar um pôster copiado.</div>
   {selected&&<button type="button" className="button ghost poster-ocr-button" disabled={busy} onClick={()=>void processFile(selected)}><RefreshCw size={15}/>{busy?'Extraindo texto…':'Ler texto novamente'}</button>}

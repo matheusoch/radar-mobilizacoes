@@ -174,6 +174,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
  const result={...event};
  const warnings=[];
  const sourceText=[context.postText,context.posterText,context.title,context.description,context.organization,context.venue,context.address,context.city].filter(Boolean).join(" ");
+ const cityEvidenceText=[result.city,result.title,result.description,result.organization,result.venue,result.address,(context.evidence||[]).join(" "),context.cityEvidence||""].filter(Boolean).join(" ");
  const hints=stateHints([result.state,sourceText].filter(Boolean).join(" "));
  let state=validState(result.state);
  if(!state&&hints.length===1)state=hints[0].code;
@@ -194,12 +195,15 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   }else if(cityValue&&stateOnly){
    result.city="";
    warnings.push("O texto identificado em Cidade é o nome de um estado; não é um município.");
+  }else if(cityValue&&hints.length===1&&norm(cityValue).includes(norm(hints[0].name))&&!looksLikePlaceName(cityValue)){
+   result.city="";
+   warnings.push("O campo Cidade parece conter o nome de uma organização/grupo e uma UF, não um município; a UF fica como pista de pesquisa.");
   }else if(cityValue){
    warnings.push("O município informado não foi confirmado na base do IBGE; confira antes de publicar.");
   }
  }
  if(!result.city){
-  const inferredCities=cityMatchesForText(sourceText,municipalities,state);
+  const inferredCities=cityMatchesForText(cityEvidenceText,municipalities,state);
   const contextMatches=inferredCities.filter(item=>{
    const re=new RegExp("(?:de|do|da|dos|das|em|na|no|para|a|ao)\s+"+escapeRegex(item.key)+"(?:\s|$)");
    return re.test(norm(sourceText));
@@ -528,7 +532,9 @@ async function handler(request,env){
    if(eventTimes.length)time=eventTimes[0].time;
    else if(globalUniqueTimes.length===1)time=globalUniqueTimes[0];
    else if(events.length===1&&globalTimes.length)time=globalTimes[0].time;
-   let title=titleCase(event.title),type=titleCase(event.type),city=titleCase(event.city),venue=titleCase(event.venue),address=titleCase(event.address);
+   let title=titleCase(event.title),city=titleCase(event.city),venue=titleCase(event.venue),address=titleCase(event.address);
+    const mobilizationContext=[event.title,event.type,event.description,event.venue,event.address,...evidence].filter(Boolean).join(" ");
+    const type=titleCase(inferTypeFromMobilization(mobilizationContext,event.type));
    if(venue&&sameLocation(venue,city,event.state))venue="";
    if(address&&sameLocation(address,city,event.state))address="";
    const missing=Array.isArray(event.missing_fields)?event.missing_fields.map(clean).filter(Boolean).slice(0,10):[];
@@ -542,7 +548,18 @@ async function handler(request,env){
     inferred_title:Boolean(event.inferred_title),confidence:["alta","média","baixa"].includes(event.confidence)?event.confidence:"baixa",source_url:tweet.url||postUrl
    };
   });
-  return json({events:cleaned,sourceUrl:tweet.url||postUrl,urlError:tweet.error});
+  let geographicallyChecked=cleaned;
+  try{
+   const municipalities=await getIBGEMunicipalities();
+   geographicallyChecked=await Promise.all(cleaned.map((event,index)=>resolveEventGeography(event,{
+    postText:publicationText,posterText,title:event.title,description:event.description,
+    organization:event.organization,city:event.city,venue:event.venue,address:event.address,
+    evidence:event.evidence,cityEvidence:event.evidence?.join(" ")
+   },env,municipalities,index<6)));
+  }catch{
+   geographicallyChecked=cleaned.map(event=>({...event,geography_status:"ibge_unavailable",geography_source:"",geography_confidence:"baixa",geography_warnings:["A base municipal do IBGE não respondeu nesta tentativa; os campos geográficos precisam de revisão manual."]}));
+  }
+  return json({events:geographicallyChecked,sourceUrl:tweet.url||postUrl,urlError:tweet.error,geography:{municipalityDatabase:"IBGE",googleMapsConfigured:Boolean(env.GOOGLE_MAPS_API_KEY),placesSearchLimit:6}});
  }catch{return json({error:"A IA não conseguiu organizar essas informações desta vez. Confira o texto e tente novamente."},502)}
 }
-export default {async fetch(request,env){const url=new URL(request.url);if(url.pathname==="/api/interpret-events")return handler(request,env);if(url.pathname==="/api/research-events")return researchHandler(request,env);return env.ASSETS.fetch(request)}};
+export default {async fetch(request,env){const url=new URL(request.url);if(url.pathname==="/api/interpret-events")return handler(request,env);if(url.pathname==="/api/research-events")return researchHandler(request,env);if(url.pathname==="/api/resolve-location")return resolveLocationHandler(request,env);return env.ASSETS.fetch(request)}};

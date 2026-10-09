@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useState} from 'react';
-import {AlertTriangle,CheckCircle2,ClipboardPaste,Image as ImageIcon,RefreshCw,Upload} from 'lucide-react';
+import {AlertTriangle,CheckCircle2,ClipboardPaste,ExternalLink,Image as ImageIcon,RefreshCw,Upload} from 'lucide-react';
 import {extractPosterEvents,extractPosterEventsFromText,normalizePtSentence,normalizePtTitle,type PosterCandidate} from '../lib/posterOcr';
 import type {MobilizationEvent} from '../types';
 
@@ -48,6 +48,7 @@ type ResearchProvider={platform:string;status:string;message:string;count:number
 const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiBusy,setAiBusy]=useState(false),[aiStatus,setAiStatus]=useState('');
  const [researchBusy,setResearchBusy]=useState(false),[researchStatus,setResearchStatus]=useState(''),[researchResults,setResearchResults]=useState<ResearchResult[]>([]),[researchProviders,setResearchProviders]=useState<ResearchProvider[]>([]);
  const processFile=useCallback(async(file:File)=>{
+  setResearchResults([]);setResearchProviders([]);setResearchStatus('');
   const ext=(file.name.split('.').pop()||'').toLowerCase();
   const supported=file.type.startsWith('image/')||['jpg','jpeg','jfif','png','webp','gif'].includes(ext);
   if(!supported){setStatus('Formato não reconhecido. Use JPG/JPEG/JFIF, PNG, WEBP ou GIF.');return}
@@ -206,10 +207,16 @@ const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiB
   <div className="social-post-import">
    <div className="poster-upload-label"><ClipboardPaste size={17}/><strong>Contexto do post / tweet (opcional, mas recomendado)</strong></div>
    <p className="poster-import-help">Cole o texto da publicação para complementar o pôster. Se só tiver a URL pública do X/Twitter, a ferramenta tentará buscar o texto do post; se o acesso falhar, cole o texto manualmente. A URL, sozinha, não garante que o conteúdo esteja acessível.</p>
-   <label className="social-post-url">URL do post<input type="url" placeholder="https://x.com/conta/status/…" value={postUrl} onChange={e=>setPostUrl(e.target.value)}/></label>
-   <label className="social-post-text">Texto do post / tweet<textarea rows={4} placeholder="Cole aqui a legenda, a descrição ou o texto completo da publicação. Pode conter vários anúncios de mobilização." value={postText} onChange={e=>setPostText(e.target.value)}/></label>
-   <button type="button" className="button primary" disabled={aiBusy||busy} onClick={()=>void interpretCombined()}>{aiBusy?'Interpretando…':'Interpretar post + pôster com IA'}</button>
+   <label className="social-post-url">URL do post<input type="url" placeholder="https://x.com/conta/status/…" value={postUrl} onChange={e=>{setPostUrl(e.target.value);setResearchResults([]);setResearchProviders([]);setResearchStatus('')}}/></label>
+   <label className="social-post-text">Texto do post / tweet<textarea rows={4} placeholder="Cole aqui a legenda, a descrição ou o texto completo da publicação. Pode conter vários anúncios de mobilização." value={postText} onChange={e=>{setPostText(e.target.value);setResearchResults([]);setResearchProviders([]);setResearchStatus('')}}/></label>
+   <div className="social-post-actions">
+    <button type="button" className="button primary" disabled={aiBusy||busy||researchBusy} onClick={()=>void interpretCombined()}>{aiBusy?'Interpretando…':'Interpretar post + pôster com IA'}</button>
+    <button type="button" className="button ghost" disabled={aiBusy||busy||researchBusy} onClick={()=>void researchElsewhere()}><RefreshCw size={15}/>{researchBusy?'Pesquisando outras redes…':'Pesquisar outras redes e cruzar evidências'}</button>
+   </div>
    {aiStatus&&<small className={aiBusy?'poster-meta':'poster-ocr-status'}>{aiStatus}</small>}
+   {researchStatus&&<small className={researchBusy?'poster-meta':'poster-ocr-status'}>{researchStatus}</small>}
+   {researchProviders.length>0&&<div className="research-provider-list"><strong>Fontes consultadas</strong><div>{researchProviders.map(provider=><span className={'research-provider '+provider.status} key={provider.platform}><b>{provider.platform}</b>: {provider.status==='searched'?'consultada ('+provider.count+')':provider.status==='not_configured'?'não configurada':'indisponível'}{provider.message&&provider.status!=='searched'?' — '+provider.message:''}</span>)}</div><small>A busca usa apenas fontes públicas ou APIs habilitadas. A ausência de resultados não prova que o evento não exista.</small></div>}
+   {researchResults.length>0&&<div className="research-results"><div className="poster-candidates-heading"><strong>Publicações potencialmente relacionadas</strong><span>{researchResults.length} resultado(s)</span></div><p className="poster-import-help">A pontuação indica sobreposição textual, não confirma que seja o mesmo evento. Confira o conteúdo original antes de aproveitar uma informação.</p>{researchResults.slice(0,12).map((result,index)=><article className="research-result" key={result.url}><div className="research-result-head"><span>{result.platform}{result.author?' · '+result.author:''}</span><small>{typeof result.relevance==='number'?'Correspondência textual: '+result.relevance+'%':''}</small></div><a href={result.url} target="_blank" rel="noreferrer"><strong>{index+1}. {result.title}</strong><ExternalLink size={13}/></a><p>{result.text}</p>{result.publishedAt&&<small>Publicado: {result.publishedAt}</small>}</article>)}</div>}
   </div>
   <label className="poster-file-button"><Upload size={16}/> Selecionar JPG / JFIF / PNG / WEBP / GIF<input type="file" accept=".jpg,.jpeg,.jfif,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif" onChange={e=>{const file=e.target.files?.[0];if(file)void processFile(file);e.currentTarget.value=''}}/></label>
   <div className="poster-paste-zone" tabIndex={0} onPaste={e=>{const item=Array.from(e.clipboardData.items).find(entry=>entry.kind==='file'&&entry.type.startsWith('image/'));const file=item?.getAsFile();if(file){e.preventDefault();e.stopPropagation();void processFile(file)}}}><ClipboardPaste size={17}/> Clique aqui e use <strong>Ctrl+V</strong> para colar um pôster copiado.</div>

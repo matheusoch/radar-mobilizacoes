@@ -578,3 +578,28 @@ body{background:var(--page);color:var(--ink)}
  .research-provider-list,.research-results{padding:10px}
  .research-result{padding:9px}
 }
+
+
+/* Geographic verification and place disambiguation */
+.geo-admin-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px}
+.geo-admin-actions .button{display:inline-flex;align-items:center;gap:8px}
+.geography-note{display:grid;gap:5px;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:9px;background:#f8fafc;font-size:11px;line-height:1.5;color:var(--ink);overflow-wrap:anywhere}
+.geography-note>strong{font-size:11px}
+.geography-note>small{font-size:10px;color:var(--muted);line-height:1.45;overflow-wrap:anywhere}
+.geography-note.verified{border-color:#a7d6b6;background:#f1faf4}
+.geography-note.warning{border-color:#e9d2a3;background:#fff9ed}
+.geography-options{display:grid;gap:8px;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.geography-options>strong{font-size:12px;line-height:1.45}
+.geography-option{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;min-width:0;padding:9px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.geography-option>div:first-child{display:grid;gap:4px;min-width:0}
+.geography-option b{font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.geography-option small{font-size:10px;line-height:1.45;color:var(--muted);overflow-wrap:anywhere}
+.geography-option-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;flex:none}
+.geography-option-actions .button{font-size:11px;padding:7px 9px;white-space:nowrap}
+.geography-option-actions a{font-size:11px;line-height:1.5;color:var(--accent);text-decoration:underline;white-space:nowrap}
+@media(max-width:640px){
+ .geo-admin-actions{display:grid;grid-template-columns:1fr;align-items:stretch}
+ .geo-admin-actions .button{width:100%;justify-content:flex-start;white-space:normal}
+ .geography-option{display:grid;grid-template-columns:1fr}
+ .geography-option-actions{justify-content:flex-start}
+}

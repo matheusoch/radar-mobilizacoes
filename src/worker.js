@@ -19,7 +19,7 @@ const validState=x=>/^[A-Z]{2}$/.test(clean(x).toUpperCase())?clean(x).toUpperCa
 const smallTitleWords=new Set(["a","as","o","os","um","uma","uns","umas","de","da","das","do","dos","e","em","no","na","nos","nas","por","para","com","pelo","pela","pelos","pelas","ao","à","às","ou"]);
 const titleAcronyms={ufmg:"UFMG",dce:"DCE",mst:"MST",pt:"PT",psol:"PSOL",pcb:"PCB",pcdob:"PCdoB",pstu:"PSTU",cut:"CUT",une:"UNE",bh:"BH",stf:"STF",tse:"TSE",tre:"TRE",masp:"MASP",ibge:"IBGE",ufrj:"UFRJ",unesp:"Unesp",usp:"USP"};
 const norm=x=>clean(x).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
-const titleCase=x=>clean(x).toLocaleLowerCase("pt-BR").split(/\s+/).filter(Boolean).map((word,index)=>{
+const titleCase=x=>clean(x).replace(/[’‘]/g,"'").toLocaleLowerCase("pt-BR").split(/\s+/).filter(Boolean).map((word,index)=>{
  const cooked=word.split("-").map(part=>titleAcronyms[norm(part)]||part.charAt(0).toLocaleUpperCase("pt-BR")+part.slice(1)).join("-");
  return index>0&&smallTitleWords.has(word)?word:cooked;
 }).join(" ");

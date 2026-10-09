@@ -17,10 +17,9 @@ function tokenSimilarity(a:string,b:string){
  if(!x.size||!y.size)return 0;let inter=0;x.forEach(t=>{if(y.has(t))inter++});
  return inter/(x.size+y.size-inter);
 }
-function possibleDuplicates(candidate:PosterCandidate,events:MobilizationEvent[],fileHash:string){
+function possibleDuplicates(candidate:PosterCandidate,events:MobilizationEvent[]){
  const city=normalized(candidate.city||''),venue=normalized(candidate.venue||''),title=normalized(candidate.title||'');
  return events.filter(event=>{
-  if(fileHash&&event.poster_sha256===fileHash)return true;
   if(candidate.date&&event.date!==candidate.date)return false;
   const sameCity=city&&normalized(event.city||'')===city;
   const sameVenue=venue&&normalized(event.venue||'')===venue;
@@ -158,12 +157,12 @@ export default function PosterImporter({currentImage,existingEvents,onFileSelect
    <div className="poster-candidates-heading"><strong>Possíveis eventos encontrados</strong><span>{candidates.length} sugestão(ões)</span></div>
    <p className="poster-import-help">Confira todas as linhas. Se o cartaz listar uma semana inteira, escolha só as atividades que deseja cadastrar. “Possível duplicado” é um alerta, não uma exclusão automática.</p>
    {candidates.map((candidate,index)=>{
-    const duplicates=possibleDuplicates(candidate,existingEvents,fileHash);
-    const samePoster=Boolean(fileHash&&duplicates.some(event=>event.poster_sha256===fileHash));
+    const duplicates=possibleDuplicates(candidate,existingEvents);
+    const samePosterEvents=fileHash?existingEvents.filter(event=>event.poster_sha256===fileHash).slice(0,4):[];
     return <article className="poster-candidate" key={candidate.id}>
      <div className="poster-candidate-top"><strong>{index+1}. {candidate.title||'Título não identificado — revisar'}</strong>{duplicates.length>0?<span className="poster-duplicate"><AlertTriangle size={13}/> Possível duplicado</span>:<span className="poster-new"><CheckCircle2 size={13}/> Sem correspondência óbvia</span>}</div>
      <p>{[candidate.date,candidate.time_label||candidate.time,candidate.city&&candidate.state?candidate.city+' / '+candidate.state:candidate.city,candidate.venue].filter(Boolean).join(' · ')||'Poucos campos reconhecidos; revise manualmente.'}</p>
-     {duplicates.length>0&&<div className="poster-duplicate-details">{samePoster?'O arquivo original com esta mesma impressão digital já aparece em: ':'Possível coincidência pelos dados do evento: '}{duplicates.map(e=>e.title+' ('+e.city+', '+e.date+')').join(' · ')}</div>}
+     {duplicates.length>0&&<div className="poster-duplicate-details">Possível coincidência pelos dados do evento: {duplicates.map(e=>e.title+' ('+e.city+', '+e.date+')').join(' · ')}</div>}{samePosterEvents.length>0&&<div className="poster-meta">Este mesmo arquivo de pôster já está associado a: {samePosterEvents.map(e=>e.title+' ('+e.city+', '+e.date+')').join(' · ')}. Isso não significa, por si só, que este evento seja duplicado.</div>}
      {candidate.sourceLines.length>0&&<details><summary>Linhas / evidências desta sugestão</summary><p>{candidate.sourceLines.join(' / ')}</p></details>}{candidate.ai_confidence&&<small className={candidate.ai_confidence==='baixa'?'poster-quality-warning':'poster-meta'}>Confiança indicada pela IA: <strong>{candidate.ai_confidence}</strong>{candidate.inferred_title?' · título sintetizado a partir do contexto':''}</small>}{candidate.missing_fields&&candidate.missing_fields.length>0&&<div className="poster-duplicate-details">Conferir: {candidate.missing_fields.join(' · ')}</div>}{candidate.organization&&<small>Organização identificada: {candidate.organization}</small>}{candidate.hashtags&&candidate.hashtags.length>0&&<small>Hashtags: {candidate.hashtags.join(' ')}</small>}{candidate.source_url&&<small>Fonte: <a href={candidate.source_url} target="_blank" rel="noreferrer">abrir publicação</a></small>}
      <button type="button" className="button ghost" disabled={aiBusy||busy} onClick={()=>onUseCandidate(candidate,selected||undefined,preview||undefined)}>Usar esta sugestão no editor</button>
     </article>

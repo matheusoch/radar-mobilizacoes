@@ -111,11 +111,12 @@ async function handler(request,env){
    else if(events.length===1&&globalTimes.length)time=globalTimes[0].time;
    let title=titleCase(event.title),type=titleCase(event.type),city=titleCase(event.city),venue=titleCase(event.venue),address=titleCase(event.address);
    if(venue&&sameLocation(venue,city,event.state))venue="";
+   if(address&&sameLocation(address,city,event.state))address="";
    const missing=Array.isArray(event.missing_fields)?event.missing_fields.map(clean).filter(Boolean).slice(0,10):[];
    if(!venue&&!address&&!missing.some(x=>/local|endere[cç]o|pra[cç]a|ponto/i.test(x)))missing.push("Local específico (praça, endereço ou ponto de encontro) a confirmar");
    return {
     id:"ai-"+index+"-"+String(date||"sem-data"),title,type,date,time,
-    time_label:sentenceCase(event.time_label),city,state:validState(event.state),venue,address,
+    time_label:titleCase(event.time_label),city,state:validState(event.state),venue,address,
     description:sentenceCase(event.description),organization:titleCase(event.organization),
     hashtags:Array.isArray(event.hashtags)?event.hashtags.map(clean).filter(Boolean).slice(0,12):[],
     evidence,missing_fields:missing.slice(0,10),

@@ -43,6 +43,253 @@ function extractTimes(text){
 }
 const sameLocation=(a,b,state)=>{const x=norm(a),y=norm(b);if(!x||!y)return false;return x===y||x===y+" "+norm(state)||x===y+" "+norm(state).toLowerCase()||x.replace(new RegExp("\\s+"+norm(state)+"$"),"")===y};
 
+
+const stateDirectory=[
+ ["AC","Acre"],["AL","Alagoas"],["AP","Amapá"],["AM","Amazonas"],["BA","Bahia"],["CE","Ceará"],["DF","Distrito Federal"],["ES","Espírito Santo"],["GO","Goiás"],["MA","Maranhão"],["MT","Mato Grosso"],["MS","Mato Grosso do Sul"],["MG","Minas Gerais"],["PA","Pará"],["PB","Paraíba"],["PR","Paraná"],["PE","Pernambuco"],["PI","Piauí"],["RJ","Rio de Janeiro"],["RN","Rio Grande do Norte"],["RS","Rio Grande do Sul"],["RO","Rondônia"],["RR","Roraima"],["SC","Santa Catarina"],["SP","São Paulo"],["SE","Sergipe"],["TO","Tocantins"]
+];
+const stateCodeByName=new Map(stateDirectory.map(([code,name])=>[norm(name),code]));
+let ibgeMunicipalitiesPromise=null;
+const escapeRegex=value=>value.replace(/[.*+?^$|(){}[\]\\]/g,"\\async function getAdmin(request,env){");
+async function getIBGEMunicipalities(){
+ if(!ibgeMunicipalitiesPromise){
+  ibgeMunicipalitiesPromise=(async()=>{
+   const response=await fetch("https://servicodados.ibge.gov.br/api/v1/localidades/municipios?orderBy=nome",{headers:{"accept":"application/json"},signal:AbortSignal.timeout(9000)});
+   if(!response.ok)throw new Error("IBGE indisponível");
+   const rows=await response.json();
+   if(!Array.isArray(rows)||rows.length<5000)throw new Error("Base municipal incompleta");
+   return rows.map(row=>({
+    id:String(row.id||""),
+    name:clean(row.nome),
+    key:norm(row.nome),
+    uf:validState(row.microrregiao?.mesorregiao?.UF?.sigla||row["regiao-imediata"]?.["regiao-intermediaria"]?.UF?.sigla||""),
+    stateName:clean(row.microrregiao?.mesorregiao?.UF?.nome||row["regiao-imediata"]?.["regiao-intermediaria"]?.UF?.nome||"")
+   })).filter(row=>row.name&&row.uf);
+  })().catch(error=>{ibgeMunicipalitiesPromise=null;throw error});
+ }
+ return ibgeMunicipalitiesPromise;
+}
+function stateHints(text){
+ const t=norm(text),found=[];
+ for(const [code,name] of stateDirectory){
+  const nameNorm=norm(name);
+  if(nameNorm&&new RegExp("(^| )"+escapeRegex(nameNorm)+"( |$)").test(t))found.push({code,name});
+ }
+ return [...new Map(found.map(x=>[x.code,x])).values()];
+}
+function looksLikePlaceName(value){
+ const v=norm(value);
+ return /\b(palacio|palace|sede|tre|tribunal|masp|praca|largo|caixa dagua|caixas dagua|campus|rodoviaria|estacao|terminal|sindicato|auditorio|teatro|assembleia|catedral|igreja|parque|mercado|estadio|centro|escola|universidade|prefeitura|camara|congresso|monumento|viaduto|ponte|farol|quadra|ginasio|pavilhao|ponto de encontro|predio|edificio|secretaria|forum)\b/.test(v);
+}
+function cityMatchesForText(text,municipalities,state){
+ const t=norm(text);
+ const found=municipalities.filter(item=>item.key.length>3&&new RegExp("(^| )"+escapeRegex(item.key)+"( |$)").test(t));
+ const filtered=state?found.filter(item=>item.uf===state):found;
+ return [...new Map(filtered.map(item=>[item.key+"|"+item.uf,item])).values()].sort((a,b)=>b.key.length-a.key.length);
+}
+function getMunicipalityMatch(value,municipalities,state){
+ const key=norm(value);
+ if(!key)return {match:null,ambiguous:[]};
+ let found=municipalities.filter(item=>item.key===key);
+ if(!found.length){
+  const prefix=/^(?:juventude|estudantes|trabalhadores|trabalhadoras|moradores|moradoras|jovens|militantes|movimento|povo|pessoal|coletivo|coletiva|alunos|alunas|professores|professoras|comunidade|sindicato)\s+(?:de|do|da|dos|das|em)\s+/;
+  const stripped=key.replace(prefix,"").trim();
+  found=municipalities.filter(item=>item.key===stripped);
+ }
+ if(state){
+  const local=found.filter(item=>item.uf===state);
+  if(local.length)found=local;
+ }
+ if(found.length===1)return {match:found[0],ambiguous:[]};
+ return {match:null,ambiguous:found};
+}
+function inferTypeFromMobilization(text,currentType){
+ const t=norm(text);
+ if(/\b(lambe lambe|lambes|colagem de cartaz|colagem de cartazes|colagem de lambe|colagem de lambes|distribuicao de panfleto|distribuicao de panfletos|panfletagem|entrega de material|entrega de panfleto|entrega de panfletos)\b/.test(t))return "Panfletagem";
+ if(/\b(bandeiraco)\b/.test(t))return "Bandeiraço";
+ if(/\b(adesivaco)\b/.test(t))return "Adesivaço";
+ if(/\b(carreata)\b/.test(t))return "Carreata";
+ if(/\b(mutirao)\b/.test(t))return "Mutirão";
+ if(/\b(blitz|brigada de rua)\b/.test(t))return "Mobilização de rua";
+ if(/\b(caminhada|passeata|marcha)\b/.test(t))return "Caminhada";
+ if(/\b(plenaria)\b/.test(t))return "Plenária";
+ if(/\b(assembleia)\b/.test(t))return "Assembleia";
+ if(/\b(ato publico|ato politico|\bato\b|manifestacao|protesto)\b/.test(t))return norm(currentType)==="manifestacao"?"Manifestação":"Ato";
+ return currentType||"";
+}
+function placeComponent(components,types){
+ return (components||[]).find(component=>(component.types||[]).some(type=>types.includes(type)));
+}
+function getPlaceCityAndState(place,municipalities,preferredState){
+ const components=place.addressComponents||[];
+ const country=placeComponent(components,["country"]);
+ if(country&&country.shortText!=="BR"&&!/brazil|brasil/i.test(country.longText||""))return null;
+ const stateComp=placeComponent(components,["administrative_area_level_1"]);
+ const returnedState=validState(stateComp?.shortText||"")||stateDirectory.find(([,name])=>norm(name)===norm(stateComp?.longText||""))?.[0]||"";
+ const componentCandidates=[
+  placeComponent(components,["locality"]),
+  placeComponent(components,["administrative_area_level_2"]),
+  placeComponent(components,["postal_town"]),
+  placeComponent(components,["sublocality_level_1"])
+ ].filter(Boolean);
+ let municipality=null;
+ for(const component of componentCandidates){
+  const query=clean(component.longText||component.shortText||"");
+  const m=getMunicipalityMatch(query,municipalities,returnedState||preferredState);
+  if(m.match){municipality=m.match;break}
+ }
+ return {city:municipality?.name||"",state:municipality?.uf||returnedState||preferredState||"",country:country?.longText||""};
+}
+async function searchGooglePlaces(query,env){
+ const key=env.GOOGLE_MAPS_API_KEY||"";
+ if(!key)return {configured:false,items:[]};
+ try{
+  const response=await fetch("https://places.googleapis.com/v1/places:searchText",{
+   method:"POST",
+   headers:{"content-type":"application/json","X-Goog-Api-Key":key,"X-Goog-FieldMask":"places.id,places.displayName,places.formattedAddress,places.location,places.addressComponents,places.types,places.googleMapsUri,places.primaryTypeDisplayName"},
+   body:JSON.stringify({textQuery:query,languageCode:"pt-BR",regionCode:"BR",maxResultCount:5}),
+   signal:AbortSignal.timeout(8000)
+  });
+  if(!response.ok)return {configured:true,items:[],error:"Google Places respondeu HTTP "+response.status};
+  const data=await response.json();
+  return {configured:true,items:Array.isArray(data.places)?data.places:[]};
+ }catch{return {configured:true,items:[],error:"Não foi possível consultar o Google Places."}}
+}
+function scorePlaceResult(place,query,venue,city,state,municipalities){
+ const queryKey=norm(query),venueKey=norm(venue),name=norm(place.displayName?.text||"");
+ const address=norm(place.formattedAddress||"");
+ let score=0;
+ if(venueKey&&name===venueKey)score+=60;
+ else if(venueKey&&(name.includes(venueKey)||venueKey.includes(name)))score+=40;
+ const tokens=[...new Set(venueKey.split(" ").filter(t=>t.length>2))];
+ if(tokens.length)score+=Math.round(20*tokens.filter(t=>name.includes(t)).length/tokens.length);
+ if(city&&address.includes(norm(city)))score+=15;
+ const cityState=getPlaceCityAndState(place,municipalities,state);
+ if(state&&cityState?.state===state)score+=15;
+ if(cityState?.country&&/brasil|brazil/i.test(cityState.country))score+=10;
+ if((place.types||[]).some(t=>["establishment","tourist_attraction","point_of_interest","park","local_government_office","university","stadium","church","place_of_worship","premise"].includes(t)))score+=5;
+ if(!queryKey)score=0;
+ return {score:Math.min(100,score),geo:cityState};
+}
+async function resolveEventGeography(event,context,env,municipalities,allowMaps=true){
+ const result={...event};
+ const warnings=[];
+ const sourceText=[context.postText,context.posterText,context.title,context.description,context.organization,context.venue,context.address,context.city].filter(Boolean).join(" ");
+ const hints=stateHints([result.state,sourceText].filter(Boolean).join(" "));
+ let state=validState(result.state);
+ if(!state&&hints.length===1)state=hints[0].code;
+ result.state=state;
+ let cityMatch=getMunicipalityMatch(result.city,municipalities,state);
+ if(cityMatch.match){
+  result.city=cityMatch.match.name;
+  if(!state||state!==cityMatch.match.uf){
+   if(state&&state!==cityMatch.match.uf)warnings.push("A UF informada conflita com a base oficial; foi usada a UF do município validado pelo IBGE.");
+   result.state=cityMatch.match.uf;state=cityMatch.match.uf;
+  }
+ }else{
+  const cityValue=clean(result.city);
+  const stateOnly=hints.length===1&&norm(cityValue)===norm(hints[0].name);
+  if(cityValue&&looksLikePlaceName(cityValue)&&!result.venue){
+   result.venue=titleCase(cityValue);result.city="";
+   warnings.push("O texto que estava no campo Cidade parece ser um ponto de referência/local, não um município.");
+  }else if(cityValue&&stateOnly){
+   result.city="";
+   warnings.push("O texto identificado em Cidade é o nome de um estado; não é um município.");
+  }else if(cityValue){
+   warnings.push("O município informado não foi confirmado na base do IBGE; confira antes de publicar.");
+  }
+ }
+ if(!result.city){
+  const inferredCities=cityMatchesForText(sourceText,municipalities,state);
+  const contextMatches=inferredCities.filter(item=>{
+   const re=new RegExp("(?:de|do|da|dos|das|em|na|no|para|a|ao)\s+"+escapeRegex(item.key)+"(?:\s|$)");
+   return re.test(norm(sourceText));
+  });
+  const choices=contextMatches.length?contextMatches:inferredCities;
+  const unique=[...new Map(choices.map(item=>[item.key+"|"+item.uf,item])).values()];
+  if(unique.length===1){result.city=unique[0].name;result.state=unique[0].uf;state=unique[0].uf;warnings.push("Cidade sugerida pelo contexto textual e confirmada na base do IBGE; confira se é a cidade do evento, não apenas a origem do grupo.");}
+  else if(unique.length>1&&!state)warnings.push("O texto cita mais de um município; não foi possível escolher a cidade do evento com segurança.");
+ }
+ let queryVenue=clean(result.venue||"");
+ if(!queryVenue&&looksLikePlaceName(result.city)){
+  queryVenue=titleCase(result.city);result.venue=queryVenue;result.city="";
+  warnings.push("O nome do ponto de encontro foi movido para Local e será validado geograficamente.");
+ }
+ const shouldSearchPlace=Boolean(queryVenue||result.address);
+ if(allowMaps&&shouldSearchPlace){
+  const stateName=stateDirectory.find(([code])=>code===result.state)?.[1]||"";
+  const query=[queryVenue,result.address,result.city,stateName,"Brasil"].filter(Boolean).join(", ");
+  const places=await searchGooglePlaces(query,env);
+  if(places.configured&&places.items.length){
+   const scored=places.items.map(place=>({...place,...scorePlaceResult(place,query,queryVenue,result.city,result.state,municipalities)})).sort((a,b)=>b.score-a.score);
+   const options=scored.map(place=>({
+    id:clean(place.id),title:clean(place.displayName?.text)||"Local no Google Maps",
+    address:clean(place.formattedAddress),lat:Number.isFinite(place.location?.latitude)?place.location.latitude:null,
+    lng:Number.isFinite(place.location?.longitude)?place.location.longitude:null,
+    city:place.geo?.city||"",state:place.geo?.state||"",score:place.score,
+    maps_url:typeof place.googleMapsUri==="string"?place.googleMapsUri:"",
+    types:Array.isArray(place.types)?place.types.slice(0,8):[]
+   })).filter(option=>option.lat!==null&&option.lng!==null);
+   const top=scored[0],next=scored[1];
+   const topOption=options.find(option=>option.id===top.id);
+   const preciseName=norm(top.displayName?.text||"");
+   const requestedName=norm(queryVenue);
+   const nameSupported=requestedName&&(preciseName===requestedName||preciseName.includes(requestedName)||requestedName.includes(preciseName));
+   const regionSupported=(!result.state||top.geo?.state===result.state)&&(!result.city||!top.geo?.city||norm(top.geo.city)===norm(result.city));
+   const gap=!next||top.score-(next.score||0)>=15;
+   if(topOption&&top.score>=70&&nameSupported&&regionSupported&&gap){
+    result.venue=topOption.title;
+    result.address=topOption.address;
+    if(topOption.city){result.city=topOption.city;result.state=topOption.state||result.state;}
+    result.lat=topOption.lat;result.lng=topOption.lng;
+    result.maps_url=topOption.maps_url||"https://www.google.com/maps/dir/?api=1&destination_place_id="+encodeURIComponent(topOption.id);
+    result.geography_status="verified_place";
+    result.geography_source="Google Maps / Places API";
+    result.geography_confidence="alta";
+    result.geography_options=options;
+    warnings.push("O ponto foi associado a um resultado do Google Maps por correspondência do nome e compatibilidade geográfica. Confira o link antes de publicar.");
+   }else{
+    result.geography_options=options;
+    result.geography_status=options.length?"multiple_places":"place_not_found";
+    result.geography_source="Google Maps / Places API";
+    result.geography_confidence="baixa";
+    warnings.push(options.length?"O Google Maps retornou opções possivelmente relacionadas; escolha manualmente o local correto.":"O Google Maps não confirmou esse ponto com segurança.");
+   }
+  }else if(!places.configured){
+   result.geography_status="maps_not_configured";
+   result.geography_source="IBGE";
+   warnings.push("O município é validado pelo IBGE; endereço e coordenadas exatas exigem configurar GOOGLE_MAPS_API_KEY no Cloudflare.");
+  }else{
+   result.geography_status="place_not_found";
+   result.geography_source="Google Maps / Places API";
+   warnings.push(places.error||"Nenhum ponto correspondente foi confirmado no Google Maps.");
+  }
+ }else{
+  result.geography_status=result.city?"city_verified":"needs_review";
+  result.geography_source="IBGE";
+  result.geography_confidence=result.city?"alta":"baixa";
+ }
+ if(result.city&&!municipalities.some(item=>item.key===norm(result.city)&&item.uf===result.state)){
+  warnings.push("A cidade e a UF ainda não formam uma combinação confirmada na base do IBGE.");
+  result.geography_status="needs_review";
+ }
+ if(!result.city)warnings.push("Cidade do evento não confirmada.");
+ result.geography_warnings=[...new Set(warnings)].slice(0,8);
+ return result;
+}
+async function resolveLocationHandler(request,env){
+ if(request.method!=="POST")return json({error:"Método não permitido."},405);
+ if(!(await getAdmin(request,env)))return json({error:"É necessário entrar com uma conta administradora válida."},403);
+ let body;try{body=await request.json()}catch{return json({error:"Pedido de localização inválido."},400)}
+ let municipalities;
+ try{municipalities=await getIBGEMunicipalities()}catch{return json({error:"Não foi possível consultar a base de municípios do IBGE nesta tentativa. Revise os campos manualmente e tente novamente."},503)}
+ const resolved=await resolveEventGeography({
+  title:clean(body.title),description:clean(body.description),organization:clean(body.organization),
+  city:clean(body.city),state:validState(body.state),venue:clean(body.venue),address:clean(body.address),
+  lat:null,lng:null
+ },{postText:clean(body.postText),posterText:clean(body.posterText),title:clean(body.title),description:clean(body.description),organization:clean(body.organization),city:clean(body.city),venue:clean(body.venue),address:clean(body.address)},env,municipalities,true);
+ return json({location:resolved,googleMapsConfigured:Boolean(env.GOOGLE_MAPS_API_KEY),municipalityDatabase:"IBGE"});
+}
+
 async function getAdmin(request,env){
  const auth=request.headers.get("Authorization")||"";if(!auth.startsWith("Bearer "))return false;
  const base=(env.SUPABASE_URL||"").replace(/\/$/,""),key=env.SUPABASE_PUBLISHABLE_KEY||"";if(!base||!key)return false;

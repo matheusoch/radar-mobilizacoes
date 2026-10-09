@@ -18,30 +18,30 @@ const validTime=x=>{const m=clean(x).match(/^(\d{1,2}):([0-5]\d)$/);return !m||N
 const validState=x=>/^[A-Z]{2}$/.test(clean(x).toUpperCase())?clean(x).toUpperCase():"";
 const smallTitleWords=new Set(["a","as","o","os","um","uma","uns","umas","de","da","das","do","dos","e","em","no","na","nos","nas","por","para","com","pelo","pela","pelos","pelas","ao","à","às","ou"]);
 const titleAcronyms={ufmg:"UFMG",dce:"DCE",mst:"MST",pt:"PT",psol:"PSOL",pcb:"PCB",pcdob:"PCdoB",pstu:"PSTU",cut:"CUT",une:"UNE",bh:"BH",stf:"STF",tse:"TSE",ufrj:"UFRJ",unesp:"Unesp",usp:"USP"};
-const norm=x=>clean(x).normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
-const titleCase=x=>clean(x).toLocaleLowerCase("pt-BR").split(/\\s+/).filter(Boolean).map((word,index)=>{
+const norm=x=>clean(x).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+const titleCase=x=>clean(x).toLocaleLowerCase("pt-BR").split(/\s+/).filter(Boolean).map((word,index)=>{
  const cooked=word.split("-").map(part=>titleAcronyms[norm(part)]||part.charAt(0).toLocaleUpperCase("pt-BR")+part.slice(1)).join("-");
  return index>0&&smallTitleWords.has(word)?word:cooked;
 }).join(" ");
-const sentenceCase=x=>clean(x).toLocaleLowerCase("pt-BR").replace(/(^|[.!?]\\s+)([a-záàâãéêíóôõúüç])/gu,(_,lead,letter)=>lead+letter.toLocaleUpperCase("pt-BR"));
+const sentenceCase=x=>clean(x).toLocaleLowerCase("pt-BR").replace(/(^|[.!?]\s+)([a-záàâãéêíóôõúüç])/gu,(_,lead,letter)=>lead+letter.toLocaleUpperCase("pt-BR"));
 const monthNumbers={janeiro:1,fevereiro:2,marco:3,abril:4,maio:5,junho:6,julho:7,agosto:8,setembro:9,outubro:10,novembro:11,dezembro:12};
 function extractDates(text){
  const found=[];
  const add=(day,month,year,index)=>{const y=Number(year||new Date().getFullYear()),d=Number(day),m=Number(month);const candidate=String(y).padStart(4,"0")+"-"+String(m).padStart(2,"0")+"-"+String(d).padStart(2,"0");const checked=validDate(candidate);if(checked)found.push({date:checked,index})};
- for(const m of text.matchAll(/\\b(20\\d{2})-(0?[1-9]|1[0-2])-([0-3]?\\d)\\b/g))add(m[3],m[2],m[1],m.index||0);
- for(const m of text.matchAll(/\\b([0-3]?\\d)\\s*[/.]\\s*(0?[1-9]|1[0-2])(?:\\s*[/.]\\s*(20\\d{2}))?\\b/g))add(m[1],m[2],m[3],m.index||0);
- const normalized=text.normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLowerCase();
- for(const m of normalized.matchAll(/\\b([0-3]?\\d)\\s+de\\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)(?:\\s+de\\s+(20\\d{2}))?\\b/g))add(m[1],monthNumbers[m[2]],m[3],m.index||0);
+ for(const m of text.matchAll(/\b(20\d{2})-(0?[1-9]|1[0-2])-([0-3]?\d)\b/g))add(m[3],m[2],m[1],m.index||0);
+ for(const m of text.matchAll(/\b([0-3]?\d)\s*[/.]\s*(0?[1-9]|1[0-2])(?:\s*[/.]\s*(20\d{2}))?\b/g))add(m[1],m[2],m[3],m.index||0);
+ const normalized=text.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+ for(const m of normalized.matchAll(/\b([0-3]?\d)\s+de\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)(?:\s+de\s+(20\d{2}))?\b/g))add(m[1],monthNumbers[m[2]],m[3],m.index||0);
  return found.sort((a,b)=>a.index-b.index);
 }
 function extractTimes(text){
  const found=[];
- const add=(hour,minute,index,whole)=>{let h=Number(hour),m=Number(minute||0);const context=text.slice(Math.max(0,index-12),Math.min(text.length,index+whole.length+24)).normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLowerCase();if(h>=1&&h<=11&&/\\b(tarde|noite)\\b/.test(context))h+=12;if(h>23||m>59)return;found.push({time:String(h).padStart(2,"0")+":"+String(m).padStart(2,"0"),index})};
- for(const m of text.matchAll(/\\b(\\d{1,2})\\s*(?:h(?:oras?)?\\s*([0-5]\\d)?|:\\s*([0-5]\\d))\\b/gi))add(m[1],m[2]||m[3],m.index||0,m[0]);
- for(const m of text.matchAll(/\\b(\\d{1,2})\\s+(?:da|de)\\s+(tarde|noite|manha|madrugada)\\b/gi))add(m[1],0,m.index||0,m[0]);
+ const add=(hour,minute,index,whole)=>{let h=Number(hour),m=Number(minute||0);const context=text.slice(Math.max(0,index-12),Math.min(text.length,index+whole.length+24)).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();if(h>=1&&h<=11&&/\b(tarde|noite)\b/.test(context))h+=12;if(h>23||m>59)return;found.push({time:String(h).padStart(2,"0")+":"+String(m).padStart(2,"0"),index})};
+ for(const m of text.matchAll(/\b(\d{1,2})\s*(?:h(?:oras?)?\s*([0-5]\d)?|:\s*([0-5]\d))\b/gi))add(m[1],m[2]||m[3],m.index||0,m[0]);
+ for(const m of text.matchAll(/\b(\d{1,2})\s+(?:da|de)\s+(tarde|noite|manha|madrugada)\b/gi))add(m[1],0,m.index||0,m[0]);
  return found.sort((a,b)=>a.index-b.index);
 }
-const sameLocation=(a,b,state)=>{const x=norm(a),y=norm(b);if(!x||!y)return false;return x===y||x===y+" "+norm(state)||x===y+" "+norm(state).toLowerCase()||x.replace(new RegExp("\\\\s+"+norm(state)+"$"),"")===y};
+const sameLocation=(a,b,state)=>{const x=norm(a),y=norm(b);if(!x||!y)return false;return x===y||x===y+" "+norm(state)||x===y+" "+norm(state).toLowerCase()||x.replace(new RegExp("\\s+"+norm(state)+"$"),"")===y};
 
 async function getAdmin(request,env){
  const auth=request.headers.get("Authorization")||"";if(!auth.startsWith("Bearer "))return false;
@@ -93,12 +93,12 @@ async function handler(request,env){
   let parsed=result&&result.response!==undefined?result.response:result;
   if(typeof parsed==="string"){const value=parsed.trim();const fence=String.fromCharCode(96).repeat(3);if(value.startsWith(fence)){const start=value.indexOf("\n");const end=value.lastIndexOf(fence);if(start>=0&&end>start)parsed=value.slice(start+1,end).trim();else parsed=value;}else parsed=value;parsed=JSON.parse(parsed)}
   const events=Array.isArray(parsed.events)?parsed.events.slice(0,20):[];
-  const combinedSource=[publicationText,posterText].filter(Boolean).join("\\n");
+  const combinedSource=[publicationText,posterText].filter(Boolean).join("\n");
   const globalDates=extractDates(combinedSource),globalTimes=extractTimes(combinedSource);
   const globalUniqueDates=[...new Set(globalDates.map(x=>x.date))],globalUniqueTimes=[...new Set(globalTimes.map(x=>x.time))];
   const cleaned=events.map((event,index)=>{
    const evidence=Array.isArray(event.evidence)?event.evidence.map(clean).filter(Boolean).slice(0,8):[];
-   const evidenceText=evidence.join("\\n");
+   const evidenceText=evidence.join("\n");
    const eventDates=extractDates(evidenceText),eventTimes=extractTimes(evidenceText);
    let date=validDate(event.date);
    if(eventDates.length)date=eventDates[0].date;

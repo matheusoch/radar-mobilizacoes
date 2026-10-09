@@ -241,10 +241,16 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   const cityKey=geoNorm(cityValue);
   const stateNameCode=stateCodeByName.get(cityKey)||"";
   const stateOnly=Boolean(stateNameCode)||Boolean(hints.length===1&&geoNorm(cityValue)===geoNorm(hints[0].name));
+   const groupIdentityOnly=/^(?:juventude|jovens|estudantes|estudantil|trabalhadores|trabalhadoras|moradores|moradoras|militantes|povo|coletivo|coletiva|alunos|alunas|professores|professoras|comunidade|sindicato|movimento|organizacao|grupo) (?:de|do|da|dos|das) .+/.test(cityKey);
   const genericLocation=/^(brasil|br|local|local a confirmar|local nao informado|nao informado|a conferir|presencial|online|virtual)$/.test(cityKey);
   const embeddedState=stateDirectory.find(([code,name])=>geoNorm(name)&&new RegExp("(?:^| )"+escapeRegex(geoNorm(name))+"(?: |$)").test(cityKey));
   const groupWithState=Boolean(embeddedState&&/(juventude|jovens|estudantes|trabalhadores|trabalhadoras|moradores|moradoras|militantes|coletivo|coletiva|alunos|alunas|professores|professoras|comunidade|sindicato|movimento|organizacao|grupo)/.test(cityKey));
-  if(cityValue&&looksLikePlaceName(cityValue)){
+   if(cityValue&&groupIdentityOnly){
+    result.city="";
+    result.city_needs_clear=true;
+    if(groupWithState)result.state="";
+    warnings.push("O campo Cidade contém a origem/identidade de um grupo ou movimento, não um município confirmado para este evento. O município foi deixado em branco para validação geográfica.");
+   }else if(cityValue&&looksLikePlaceName(cityValue)){
    if(!result.venue)result.venue=titleCase(cityValue);
    result.city="";result.city_needs_clear=true;
    warnings.push("O texto que estava no campo Cidade parece ser um ponto de referência/local, não um município.");

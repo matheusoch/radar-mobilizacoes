@@ -42,18 +42,25 @@ function inferType(s:string):string|undefined{
 function dateInLine(line:string):string|undefined{
  const n=norm(line);
  if(/\b\d{1,2}\s*[/.]\s*\d{1,2}\s*(?:a|ate|–|—|-)\s*\d{1,2}\s*[/.]\s*\d{1,2}\b/.test(n))return undefined;
- const m=line.match(/\b(\d{1,2})\s*[/. -]\s*(\d{1,2})(?:\s*[/. -]\s*(20\d{2}))?\b/);
- if(!m)return undefined;
- const d=Number(m[1]),mo=Number(m[2]),y=Number(m[3]||new Date().getFullYear());
+ const numeric=line.match(/\b(\d{1,2})\s*[/. -]\s*(\d{1,2})(?:\s*[/. -]\s*(20\d{2}))?\b/);
+ const months:Record<string,number>={janeiro:1,fevereiro:2,marco:3,abril:4,maio:5,junho:6,julho:7,agosto:8,setembro:9,outubro:10,novembro:11,dezembro:12};
+ const written=n.match(/\b(\d{1,2})\s+de\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)(?:\s+de\s+(20\d{2}))?\b/);
+ const d=numeric?Number(numeric[1]):written?Number(written[1]):NaN;
+ const mo=numeric?Number(numeric[2]):written?months[written[2]]:NaN;
+ const y=Number((numeric&&numeric[3])||(written&&written[3])||new Date().getFullYear());
+ if(!Number.isFinite(d)||!Number.isFinite(mo))return undefined;
  const dt=new Date(y,mo-1,d);if(dt.getFullYear()!==y||dt.getMonth()!==mo-1||dt.getDate()!==d)return undefined;
  return [y,String(mo).padStart(2,'0'),String(d).padStart(2,'0')].join('-');
 }
 function dateAnchors(lines:string[]){const result:Array<{index:number;date:string}>=[];lines.forEach((line,index)=>{const date=dateInLine(line);if(date)result.push({index,date})});return result.filter((a,i,all)=>i===0||a.date!==all[i-1].date)}
-function parseTimes(lines:string[]):Array<{time:string;line:string}>{
- const out:Array<{time:string;line:string}>=[];
+function parseTimes(lines:string[]):Array<{time:string;line:string;label:string}>{
+ const out:Array<{time:string;line:string;label:string}>=[];
  for(const line of lines){
   const matches=[...line.matchAll(new RegExp(TIME_RE.source,'gi'))];if(!matches.length)continue;
-  const first=matches[0];out.push({time:String(first[1]).padStart(2,'0')+':'+String(first[2]||first[3]||'00').padStart(2,'0'),line:clean(line)});
+  const first=matches[0];
+  const hasDescription=/(concentra|sa[ií]da|partida|abertura|encerramento|encontro|in[ií]cio|t[eé]rmino|recep[cç][aã]o|largada)/i.test(line);
+  const label=hasDescription?clean(line):matches.map(item=>clean(item[0])).join(' / ');
+  out.push({time:String(first[1]).padStart(2,'0')+':'+String(first[2]||first[3]||'00').padStart(2,'0'),line:clean(line),label});
  }
  return out;
 }
@@ -91,7 +98,7 @@ function makeCandidate(local:string[],all:string[],date:string|undefined,index:n
  let title=bestTitle(l,type)||bestTitle(all,type);
  if(title&&/agenda da semana|programacao semanal/i.test(norm(title))&&loc.venue)title=(type||'Mobilização')+' — '+loc.venue;
  if(!title&&loc.venue)title=(type||'Mobilização')+' — '+loc.venue;
- return {id:'suggestion-'+index+'-'+(date||'sem-data'),title:type&&loc.venue&&title&&norm(title)===norm(loc.venue)?type+' — '+loc.venue:title,type,date,time:sch[0]?.time,time_label:sch.length?sch.map(x=>x.line).join(' / ').slice(0,180):undefined,city:loc.city,state:loc.state,venue:loc.venue,address:loc.address,confidence,sourceLines:l};
+ return {id:'suggestion-'+index+'-'+(date||'sem-data'),title:type&&loc.venue&&title&&norm(title)===norm(loc.venue)?type+' — '+loc.venue:title,type,date,time:sch[0]?.time,time_label:sch.length?sch.map(x=>x.label).join(' / ').slice(0,180):undefined,city:loc.city,state:loc.state,venue:loc.venue,address:loc.address,confidence,sourceLines:l};
 }
 function detect(text:string,confidence?:number):PosterCandidate[]{
  const lines=text.split(/\r?\n/).map(clean).filter(x=>x.length>1);if(!lines.length)return [];

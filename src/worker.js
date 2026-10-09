@@ -17,7 +17,7 @@ const validDate=x=>{const v=clean(x);if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return ""
 const validTime=x=>{const m=clean(x).match(/^(\d{1,2}):([0-5]\d)$/);return !m||Number(m[1])>23?"":String(Number(m[1])).padStart(2,"0")+":"+m[2]};
 const validState=x=>/^[A-Z]{2}$/.test(clean(x).toUpperCase())?clean(x).toUpperCase():"";
 const smallTitleWords=new Set(["a","as","o","os","um","uma","uns","umas","de","da","das","do","dos","e","em","no","na","nos","nas","por","para","com","pelo","pela","pelos","pelas","ao","à","às","ou"]);
-const titleAcronyms={ufmg:"UFMG",dce:"DCE",mst:"MST",pt:"PT",psol:"PSOL",pcb:"PCB",pcdob:"PCdoB",pstu:"PSTU",cut:"CUT",une:"UNE",bh:"BH",stf:"STF",tse:"TSE",ufrj:"UFRJ",unesp:"Unesp",usp:"USP"};
+const titleAcronyms={ufmg:"UFMG",dce:"DCE",mst:"MST",pt:"PT",psol:"PSOL",pcb:"PCB",pcdob:"PCdoB",pstu:"PSTU",cut:"CUT",une:"UNE",bh:"BH",stf:"STF",tse:"TSE",tre:"TRE",masp:"MASP",ibge:"IBGE",ufrj:"UFRJ",unesp:"Unesp",usp:"USP"};
 const norm=x=>clean(x).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
 const titleCase=x=>clean(x).toLocaleLowerCase("pt-BR").split(/\s+/).filter(Boolean).map((word,index)=>{
  const cooked=word.split("-").map(part=>titleAcronyms[norm(part)]||part.charAt(0).toLocaleUpperCase("pt-BR")+part.slice(1)).join("-");
@@ -197,7 +197,7 @@ function scorePlaceResult(place,query,venue,city,state,municipalities){
 async function resolveEventGeography(event,context,env,municipalities,allowMaps=true){
  const result={...event};
  const warnings=[];
- const sourceText=[context.postText,context.posterText,context.title,context.description,context.organization,context.venue,context.address,context.city].filter(Boolean).join(" ");
+ const sourceText=[context.postText,context.posterText,context.title,context.description,context.organization,context.venue,context.address,context.city,(context.evidence||[]).join(" ")].filter(Boolean).join(" ");
  const cityEvidenceText=[result.city,result.title,result.description,result.organization,result.venue,result.address,(context.evidence||[]).join(" "),context.cityEvidence||""].filter(Boolean).join(" ");
  const hints=stateHints([result.state,sourceText].filter(Boolean).join(" "));
  let state=validState(result.state);
@@ -255,7 +255,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   const query=[queryVenue,result.address,result.city,stateName,"Brasil"].filter(Boolean).join(", ");
   const places=await searchGooglePlaces(query,env);
   if(places.configured&&places.items.length){
-   const scored=places.items.map(place=>({...place,...scorePlaceResult(place,query,queryVenue,result.city,result.state,municipalities)})).sort((a,b)=>b.score-a.score);
+   const scored=places.items.map(place=>({...place,...scorePlaceResult(place,query,queryVenue,result.city,result.state,municipalities)})).filter(place=>place.geo!==null).sort((a,b)=>b.score-a.score);
    const options=scored.map(place=>({
     id:clean(place.id),title:clean(place.displayName?.text)||"Local no Google Maps",
     address:clean(place.formattedAddress),lat:Number.isFinite(place.location?.latitude)?place.location.latitude:null,
@@ -280,7 +280,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
     result.geography_status="verified_place";
     result.geography_source="Google Maps / Places API";
     result.geography_confidence="alta";
-    result.geography_options=options;
+    result.geography_options=[];
     warnings.push("O ponto foi associado a um resultado do Google Maps por correspondência do nome e compatibilidade geográfica. Confira o link antes de publicar.");
    }else{
     result.geography_options=options;

@@ -76,6 +76,22 @@ A carga foi ampliada a partir da planilha de conferência do levantamento do twe
 
 Algumas peças do conjunto enviado são calendários ou resumos que cobrem várias atividades; elas foram usadas como evidência complementar e não convertidas automaticamente em um evento único.
 
+## Interpretação de pôsteres e validação geográfica
+
+No painel `/admin`, a ferramenta de pôsteres pode interpretar em conjunto o OCR da imagem, o texto e a URL da publicação. A saída permanece como sugestão para revisão, não como publicação automática.
+
+A verificação geográfica consulta a lista de municípios e UFs do IBGE. Nomes de prédios, tribunais, praças e pontos de encontro devem ficar em `venue`, não em `city`. Termos de mobilização como “lambe-lambe” e “colagem de lambes” são classificados como `Panfletagem`. Quando a API de lugares estiver disponível, o sistema busca endereço e coordenadas no Google Maps/Places; resultados ambíguos ficam para escolha manual.
+
+### Habilitar endereços e coordenadas no Google Maps
+
+A validação de cidade pelo IBGE funciona sem chave Google. Para pesquisar locais específicos e preencher endereço/latitude/longitude, configure a API de lugares:
+
+1. No Google Cloud Console, selecione um projeto, ative **Places API (New)** e configure faturamento. Consulte a documentação oficial de [Text Search (New)](https://developers.google.com/maps/documentation/places/web-service/text-search?hl=pt-BR) e [uso e faturamento](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing).
+2. Crie uma chave e restrinja-a à API Places necessária. Não publique a chave no repositório nem a coloque em `wrangler.jsonc`.
+3. No Cloudflare, abra **Workers & Pages → agenda-mobilizacoes → Settings → Variables and Secrets → Add → Secret**. Nomeie o segredo exatamente `GOOGLE_MAPS_API_KEY`, cole o valor e faça o deploy. Consulte [Secrets do Cloudflare Workers](https://developers.cloudflare.com/workers/configuration/secrets/).
+
+Sem esse segredo, o painel deve mostrar que o Maps não está configurado; não deve inventar um endereço ou coordenadas. O uso da Places API pode gerar cobranças conforme os campos e as consultas solicitados.
+
 ## Netlify
 
 Build command: `npm run build`

@@ -346,9 +346,15 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
  const cityEvidenceText=[result.city,result.title,result.description,result.organization,result.venue,result.address,(context.evidence||[]).join("\n"),context.cityEvidence||"",context.postText||"",context.posterText||""].filter(Boolean).join("\n");
  const identityClue=(city)=>new RegExp("(?:^| )(?:juventude|jovens|estudantes|estudantil|trabalhadores|trabalhadoras|moradores|moradoras|militantes|povo|coletivo|coletiva|alunos|alunas|professores|professoras|comunidade|sindicato|movimento|organizacao|grupo) (?:de|do|da|dos|das|em) "+escapeRegex(geoNorm(city))+"(?: |$)").test(geoNorm(sourceText));
  const hints=stateHints([result.state,sourceText].filter(Boolean).join(" "));
+ const groupStateClue=stateMentionAsGroupClue(sourceText);
  const originCityHints=municipalityGroupOriginHints(sourceText,municipalities);
  const originCityHint=originCityHints.length===1?originCityHints[0]:null;
  let state=validState(result.state);
+ if(state&&groupStateClue?.code===state&&!hints.some(hint=>hint.code===state)){
+  state="";
+  result.state="";
+  warnings.push("A UF aparece somente na identificação de um grupo/organização; será tratada como pista de pesquisa, não como estado confirmado do evento.");
+ }
  if(!state&&hints.length===1)state=hints[0].code;
  result.state=state;
  let cityMatch=getMunicipalityMatch(result.city,municipalities,state);
@@ -432,10 +438,11 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   const stateSearchHint=reliableState||(originStateName&&!result.state?originStateName:"")||(groupStateClue&&!result.state?groupStateClue.name:"");
   // Group/organization state names are search clues, not event geography by themselves.
   // Use them to constrain candidate discovery, but only assign the event's UF after the selected place confirms it.
-  const expectedCity=result.city||originCityHint?.name||"";
-  const expectedState=result.state||originCityHint?.uf||groupStateClue?.code||"";
-  const query=[queryVenue,result.address,expectedCity,stateSearchHint,"Brasil"].filter(Boolean).join(", ");
-  const places=await searchPlacesWithFallback(query,queryVenue,expectedCity,expectedState,env,municipalities,allowOSMFallback);
+  const expectedCity=result.city||"";
+  const searchCity=result.city||originCityHint?.name||"";
+  const expectedState=result.state||groupStateClue?.code||"";
+  const query=[queryVenue,result.address,searchCity,stateSearchHint,"Brasil"].filter(Boolean).join(", ");
+  const places=await searchPlacesWithFallback(query,queryVenue,searchCity,expectedState,env,municipalities,allowOSMFallback);
   if(places.configured&&places.items.length&&places.items.some(place=>getPlaceCityAndState(place,municipalities,expectedState)!==null)){
    const scored=places.items.map(place=>({...place,...scorePlaceResult(place,query,queryVenue,expectedCity,expectedState,municipalities)})).filter(place=>place.geo!==null).sort((a,b)=>b.score-a.score);
    const options=scored.map(place=>({

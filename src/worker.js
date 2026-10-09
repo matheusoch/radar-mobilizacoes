@@ -190,13 +190,13 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   const cityValue=clean(result.city);
   const stateOnly=hints.length===1&&norm(cityValue)===norm(hints[0].name);
   if(cityValue&&looksLikePlaceName(cityValue)&&!result.venue){
-   result.venue=titleCase(cityValue);result.city="";
+   result.venue=titleCase(cityValue);result.city="";result.city_needs_clear=true;
    warnings.push("O texto que estava no campo Cidade parece ser um ponto de referência/local, não um município.");
   }else if(cityValue&&stateOnly){
-   result.city="";
+   result.city="";result.city_needs_clear=true;
    warnings.push("O texto identificado em Cidade é o nome de um estado; não é um município.");
   }else if(cityValue&&hints.length===1&&norm(cityValue).includes(norm(hints[0].name))&&!looksLikePlaceName(cityValue)){
-   result.city="";
+   result.city="";result.city_needs_clear=true;
    warnings.push("O campo Cidade parece conter o nome de uma organização/grupo e uma UF, não um município; a UF fica como pista de pesquisa.");
   }else if(cityValue){
    warnings.push("O município informado não foi confirmado na base do IBGE; confira antes de publicar.");
@@ -215,7 +215,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
  }
  let queryVenue=clean(result.venue||"");
  if(!queryVenue&&looksLikePlaceName(result.city)){
-  queryVenue=titleCase(result.city);result.venue=queryVenue;result.city="";
+  queryVenue=titleCase(result.city);result.venue=queryVenue;result.city="";result.city_needs_clear=true;
   warnings.push("O nome do ponto de encontro foi movido para Local e será validado geograficamente.");
  }
  const shouldSearchPlace=Boolean(queryVenue||result.address);

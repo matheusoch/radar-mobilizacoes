@@ -765,7 +765,7 @@ const blank=():MobilizationEvent=>({
     setEditing(prev=>{
       if(!prev)return prev;
       const isExisting=Boolean(prev.db_id);
-      const assign=(current:string|undefined|null,next:string|undefined)=>next&&(!isExisting||!String(current||'').trim())?next:current;
+      const assign=(current:string|undefined|null,next:string|undefined):string|undefined=>next&&(!isExisting||!String(current||'').trim())?next:(current??undefined);
       return {...prev,title:assign(prev.title,c.title) as string,type:assign(prev.type,c.type) as string,date:assign(prev.date,c.date) as string,time:assign(prev.time,c.time),time_label:assign(prev.time_label,c.time_label),city:assign(prev.city,c.city) as string,state:assign(prev.state,c.state) as string,venue:assign(prev.venue,c.venue) as string,address:assign(prev.address,c.address)};
     });
     setMessage(candidates.length>1?'O pôster parece conter '+candidates.length+' atividades. A primeira sugestão foi carregada no editor; confira a lista e selecione outras atividades conforme necessário.':'Sugestões extraídas do pôster. Confira os campos antes de salvar.');

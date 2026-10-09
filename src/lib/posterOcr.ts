@@ -28,10 +28,10 @@ const cityUF:Record<string,string>={'belo horizonte':'MG','sao paulo':'SP','rio 
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const clean=(s:string)=>s.replace(/[•●▪■]+/g,' ').replace(/\s+/g,' ').replace(/^[\s:|–—-]+|[\s|]+$/g,'').trim();
 const SMALL_TITLE_WORDS=new Set(['a','as','o','os','um','uma','uns','umas','de','da','das','do','dos','e','em','no','na','nos','nas','por','para','com','pelo','pela','pelos','pelas','ao','à','às','ou']);
-const TITLE_ACRONYMS:Record<string,string>={ufmg:'UFMG',dce:'DCE',mst:'MST',pt:'PT',psol:'PSOL',pcb:'PCB',pcdob:'PCdoB',pstu:'PSTU',cut:'CUT',une:'UNE',bh:'BH',stf:'STF',tse:'TSE',ufrj:'UFRJ',unesp:'Unesp',usp:'USP',uol:'UOL'};
+const TITLE_ACRONYMS:Record<string,string>={ufmg:'UFMG',dce:'DCE',mst:'MST',pt:'PT',psol:'PSOL',pcb:'PCB',pcdob:'PCdoB',pstu:'PSTU',cut:'CUT',une:'UNE',bh:'BH',stf:'STF',tse:'TSE',ufrj:'UFRJ',unesp:'Unesp',usp:'USP',uol:'UOL',tre:'TRE',masp:'MASP',ibge:'IBGE',bndes:'BNDES'};
 export function normalizePtTitle(value:string):string{
  const words=value.replace(/\s+/g,' ').trim().toLocaleLowerCase('pt-BR').split(' ');
- return words.map((word,index)=>{
+ const result=words.map((word,index)=>{
   const hyphenated=word.split('-').map(part=>{
    const key=norm(part);
    if(TITLE_ACRONYMS[key])return TITLE_ACRONYMS[key];
@@ -39,6 +39,7 @@ export function normalizePtTitle(value:string):string{
   }).join('-');
   return index>0&&SMALL_TITLE_WORDS.has(word)?word:hyphenated;
  }).join(' ');
+ return result.replace(/\\bD'([a-záàâãéêíóôõúüç])/gu,(_m,letter)=>"d'"+letter.toLocaleUpperCase('pt-BR'));
 }
 export function normalizePtSentence(value:string):string{
  return value.replace(/\s+/g,' ').trim().toLocaleLowerCase('pt-BR')
@@ -51,11 +52,14 @@ function prettyCity(s:string){
 }
 function inferType(s:string):string|undefined{
  const t=norm(s);
- if(/caminhada|passeata/.test(t))return 'Caminhada';
- if(/panfletagem|bandeiracao/.test(t))return 'Panfletagem';
+ if(/lambe|colagem de cartaz|colagem de cartazes|panfletagem|distribuicao de panfleto|entrega de material/.test(t))return 'Panfletagem';
+ if(/caminhada|passeata|marcha/.test(t))return 'Caminhada';
+ if(/bandeiracao|bandeiraco/.test(t))return 'Bandeiraço';
+ if(/adesivaco/.test(t))return 'Adesivaço';
+ if(/carreata/.test(t))return 'Carreata';
  if(/plenaria/.test(t))return 'Plenária';
  if(/assembleia/.test(t))return 'Assembleia';
- if(/oficina|colagem de lambes/.test(t))return 'Oficina';
+ if(/oficina/.test(t))return 'Oficina';
  if(/debate|roda de conversa/.test(t))return 'Debate';
  if(/reuniao/.test(t))return 'Reunião';
  if(/ato publico|ato político|ato politico|\bato\b/.test(t))return 'Ato';

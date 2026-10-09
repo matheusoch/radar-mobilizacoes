@@ -36,7 +36,7 @@ export default function PosterImporter({currentImage,existingEvents,onFileSelect
   const supported=file.type.startsWith('image/')||['jpg','jpeg','jfif','png','webp','gif'].includes(ext);
   if(!supported){setStatus('Formato não reconhecido. Use JPG/JPEG/JFIF, PNG, WEBP ou GIF.');return}
   if(file.size>8*1024*1024){setStatus('O pôster deve ter no máximo 8 MB.');return}
-  const url=URL.createObjectURL(file);setPreview(url);setSelected(file);setDimensions('');setRawText('');setCandidates([]);setFileHash('');
+  const url=URL.createObjectURL(file);setPreview(url);setSelected(file);setDimensions(null);setRawText('');setCandidates([]);setFileHash('');
   try{const digest=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());setFileHash(Array.from(new Uint8Array(digest)).map(value=>value.toString(16).padStart(2,'0')).join(''))}catch{setFileHash('')}
   onFileSelected(file,url);
   const probe=new Image();probe.onload=()=>setDimensions({width:probe.naturalWidth,height:probe.naturalHeight});probe.src=url;

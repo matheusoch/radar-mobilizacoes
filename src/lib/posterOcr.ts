@@ -28,7 +28,7 @@ const cityUF:Record<string,string>={'belo horizonte':'MG','sao paulo':'SP','rio 
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const clean=(s:string)=>s.replace(/[•●▪■]+/g,' ').replace(/\s+/g,' ').replace(/^[\s:|–—-]+|[\s|]+$/g,'').trim();
 const SMALL_TITLE_WORDS=new Set(['a','as','o','os','um','uma','uns','umas','de','da','das','do','dos','e','em','no','na','nos','nas','por','para','com','pelo','pela','pelos','pelas','ao','à','às','ou']);
-const TITLE_ACRONYMS:Record<string,string>={ufmg:'UFMG',dce:'DCE',mst:'MST',pt:'PT',psol:'PSOL',pcb:'PCB',pcdob:'PCdoB',pstu:'PSTU',cut:'CUT',une:'UNE',bh:'BH',stf:'STF',tse:'TSE',ufrj:'UFRJ',unesp:'Unesp',usp:'USP',uol:'UOL',tre:'TRE',masp:'MASP',ibge:'IBGE',bndes:'BNDES'};
+const TITLE_ACRONYMS:Record<string,string>={ufmg:'UFMG',dce:'DCE',mst:'MST',pt:'PT',psol:'PSOL',pcb:'PCB',pcdob:'PCdoB',pstu:'PSTU',cut:'CUT',une:'UNE',bh:'BH',stf:'STF',tse:'TSE',tre:'TRE',trt:'TRT',tj:'TJ',tcu:'TCU',mp:'MP',mpf:'MPF',mpt:'MPT',masp:'MASP',ibge:'IBGE',dnit:'DNIT',bndes:'BNDES',ufrj:'UFRJ',ufba:'UFBA',ufro:'UFRO',unir:'UNIR',ufrgs:'UFRGS',ufsc:'UFSC',ufpr:'UFPR',uerj:'UERJ',uff:'UFF',unesp:'Unesp',usp:'USP',uol:'UOL'};
 export function normalizePtTitle(value:string):string{
  const words=value.replace(/[’‘]/g,"'").replace(/\s+/g,' ').trim().toLocaleLowerCase('pt-BR').split(' ');
  const result=words.map((word,index)=>{
@@ -52,7 +52,9 @@ function prettyCity(s:string){
 }
 function inferType(s:string):string|undefined{
  const t=norm(s);
- if(/lambe|colagem de cartaz|colagem de cartazes|panfletagem|distribuicao de panfleto|entrega de material/.test(t))return 'Panfletagem';
+ if(/lambe|colagem de cartaz|colar cartaz|colagem de cartazes|panfletagem|distribuicao de material|distribuicao de panfleto|entrega de material|entrega de panfleto|distribuicao de jornal|entrega de jornal|abordagem de rua/.test(t))return 'Panfletagem';
+ if(/brigada de rua|blitz/.test(t))return 'Mobilização de rua';
+ if(/mutirao/.test(t))return 'Mutirão';
  if(/caminhada|passeata|marcha/.test(t))return 'Caminhada';
  if(/bandeiracao|bandeiraco/.test(t))return 'Bandeiraço';
  if(/adesivaco/.test(t))return 'Adesivaço';
@@ -105,7 +107,13 @@ function locate(lines:string[],contextLines:string[]=[],allLines:string[]=[]){
  const findKnownCity=(source:string[])=>{
   for(const line of source){
    const n=norm(line);
-   const found=Object.keys(cityUF).sort((a,b)=>b.length-a.length).find(c=>n.includes(c));
+   const found=Object.keys(cityUF).sort((a,b)=>b.length-a.length).find(city=>{
+    if(!n.includes(city))return false;
+    const escaped=city.replace(/ /g,'\\\\s+');
+    const groupOrigin=new RegExp('\\\\b(?:juventude|jovens|estudantes|trabalhadores|trabalhadoras|moradores|moradoras|militantes|coletivo|coletiva|alunos|alunas|professores|professoras|comunidade|sindicato|movimento|organizacao|grupo)\\\\s+(?:de|do|da|dos|das)\\\\s+'+escaped+'\\\\b');
+    const explicitLocation=new RegExp('\\\\b(?:em|no|na|nos|nas|para|cidade de|municipio de|ato em|evento em|concentracao em|marcha em|caminhada em)\\\\s+'+escaped+'\\\\b');
+    return !groupOrigin.test(n)||explicitLocation.test(n);
+   });
    if(found)return {city:prettyCity(found),state:cityUF[found]};
   }
   return null;
@@ -116,7 +124,7 @@ function locate(lines:string[],contextLines:string[]=[],allLines:string[]=[]){
  city=fallback?.city;state=fallback?.state;
  const combined=[...lines,...contextLines];
  const address=combined.find(x=>/\b(rua|avenida|av\.|travessa|alameda|rodovia|endereco|endereço|cep)\b/i.test(x));
- const venue=combined.find(x=>/\b(praca|praça|largo|campus|uf[a-z]{2}|masp|estacao|estação|terminal|sindicato|audit[oó]rio|teatro|reitoria|rodoviaria|rodoviária|dce|hotel|parque|mercado|centro|ponto de encontro|shopping|anfiteatro|samb[oó]dromo)\b/i.test(x));
+ const venue=combined.find(x=>/\b(praca|praça|largo|campus|uf[a-z]{2}|masp|tre|tribunal|pal[aá]cio|sede|caixa d[’']?agua|caixas d[’']?agua|esta[cç][aã]o|terminal|sindicato|audit[oó]rio|teatro|reitoria|rodovi[aá]ria|dce|hotel|parque|mercado|centro|ponto de encontro|shopping|anfiteatro|samb[oó]dromo|museu|memorial|biblioteca|prefeitura|c[aâ]mara|congresso|monumento|viaduto|ponte|quadra|ginasio|rua|avenida|travessa|alameda|rodovia)\b/i.test(x));
  return {city,state,venue:venue?clean(venue):address?clean(address):undefined,address:address?clean(address):undefined};
 }
 function bestTitle(lines:string[],type?:string):string|undefined{

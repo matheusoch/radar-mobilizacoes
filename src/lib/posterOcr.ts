@@ -116,9 +116,18 @@ function extractVenueClue(lines:string[]):string|undefined{
 function locate(lines:string[],contextLines:string[]=[],allLines:string[]=[]){
  let city:string|undefined,state:string|undefined;
  const findCityState=(source:string[])=>{
+  const commonCities=Object.keys(cityUF).sort((a,b)=>b.length-a.length);
+  const stateNames=new Set(['acre','alagoas','amapa','amazonas','bahia','ceara','distrito federal','espirito santo','goias','maranhao','mato grosso','mato grosso do sul','minas gerais','para','paraiba','parana','pernambuco','piaui','rio de janeiro','rio grande do norte','rio grande do sul','rondonia','roraima','santa catarina','sao paulo','sergipe','tocantins']);
+  const groupIdentity=/^(?:juventude|jovens|estudantes|estudantil|trabalhadores|trabalhadoras|moradores|moradoras|militantes|coletivo|coletiva|alunos|alunas|professores|professoras|comunidade|sindicato|movimento|organizacao|grupo) (?:de|do|da|dos|das) /;
   for(const line of source){
-   const m=line.match(/(?:^|[,;|])\s*([^,;|]{2,45}?)\s*[-/·]\s*([A-Z]{2})\b/);
-   if(m&&states.has(m[2].toUpperCase()))return {city:prettyCity(m[1]),state:m[2].toUpperCase()};
+   const m=line.match(/(?:^|[,;|])\s*([^,;|]{2,70}?)\s*[-/·]\s*([A-Z]{2})\b/);
+   if(!m||!states.has(m[2].toUpperCase()))continue;
+   const left=clean(m[1]),key=norm(left),uf=m[2].toUpperCase();
+   if(groupIdentity.test(key))continue;
+   const foundCity=commonCities.find(city=>key===city||key.endsWith(' '+city));
+   if(foundCity)return {city:prettyCity(foundCity),state:uf};
+   if(stateNames.has(key)||venueKeyword.test(key))return {city:undefined,state:uf};
+   return {city:prettyCity(left),state:uf};
   }
   return null;
  };

@@ -786,11 +786,16 @@ async function handler(request,env){
    };
   });
   let geographicallyChecked=cleaned;
+  // For multi-event posters, prevent one candidate from borrowing another event's city/state clues.
+  // The model's event-specific evidence and organization fields remain available to the resolver.
+  const sharedGeoContext=cleaned.length===1
+   ?[publicationText,posterText,researchResults.map(item=>"[ "+item.platform+" ] "+item.url+" "+item.text).join("\n")].filter(Boolean).join("\n")
+   :"";
   try{
    const municipalities=await getIBGEMunicipalities();
    if(env.GOOGLE_MAPS_API_KEY){
     geographicallyChecked=await Promise.all(cleaned.map((event,index)=>resolveEventGeography(event,{
-     postText:publicationText,posterText,title:event.title,description:event.description,
+     postText:sharedGeoContext,posterText:sharedGeoContext,title:event.title,description:event.description,
      organization:event.organization,city:event.city,venue:event.venue,address:event.address,
      evidence:event.evidence,cityEvidence:event.evidence?.join(" ")
     },env,municipalities,index<6,false)));
@@ -799,7 +804,7 @@ async function handler(request,env){
     for(let index=0;index<cleaned.length;index++){
      const event=cleaned[index];
      geographicallyChecked.push(await resolveEventGeography(event,{
-      postText:publicationText,posterText,title:event.title,description:event.description,
+      postText:sharedGeoContext,posterText:sharedGeoContext,title:event.title,description:event.description,
       organization:event.organization,city:event.city,venue:event.venue,address:event.address,
       evidence:event.evidence,cityEvidence:event.evidence?.join(" ")
      },env,municipalities,index<3,true));

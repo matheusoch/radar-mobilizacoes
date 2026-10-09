@@ -30,7 +30,7 @@ const clean=(s:string)=>s.replace(/[•●▪■]+/g,' ').replace(/\s+/g,' ').re
 const SMALL_TITLE_WORDS=new Set(['a','as','o','os','um','uma','uns','umas','de','da','das','do','dos','e','em','no','na','nos','nas','por','para','com','pelo','pela','pelos','pelas','ao','à','às','ou']);
 const TITLE_ACRONYMS:Record<string,string>={ufmg:'UFMG',dce:'DCE',mst:'MST',pt:'PT',psol:'PSOL',pcb:'PCB',pcdob:'PCdoB',pstu:'PSTU',cut:'CUT',une:'UNE',bh:'BH',stf:'STF',tse:'TSE',ufrj:'UFRJ',unesp:'Unesp',usp:'USP',uol:'UOL',tre:'TRE',masp:'MASP',ibge:'IBGE',bndes:'BNDES'};
 export function normalizePtTitle(value:string):string{
- const words=value.replace(/\s+/g,' ').trim().toLocaleLowerCase('pt-BR').split(' ');
+ const words=value.replace(/[’‘]/g,"'").replace(/\s+/g,' ').trim().toLocaleLowerCase('pt-BR').split(' ');
  const result=words.map((word,index)=>{
   const hyphenated=word.split('-').map(part=>{
    const key=norm(part);

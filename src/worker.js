@@ -49,7 +49,7 @@ const stateDirectory=[
 ];
 const stateCodeByName=new Map(stateDirectory.map(([code,name])=>[norm(name),code]));
 let ibgeMunicipalitiesPromise=null;
-const escapeRegex=value=>value.replace(/[.*+?^$|(){}[\]\\]/g,"\\async function getAdmin(request,env){");
+const escapeRegex=value=>value.replace(/[.*+?^$|(){}[\\]\\]/g,char=>String.fromCharCode(92)+char);
 async function getIBGEMunicipalities(){
  if(!ibgeMunicipalitiesPromise){
   ibgeMunicipalitiesPromise=(async()=>{

@@ -122,6 +122,53 @@ const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiB
    }
   }finally{setAiBusy(false)}
  };
+ const researchElsewhere=async()=>{
+  const combinedPost=postText.trim(),combinedPoster=rawText.trim();
+  if(!combinedPost&&!combinedPoster&&!postUrl.trim()&&!candidates.length){
+   setResearchStatus('Anexe um pôster, cole o texto da publicação ou interprete o material primeiro.');
+   return;
+  }
+  setResearchBusy(true);setResearchStatus('Extraindo termos e consultando fontes públicas…');setResearchResults([]);setResearchProviders([]);
+  try{
+   const token=await getAuthToken();
+   if(!token)throw new Error('A sessão expirou. Entre novamente no painel administrativo.');
+   const response=await fetch('/api/research-events',{
+    method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+token},
+    body:JSON.stringify({
+     postText:combinedPost,postUrl:postUrl.trim(),posterText:combinedPoster,
+     candidates:candidates.slice(0,8).map(candidate=>({
+      title:candidate.title,type:candidate.type,date:candidate.date,time:candidate.time,
+      time_label:candidate.time_label,city:candidate.city,state:candidate.state,venue:candidate.venue,
+      address:candidate.address,organization:candidate.organization,hashtags:candidate.hashtags
+     }))
+    })
+   });
+   const payload=await response.json().catch(()=>({}));
+   if(!response.ok)throw new Error(typeof payload.error==='string'?payload.error:'Não foi possível pesquisar outras redes.');
+   const found:ResearchResult[]=(Array.isArray(payload.results)?payload.results:[]).filter((item:any)=>item&&typeof item.url==='string'&&item.url.startsWith('https://')).map((item:any)=>({
+    platform:typeof item.platform==='string'?item.platform:'Fonte pública',
+    title:typeof item.title==='string'?item.title:'Publicação relacionada',
+    text:typeof item.text==='string'?item.text:'',
+    url:item.url,author:typeof item.author==='string'?item.author:undefined,
+    handle:typeof item.handle==='string'?item.handle:undefined,
+    publishedAt:typeof item.publishedAt==='string'?item.publishedAt:undefined,
+    likes:Number(item.likes)||0,reposts:Number(item.reposts)||0,relevance:Number(item.relevance)||0
+   }));
+   const providers:ResearchProvider[]=(Array.isArray(payload.providers)?payload.providers:[]).map((item:any)=>({
+    platform:String(item.platform||'Fonte'),status:String(item.status||'unavailable'),
+    message:String(item.message||''),count:Number(item.count)||0
+   }));
+   setResearchResults(found);setResearchProviders(providers);
+   setResearchStatus(typeof payload.summary==='string'?payload.summary:found.length+' publicação(ões) encontrada(s).');
+   if(found.length){
+    setResearchStatus(found.length+' publicação(ões) encontrada(s). Cruzando os trechos com o pôster e a publicação original…');
+    await interpretCombined(found.slice(0,20));
+    setResearchStatus('Pesquisa concluída: '+found.length+' publicação(ões) relacionadas para conferir. A interpretação foi refeita com esses trechos adicionais.');
+   }
+  }catch(error){
+   setResearchStatus(error instanceof Error?error.message:'Falha ao pesquisar outras redes. Tente novamente.');
+  }finally{setResearchBusy(false)}
+ };
  const loadPastedImageUrl=useCallback(async(url:string)=>{
   try{
    const response=await fetch(url,{mode:'cors'});

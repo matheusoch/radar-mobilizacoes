@@ -113,8 +113,8 @@ function extractVenueClue(text){
  return "";
 }
 function cityMatchesForText(text,municipalities,state){
- const t=geoNorm(text);
- const found=municipalities.filter(item=>item.key.length>3&&new RegExp("(^| )"+escapeRegex(item.key)+"( |$)").test(t));
+ const t=" "+geoNorm(text)+" ";
+ const found=municipalities.filter(item=>item.key.length>3&&t.includes(" "+item.key+" "));
  const filtered=state?found.filter(item=>item.uf===state):found;
  return [...new Map(filtered.map(item=>[item.key+"|"+item.uf,item])).values()].sort((a,b)=>b.key.length-a.key.length);
 }

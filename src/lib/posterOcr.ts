@@ -1,7 +1,14 @@
+export type GeographyPlaceOption = {
+  id:string; title:string; address:string; lat:number|null; lng:number|null;
+  city?:string; state?:string; score:number; maps_url?:string; types?:string[];
+};
 export type PosterCandidate = {
   id: string; title?: string; type?: string; date?: string; time?: string; time_label?: string;
   city?: string; state?: string; venue?: string; address?: string; confidence?: number; sourceLines: string[];
   organization?: string; description?: string; hashtags?: string[]; evidence?: string[]; missing_fields?: string[]; inferred_title?: boolean; ai_confidence?: string; source_url?: string;
+  lat?:number|null; lng?:number|null; maps_url?:string;
+  geography_status?:string; geography_source?:string; geography_confidence?:string;
+  geography_warnings?:string[]; geography_options?:GeographyPlaceOption[];
 };
 type OcrWorker = { recognize:(image:File)=>Promise<{data:{text:string;confidence?:number}}>; terminate:()=>Promise<void> };
 type TesseractApi = { createWorker:(languages:string,oem?:number)=>Promise<OcrWorker> };

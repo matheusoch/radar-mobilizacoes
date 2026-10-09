@@ -825,13 +825,16 @@ const blank=():MobilizationEvent=>({
   };
   const useGeographyOption=(option:any)=>{
     if(!editing)return;
+    const osmSource=String(option.maps_url||'').includes('openstreetmap.org');
+    const attribution=osmSource?'Dados cartográficos: © OpenStreetMap contributors.':'';
     setEditing({...editing,
       venue:option.title?normalizePtTitle(option.title):editing.venue,
       address:option.address?normalizePtTitle(option.address):editing.address,
       city:option.city?normalizePtTitle(option.city):editing.city,
       state:option.state?String(option.state).toUpperCase():editing.state,
       lat:typeof option.lat==='number'?option.lat:null,
-      lng:typeof option.lng==='number'?option.lng:null
+      lng:typeof option.lng==='number'?option.lng:null,
+      notes:[editing.notes,attribution].filter(Boolean).filter((value,index,items)=>items.indexOf(value)===index).join('\n')
     });
     setGeoOptions([]);
     setMessage('Resultado geográfico selecionado manualmente. Confira o endereço e as coordenadas antes de salvar.');
@@ -872,7 +875,9 @@ const blank=():MobilizationEvent=>({
       candidate.missing_fields?.length?'Campos a confirmar: '+candidate.missing_fields.join(', '):'',
       candidate.inferred_title?'Título sintetizado a partir do contexto; confirmar se representa o nome oficial.':'',
       candidate.sourceLines?.length?'Texto reconhecido do pôster: '+candidate.sourceLines.slice(0,12).join(' | ').slice(0,1800):'',
-      candidate.geography_warnings?.length?'Observações geográficas: '+candidate.geography_warnings.join(' | '):''
+      candidate.geography_source?'Fonte da verificação geográfica: '+candidate.geography_source:'',
+      candidate.geography_warnings?.length?'Observações geográficas: '+candidate.geography_warnings.join(' | '):'',
+      candidate.geography_source?.includes('OpenStreetMap')?'Dados cartográficos: © OpenStreetMap contributors.':''
     ].filter(Boolean).join('\n');
     setEditing(prev=>{
       const target=sameEvent&&prev?prev:blank();

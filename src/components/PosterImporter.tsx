@@ -92,6 +92,7 @@ const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiB
     time:typeof event.time==='string'&&event.time?event.time:undefined,
     time_label:typeof event.time_label==='string'&&event.time_label?normalizePtTitle(event.time_label):undefined,
     city:typeof event.city==='string'&&event.city?normalizePtTitle(event.city):undefined,
+    city_needs_clear:Boolean(event.city_needs_clear),
     state:typeof event.state==='string'&&event.state?event.state:undefined,
     venue:typeof event.venue==='string'&&event.venue?normalizePtTitle(event.venue):undefined,
     address:typeof event.address==='string'&&event.address?normalizePtTitle(event.address):undefined,

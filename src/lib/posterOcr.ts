@@ -64,20 +64,30 @@ function parseTimes(lines:string[]):Array<{time:string;line:string;label:string}
  }
  return out;
 }
-function locate(lines:string[],allLines:string[]){
+function locate(lines:string[],contextLines:string[]=[]){
  let city:string|undefined,state:string|undefined;
- for(const line of allLines){
-  const m=line.match(/(?:^|[,;|])\s*([^,;|]{2,45}?)\s*[-/·]\s*([A-Z]{2})\b/);
-  if(m&&states.has(m[2].toUpperCase())){city=prettyCity(m[1]);state=m[2].toUpperCase();break}
- }
- if(!city){
-  for(const line of allLines){
-   const n=norm(line);const found=Object.keys(cityUF).sort((a,b)=>b.length-a.length).find(c=>n.includes(c));
-   if(found){city=prettyCity(found);state=cityUF[found];break}
+ const findCityState=(source:string[])=>{
+  for(const line of source){
+   const m=line.match(/(?:^|[,;|])\s*([^,;|]{2,45}?)\s*[-/·]\s*([A-Z]{2})\b/);
+   if(m&&states.has(m[2].toUpperCase()))return {city:prettyCity(m[1]),state:m[2].toUpperCase()};
   }
- }
- const address=lines.find(x=>/\b(rua|avenida|av\.|travessa|alameda|rodovia|endereco|endereço|cep)\b/i.test(x));
- const venue=lines.find(x=>/\b(praca|praça|largo|campus|uf[a-z]{2}|masp|estacao|estação|terminal|sindicato|audit[oó]rio|teatro|reitoria|rodoviaria|rodoviária|dce|hotel|parque|mercado|centro|ponto de encontro)\b/i.test(x));
+  return null;
+ };
+ const findKnownCity=(source:string[])=>{
+  for(const line of source){
+   const n=norm(line);
+   const found=Object.keys(cityUF).sort((a,b)=>b.length-a.length).find(c=>n.includes(c));
+   if(found)return {city:prettyCity(found),state:cityUF[found]};
+  }
+  return null;
+ };
+ const local=findCityState(lines)||findKnownCity(lines);
+ const context=[...contextLines].reverse();
+ const fallback=local||findCityState(context)||findKnownCity(context);
+ city=fallback?.city;state=fallback?.state;
+ const combined=[...lines,...contextLines];
+ const address=combined.find(x=>/\b(rua|avenida|av\.|travessa|alameda|rodovia|endereco|endereço|cep)\b/i.test(x));
+ const venue=combined.find(x=>/\b(praca|praça|largo|campus|uf[a-z]{2}|masp|estacao|estação|terminal|sindicato|audit[oó]rio|teatro|reitoria|rodoviaria|rodoviária|dce|hotel|parque|mercado|centro|ponto de encontro|shopping|anfiteatro|samb[oó]dromo)\b/i.test(x));
  return {city,state,venue:venue?clean(venue):address?clean(address):undefined,address:address?clean(address):undefined};
 }
 function bestTitle(lines:string[],type?:string):string|undefined{
@@ -92,35 +102,62 @@ function bestTitle(lines:string[],type?:string):string|undefined{
  const score=(line:string)=>{const n=norm(line);let s=Math.min(line.length,70)/20;if(/agenda da semana|programacao semanal/.test(n))s-=2;if(/mobilizacao|manifestacao|protesto|marcha|caminhada|ato|plenaria|assembleia|reuniao|oficina|estudantes|democracia|virada/.test(n))s+=2;if(type&&n===norm(type))s-=2;return s};
  return candidates.sort((a,b)=>score(b)-score(a))[0];
 }
-function makeCandidate(local:string[],all:string[],date:string|undefined,index:number,confidence?:number):PosterCandidate{
+function makeCandidate(local:string[],all:string[],date:string|undefined,index:number,confidence?:number,contextLines:string[]=[]):PosterCandidate{
  const l=local.map(clean).filter(x=>x.length>1), text=l.join(' ');
- const sch=parseTimes(l), loc=locate(l,all), type=inferType(text)||inferType(all.join(' '));
- let title=bestTitle(l,type)||bestTitle(all,type);
- if(title&&/agenda da semana|programacao semanal/i.test(norm(title))&&loc.venue)title=(type||'Mobilização')+' — '+loc.venue;
+ const scheduleLines=l.filter(line=>parseTimes([line]).length>0);
+ const sch=parseTimes(l), loc=locate(l,contextLines.length?contextLines:all), type=inferType(text)||inferType(all.join(' '));
+ let title=bestTitle(l,type)||bestTitle(contextLines,type)||bestTitle(all,type);
+ if(title&&/agenda da semana|programacao semanal|agenda de mobilizacoes/.test(norm(title))&&loc.venue)title=(type||'Mobilização')+' — '+loc.venue;
  if(!title&&loc.venue)title=(type||'Mobilização')+' — '+loc.venue;
- return {id:'suggestion-'+index+'-'+(date||'sem-data'),title:type&&loc.venue&&title&&norm(title)===norm(loc.venue)?type+' — '+loc.venue:title,type,date,time:sch[0]?.time,time_label:sch.length?sch.map(x=>x.label).join(' / ').slice(0,180):undefined,city:loc.city,state:loc.state,venue:loc.venue,address:loc.address,confidence,sourceLines:l};
+ return {id:'suggestion-'+index+'-'+(date||'sem-data'),title,type,date,time:sch[0]?.time,time_label:scheduleLines.map(clean).join(' / ').slice(0,180)||undefined,city:loc.city,state:loc.state,venue:loc.venue,address:loc.address,confidence,sourceLines:l};
 }
 function detect(text:string,confidence?:number):PosterCandidate[]{
- const lines=text.split(/\r?\n/).map(clean).filter(x=>x.length>1);if(!lines.length)return [];
- const anchors=dateAnchors(lines), out:PosterCandidate[]=[];
- if(anchors.length>=2){
-  anchors.forEach((a,index)=>{
-   const next=anchors[index+1],start=Math.max(0,a.index-1),end=next?next.index:Math.min(lines.length,a.index+7),group=lines.slice(start,end);
-   const times=group.filter(line=>parseTimes([line]).length>0);
-   const splitTimes=times.length>1&&!times.some(line=>/(concentra|sa[ií]da|partida|abertura|encerramento|encontro)/i.test(line));
-   if(splitTimes){
-    times.forEach(line=>{const i=group.indexOf(line);const local=group.slice(Math.max(0,i-2),Math.min(group.length,i+3));out.push(makeCandidate(local,lines,a.date,out.length,confidence))});
-   }else out.push(makeCandidate(group,lines,a.date,out.length,confidence));
+ const lines=text.split(/\r?\n/).map(clean).filter(x=>x.length>1);
+ if(!lines.length)return [];
+ const anchors=dateAnchors(lines);
+ const sections:Array<{start:number;end:number;date?:string}>=[];
+ if(anchors.length){
+  anchors.forEach((anchor,index)=>{
+   sections.push({start:anchor.index+1,end:anchors[index+1]?.index??lines.length,date:anchor.date});
   });
- }else{
-  const timeLines=lines.filter(line=>parseTimes([line]).length>0);
-  const splitTimes=timeLines.length>=2&&!timeLines.some(line=>/(concentra|sa[ií]da|partida|abertura|encerramento|encontro)/i.test(line));
-  if(splitTimes)timeLines.forEach(line=>{const i=lines.indexOf(line);out.push(makeCandidate(lines.slice(Math.max(0,i-2),Math.min(lines.length,i+3)),lines,anchors[0]?.date,out.length,confidence))});
-  else out.push(makeCandidate(lines,lines,anchors[0]?.date,out.length,confidence));
+  if(anchors[0].index>0)sections.unshift({start:0,end:anchors[0].index,date:undefined});
+ }else sections.push({start:0,end:lines.length,date:undefined});
+ const out:PosterCandidate[]=[];
+ for(const section of sections){
+  const segment=lines.slice(section.start,section.end);
+  if(!segment.length)continue;
+  const timeIndexes:number[]=[];
+  segment.forEach((line,index)=>{if(parseTimes([line]).length)timeIndexes.push(index)});
+  if(!timeIndexes.length){
+   if(segment.some(line=>inferType(line)))out.push(makeCandidate(segment,lines,section.date,out.length,confidence,segment));
+   continue;
+  }
+  const eventIndexes:number[]=[];
+  for(const index of timeIndexes){
+   const line=segment[index]||'';
+   const previous=eventIndexes.length?segment[eventIndexes[eventIndexes.length-1]]||'':'';
+   // "Concentração" and "saída/partida" on consecutive lines are phases of one mobilization, not two events.
+   if(eventIndexes.length&&/(concentra|encontro)/i.test(previous)&&/(sa[ií]da|partida)/i.test(line))continue;
+   eventIndexes.push(index);
+  }
+  eventIndexes.forEach((localStart,position)=>{
+   const localEnd=eventIndexes[position+1]??segment.length;
+   const local=segment.slice(localStart,localEnd);
+   const prefix=segment.slice(0,localStart).slice(-4);
+   const context=[...prefix,...local];
+   out.push(makeCandidate(local,lines,section.date,out.length,confidence,context));
+  });
  }
  const unique:PosterCandidate[]=[];
- for(const c of out){const key=[c.date||'',c.time||'',norm(c.city||''),norm(c.venue||''),norm(c.title||'')].join('|');if(!unique.some(x=>[x.date||'',x.time||'',norm(x.city||''),norm(x.venue||''),norm(x.title||'')].join('|')===key))unique.push({...c,id:'suggestion-'+unique.length})}
+ const keys=new Set<string>();
+ for(const candidate of out){
+  const key=[candidate.date||'',candidate.time||'',norm(candidate.city||''),norm(candidate.venue||''),norm(candidate.title||'')].join('|');
+  if(!keys.has(key)){keys.add(key);unique.push({...candidate,id:'suggestion-'+unique.length})}
+ }
  return unique;
+}
+export function extractPosterEventsFromText(text:string,confidence?:number):PosterCandidate[]{
+ return detect(text,confidence);
 }
 export async function extractPosterEvents(file:File):Promise<{text:string;confidence?:number;candidates:PosterCandidate[]}>{
  const api=await loadTesseract(),worker=await api.createWorker('por+eng');

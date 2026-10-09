@@ -772,7 +772,12 @@ const blank=():MobilizationEvent=>({
   };
   const useOcrCandidate=(candidate:PosterCandidate,file:File,previewUrl:string)=>{
     const normalizeText=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
-    const sameEvent=Boolean(editing?.db_id&&(!candidate.date||candidate.date===editing.date)&&(!candidate.city||normalizeText(candidate.city)===normalizeText(editing.city))&&((candidate.title&&normalizeText(candidate.title)===normalizeText(editing.title))||(candidate.venue&&normalizeText(candidate.venue)===normalizeText(editing.venue))));
+    const sameDate=Boolean(editing?.db_id&&(!candidate.date||candidate.date===editing.date));
+    const sameCity=Boolean(editing?.db_id&&(!candidate.city||normalizeText(candidate.city)===normalizeText(editing.city)));
+    const titleMatches=Boolean(candidate.title&&normalizeText(candidate.title)===normalizeText(editing?.title||''));
+    const venueMatches=Boolean(candidate.venue&&normalizeText(candidate.venue)===normalizeText(editing?.venue||''));
+    const timeMatches=Boolean(candidate.time&&editing?.time&&candidate.time.slice(0,5)===editing.time.slice(0,5));
+    const sameEvent=Boolean(editing?.db_id&&sameDate&&sameCity&&(titleMatches&&(venueMatches||timeMatches||!candidate.venue)||venueMatches&&timeMatches));
     setEditing(prev=>{
       const target=sameEvent&&prev?prev:blank();
       return {...target,title:candidate.title||target.title,type:candidate.type||target.type,date:candidate.date||target.date,time:candidate.time||target.time,time_label:candidate.time_label||target.time_label,city:candidate.city||target.city,state:candidate.state||target.state,venue:candidate.venue||target.venue,address:candidate.address||target.address,public:sameEvent?target.public:false,status:sameEvent?target.status:'pending'};

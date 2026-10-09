@@ -204,7 +204,8 @@ function placeComponent(components,types){
 function getPlaceCityAndState(place,municipalities,preferredState){
  const components=place.addressComponents||[];
  const country=placeComponent(components,["country"]);
- if(country&&country.shortText!=="BR"&&!/brazil|brasil/i.test(country.longText||""))return null;
+ if(!country)return null;
+ if(String(country.shortText||"").toUpperCase()!=="BR"&&!/brazil|brasil/i.test(country.longText||""))return null;
  const stateComp=placeComponent(components,["administrative_area_level_1"]);
  const returnedState=validState(stateComp?.shortText||"")||stateDirectory.find(([,name])=>norm(name)===norm(stateComp?.longText||""))?.[0]||"";
  const componentCandidates=[
@@ -216,10 +217,12 @@ function getPlaceCityAndState(place,municipalities,preferredState){
  let municipality=null;
  for(const component of componentCandidates){
   const query=clean(component.longText||component.shortText||"");
-  const m=getMunicipalityMatch(query,municipalities,returnedState||preferredState);
+  // The map result itself must support the city. A group/organization's state is only a search hint,
+  // not sufficient evidence to disambiguate homonymous municipalities.
+  const m=getMunicipalityMatch(query,municipalities,returnedState);
   if(m.match){municipality=m.match;break}
  }
- return {city:municipality?.name||"",state:municipality?.uf||returnedState||preferredState||"",country:country?.longText||""};
+ return {city:municipality?.name||"",state:municipality?.uf||returnedState||"",country:country?.longText||""};
 }
 async function searchGooglePlaces(query,env){
  const key=env.GOOGLE_MAPS_API_KEY||"";
@@ -293,7 +296,7 @@ async function searchOpenStreetMap(query,venue,city,state,municipalities){
   const cityValues=[props.city,props.town,props.village,props.municipality,props.locality,props.county].map(value=>clean(value||"")).filter(Boolean);
   let municipality=null;
   for(const cityValue of cityValues){
-   const match=getMunicipalityMatch(cityValue,municipalities,stateCode||state);
+   const match=getMunicipalityMatch(cityValue,municipalities,stateCode);
    if(match.match){municipality=match.match;break}
   }
   const cityName=municipality?.name||"";

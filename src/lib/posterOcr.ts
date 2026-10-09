@@ -108,11 +108,12 @@ function locate(lines:string[],contextLines:string[]=[],allLines:string[]=[]){
   for(const line of source){
    const n=norm(line);
    const found=Object.keys(cityUF).sort((a,b)=>b.length-a.length).find(city=>{
-    if(!n.includes(city))return false;
-    const escaped=city.replace(/ /g,'\\\\s+');
-    const groupOrigin=new RegExp('\\\\b(?:juventude|jovens|estudantes|trabalhadores|trabalhadoras|moradores|moradoras|militantes|coletivo|coletiva|alunos|alunas|professores|professoras|comunidade|sindicato|movimento|organizacao|grupo)\\\\s+(?:de|do|da|dos|das)\\\\s+'+escaped+'\\\\b');
-    const explicitLocation=new RegExp('\\\\b(?:em|no|na|nos|nas|para|cidade de|municipio de|ato em|evento em|concentracao em|marcha em|caminhada em)\\\\s+'+escaped+'\\\\b');
-    return !groupOrigin.test(n)||explicitLocation.test(n);
+    const at=n.indexOf(city);
+    if(at<0)return false;
+    const before=n.slice(0,at);
+    const identityTail=/(?:^| )(?:juventude|jovens|estudantes|trabalhadores|trabalhadoras|moradores|moradoras|militantes|coletivo|coletiva|alunos|alunas|professores|professoras|comunidade|sindicato|movimento|organizacao|grupo) (?:de|do|da|dos|das)$/.test(before);
+    const explicitLocation=new RegExp('(?:^| )(?:em|no|na|nos|nas|para|cidade de|municipio de|ato em|evento em|concentracao em|marcha em|caminhada em) '+city+'(?: |$)');
+    return !identityTail||explicitLocation.test(n);
    });
    if(found)return {city:prettyCity(found),state:cityUF[found]};
   }
@@ -124,7 +125,7 @@ function locate(lines:string[],contextLines:string[]=[],allLines:string[]=[]){
  city=fallback?.city;state=fallback?.state;
  const combined=[...lines,...contextLines];
  const address=combined.find(x=>/\b(rua|avenida|av\.|travessa|alameda|rodovia|endereco|endereço|cep)\b/i.test(x));
- const venue=combined.find(x=>/\b(praca|praça|largo|campus|uf[a-z]{2}|masp|tre|tribunal|pal[aá]cio|sede|caixa d[’']?agua|caixas d[’']?agua|esta[cç][aã]o|terminal|sindicato|audit[oó]rio|teatro|reitoria|rodovi[aá]ria|dce|hotel|parque|mercado|centro|ponto de encontro|shopping|anfiteatro|samb[oó]dromo|museu|memorial|biblioteca|prefeitura|c[aâ]mara|congresso|monumento|viaduto|ponte|quadra|ginasio|rua|avenida|travessa|alameda|rodovia)\b/i.test(x));
+ const venue=combined.find(x=>/\\b(praca|praça|largo|campus|uf[a-z]{2}|masp|tre|tribunal|pal[aá]cio|sede|caixas? d[’']?[áa]gua|esta[cç][aã]o|terminal|sindicato|audit[oó]rio|teatro|reitoria|rodovi[aá]ria|dce|hotel|parque|mercado|centro|ponto de encontro|shopping|anfiteatro|samb[oó]dromo|museu|memorial|biblioteca|prefeitura|c[aâ]mara|congresso|monumento|viaduto|ponte|quadra|ginasio|rua|avenida|travessa|alameda|rodovia)\\b/i.test(x));
  return {city,state,venue:venue?clean(venue):address?clean(address):undefined,address:address?clean(address):undefined};
 }
 function bestTitle(lines:string[],type?:string):string|undefined{

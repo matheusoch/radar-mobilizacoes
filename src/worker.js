@@ -94,16 +94,16 @@ function buildFallbackQueries(body){
  const candidates=Array.isArray(body.candidates)?body.candidates.slice(0,8):[];
  const all=[shortText(body.postText,6000),shortText(body.posterText,9000)].filter(Boolean).join("\n");
  const terms=[];
- const add=value=>{const q=shortText(value,100).replace(/^[#\\s]+|[#\\s]+$/g,"").replace(/\\s+/g," ").trim();if(q&&q.split(" ").filter(x=>x.length>2).length>=1&&!terms.some(x=>norm(x)===norm(q)))terms.push(q)};
+ const add=value=>{const q=shortText(value,100).replace(/^[#\s]+|[#\s]+$/g,"").replace(/\s+/g," ").trim();if(q&&q.split(" ").filter(x=>x.length>2).length>=1&&!terms.some(x=>norm(x)===norm(q)))terms.push(q)};
  for(const item of candidates){
   const title=shortText(item.title,100),city=shortText(item.city,50),venue=shortText(item.venue,60),org=shortText(item.organization,70);
   if(title)add([title,city].filter(Boolean).join(" "));
   if(org)add([org,city].filter(Boolean).join(" "));
   if(venue)add([venue,city].filter(Boolean).join(" "));
  }
- const tags=[...new Set((all.match(/#[\\p{L}\\p{N}_]+/gu)||[]).map(x=>x.slice(1)))];
+ const tags=[...new Set((all.match(/#[\p{L}\p{N}_]+/gu)||[]).map(x=>x.slice(1)))];
  for(const tag of tags.slice(0,3))add("#"+tag);
- const lines=all.split(/\\r?\\n/).map(clean).filter(x=>x.length>=10&&x.length<=115&&!/^https?:/i.test(x));
+ const lines=all.split(/\r?\n/).map(clean).filter(x=>x.length>=10&&x.length<=115&&!/^https?:/i.test(x));
  for(const line of lines.slice(0,4))add(line);
  if(!terms.length)add(all.slice(0,90));
  return terms.slice(0,4);
@@ -142,14 +142,13 @@ async function searchMastodonInstance(host,query,token){
  const statuses=Array.isArray(r.data.statuses)?r.data.statuses:[];
  return {ok:true,items:statuses.map(s=>({
   platform:"Mastodon",title:shortText((s.account&& (s.account.display_name||s.account.acct))||"Publicação no Mastodon",150),
-  text:shortText((s.content||"").replace(/<br\\s*\\/?\\s*>/gi," ").replace(/<[^>]+>/g," ").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'"),700),
+  text:shortText((s.content||"").replace(/<br\s*\/?\s*>/gi," ").replace(/<[^>]+>/g," ").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'"),700),
   url:shortText(s.url||s.uri,500),author:shortText(s.account?.display_name||s.account?.acct||"",100),handle:shortText(s.account?.acct||"",100),publishedAt:shortText(s.created_at||"",50),likes:Number(s.favourites_count)||0,reposts:Number(s.reblogs_count)||0
  })).filter(x=>/^https:\/\//.test(x.url)&&x.text)};
 }
 async function searchX(query,token){
- const url="https://api.x.com/2/tweets/search/recent?query="+encodeURIComponent(query+" -is:retweet")+" &max_results=10&tweet.fields=created_at,author_id,public_metrics,entities&expansions=author_id&user.fields=username,name";
- const fixed=url.replace(" +&max_results","&max_results");
- const r=await responseJson(fixed,{Authorization:"Bearer "+token});
+ const url="https://api.x.com/2/tweets/search/recent?query="+encodeURIComponent(query+" -is:retweet")+"&max_results=10&tweet.fields=created_at,author_id,public_metrics,entities&expansions=author_id&user.fields=username,name";
+ const r=await responseJson(url,{Authorization:"Bearer "+token});
  if(!r.ok)return {ok:false,items:[]};
  const users=new Map((r.data.includes?.users||[]).map(u=>[u.id,u]));
  const tweets=Array.isArray(r.data.data)?r.data.data:[];
@@ -180,12 +179,12 @@ async function researchHandler(request,env){
  let body;try{body=JSON.parse(raw)}catch{return json({error:"Pedido de pesquisa inválido."},400)}
  const postText=shortText(body.postText,8000),posterText=shortText(body.posterText,12000),postUrl=shortText(body.postUrl,500);
  const candidates=Array.isArray(body.candidates)?body.candidates.slice(0,8):[];
- const seedText=[postText,posterText,candidates.map(x=>[x.title,x.organization,x.hashtags?.join(" "),x.city,x.state,x.venue].filter(Boolean).join(" ")).join("\\n")].filter(Boolean).join("\\n");
+ const seedText=[postText,posterText,candidates.map(x=>[x.title,x.organization,x.hashtags?.join(" "),x.city,x.state,x.venue].filter(Boolean).join(" ")).join("\n")].filter(Boolean).join("\n");
  if(!seedText.trim()&&!postUrl)return json({error:"Anexe um pôster, cole o texto ou informe uma publicação para servir de ponto de partida."},400);
  let queries=[];
  if(env.AI&&env.AI.run){
   try{
-   const source="TEXTO DO POST:\\n"+(postText||"(ausente)")+"\\nOCR DO PÔSTER:\\n"+(posterText||"(ausente)")+"\\nCANDIDATOS EXTRAÍDOS:\\n"+JSON.stringify(candidates);
+   const source="TEXTO DO POST:\n"+(postText||"(ausente)")+"\nOCR DO PÔSTER:\n"+(posterText||"(ausente)")+"\nCANDIDATOS EXTRAÍDOS:\n"+JSON.stringify(candidates);
    const prompt="Gere de 1 a 4 consultas curtas de busca para localizar outras publicações sobre o mesmo evento ou movimento. Priorize nome específico da mobilização, organização, hashtag, local e data quando existentes. Não use consultas genéricas como apenas ato, protesto ou manifestação. Não invente nomes que não aparecem no material. As consultas podem ser frases literais ou combinações de termos. Retorne apenas JSON no formato exigido.";
    const result=await env.AI.run(MODEL,{messages:[{role:"system",content:prompt},{role:"user",content:source}],response_format:{type:"json_schema",json_schema:querySchema},temperature:0,max_tokens:500});
    const parsed=parseModelObject(result);

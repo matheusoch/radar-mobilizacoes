@@ -800,14 +800,22 @@ const blank=():MobilizationEvent=>({
       const payload=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(typeof payload.error==='string'?payload.error:'Não foi possível validar o local.');
       const location=payload.location||{};
-      setEditing(prev=>prev?{...prev,
-        city:location.city?normalizePtTitle(location.city):(location.city_needs_clear?'':prev.city),
-        state:location.state?String(location.state).toUpperCase():prev.state,
-        venue:location.venue?normalizePtTitle(location.venue):prev.venue,
-        address:location.address?normalizePtTitle(location.address):prev.address,
-        lat:typeof location.lat==='number'?location.lat:(location.city_needs_clear?null:prev.lat),
-        lng:typeof location.lng==='number'?location.lng:(location.city_needs_clear?null:prev.lng)
-      }:prev);
+      setEditing(prev=>{
+        if(!prev)return prev;
+        const source=String(location.geography_source||'');
+        const sourceNote=source?'Fonte geográfica: '+source:'';
+        const attribution=source.includes('OpenStreetMap')?'Dados cartográficos: © OpenStreetMap contributors.':'';
+        const notes=[prev.notes,sourceNote,attribution].filter(Boolean).filter((value,index,items)=>items.indexOf(value)===index).join('\n');
+        return {...prev,
+          city:location.city?normalizePtTitle(location.city):(location.city_needs_clear?'':prev.city),
+          state:location.state?String(location.state).toUpperCase():prev.state,
+          venue:location.venue?normalizePtTitle(location.venue):prev.venue,
+          address:location.address?normalizePtTitle(location.address):prev.address,
+          lat:typeof location.lat==='number'?location.lat:(location.city_needs_clear?null:prev.lat),
+          lng:typeof location.lng==='number'?location.lng:(location.city_needs_clear?null:prev.lng),
+          notes
+        };
+      });
       const options=Array.isArray(location.geography_options)?location.geography_options.filter((option:any)=>option&&typeof option.title==='string'):[];
       setGeoOptions(options);
       const warnings=Array.isArray(location.geography_warnings)?location.geography_warnings:[];

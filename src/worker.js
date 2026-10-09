@@ -371,9 +371,10 @@ async function searchOpenStreetMap(query,venue,city,state,municipalities){
   .sort((a,b)=>b.score-a.score);
  return {configured:true,items:scored,source:"OpenStreetMap/Nominatim",error:""};
 }
-async function searchPlacesWithFallback(query,venue,city,state,env,municipalities){
+async function searchPlacesWithFallback(query,venue,city,state,env,municipalities,allowOSMFallback=true){
  const google=await searchGooglePlaces(query,env);
  if(google.configured&&google.items.length)return {...google,source:"Google Maps / Places API"};
+ if(!allowOSMFallback)return {...google,source:"Google Maps / Places API",items:[],error:google.error||"Busca secundária adiada para evitar consultas cartográficas excessivas."};
  const osm=await searchOpenStreetMap(query,venue,city,state,municipalities);
  if(osm.items.length)return osm;
  if(google.configured)return {...google,source:"Google Maps / Places API",fallbackError:osm.error||""};
@@ -396,7 +397,7 @@ function scorePlaceResult(place,query,venue,city,state,municipalities){
  if(!queryKey)score=0;
  return {score:Math.min(100,score),geo:cityState};
 }
-async function resolveEventGeography(event,context,env,municipalities,allowMaps=true){
+async function resolveEventGeography(event,context,env,municipalities,allowMaps=true,allowOSMFallback=true){
  const result={...event};
  const warnings=[];
  const sourceText=[context.postText,context.posterText,context.title,context.description,context.organization,context.venue,context.address,context.city,(context.evidence||[]).join("\n")].filter(Boolean).join("\n");
@@ -488,7 +489,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   const originStateName=originCityHint?stateDirectory.find(([code])=>code===originCityHint.uf)?.[1]||"": "";
   const stateSearchHint=reliableState||(originStateName&&!result.state?originStateName:"")||(groupStateClue&&!result.state?groupStateClue.name:"");
   const query=[queryVenue,result.address,reliableCity,stateSearchHint,"Brasil"].filter(Boolean).join(", ");
-  const places=await searchPlacesWithFallback(query,queryVenue,result.city||originCityHint?.name||"",result.state||originCityHint?.uf||"",env,municipalities);
+  const places=await searchPlacesWithFallback(query,queryVenue,result.city||originCityHint?.name||"",result.state||originCityHint?.uf||"",env,municipalities,allowOSMFallback);
   if(places.configured&&places.items.length&&places.items.some(place=>getPlaceCityAndState(place,municipalities,result.state)!==null)){
    const scored=places.items.map(place=>({...place,...scorePlaceResult(place,query,queryVenue,result.city,result.state,municipalities)})).filter(place=>place.geo!==null).sort((a,b)=>b.score-a.score);
    const options=scored.map(place=>({
@@ -836,11 +837,23 @@ async function handler(request,env){
   let geographicallyChecked=cleaned;
   try{
    const municipalities=await getIBGEMunicipalities();
-   geographicallyChecked=await Promise.all(cleaned.map((event,index)=>resolveEventGeography(event,{
-    postText:publicationText,posterText,title:event.title,description:event.description,
-    organization:event.organization,city:event.city,venue:event.venue,address:event.address,
-    evidence:event.evidence,cityEvidence:event.evidence?.join(" ")
-   },env,municipalities,index<6)));
+   if(env.GOOGLE_MAPS_API_KEY){
+    geographicallyChecked=await Promise.all(cleaned.map((event,index)=>resolveEventGeography(event,{
+     postText:publicationText,posterText,title:event.title,description:event.description,
+     organization:event.organization,city:event.city,venue:event.venue,address:event.address,
+     evidence:event.evidence,cityEvidence:event.evidence?.join(" ")
+    },env,municipalities,index<6,false)));
+   }else{
+    geographicallyChecked=[];
+    for(let index=0;index<cleaned.length;index++){
+     const event=cleaned[index];
+     geographicallyChecked.push(await resolveEventGeography(event,{
+      postText:publicationText,posterText,title:event.title,description:event.description,
+      organization:event.organization,city:event.city,venue:event.venue,address:event.address,
+      evidence:event.evidence,cityEvidence:event.evidence?.join(" ")
+     },env,municipalities,index<3,true));
+    }
+   }
   }catch{
    geographicallyChecked=cleaned.map(event=>({...event,geography_status:"ibge_unavailable",geography_source:"",geography_confidence:"baixa",geography_warnings:["A base municipal do IBGE não respondeu nesta tentativa; os campos geográficos precisam de revisão manual."]}));
   }

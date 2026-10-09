@@ -602,7 +602,7 @@ function ChatPage(){
 
 function AdminPage(){
   const db=supabase!;
-  const[user,setUser]=useState<any>(null);const[loading,setLoading]=useState(true);const[authorized,setAuthorized]=useState(false);const[events,setEvents]=useState<MobilizationEvent[]>([]);const[sources,setSources]=useState<EventSource[]>([]);const[submissions,setSubmissions]=useState<Submission[]>([]);const[chatPending,setChatPending]=useState<ChatMessage[]>([]);const[editing,setEditing]=useState<MobilizationEvent|null>(null);const[posterFile,setPosterFile]=useState<File|null>(null);const[posterPreview,setPosterPreview]=useState<string|null>(null);const[indexingPosters,setIndexingPosters]=useState(false);const[posterIndexProgress,setPosterIndexProgress]=useState('');const[message,setMessage]=useState('');const[saving,setSaving]=useState(false);const[submitting,setSubmitting]=useState<string|null>(null);const[subPosterUrls,setSubPosterUrls]=useState<Record<string,string>>({});const[adminQuery,setAdminQuery]=useState('');const[adminDate,setAdminDate]=useState('');const[adminStatus,setAdminStatus]=useState('');const[analyticsRows,setAnalyticsRows]=useState<PageViewRow[]>([]);
+  const[user,setUser]=useState<any>(null);const[loading,setLoading]=useState(true);const[authorized,setAuthorized]=useState(false);const[events,setEvents]=useState<MobilizationEvent[]>([]);const[sources,setSources]=useState<EventSource[]>([]);const[submissions,setSubmissions]=useState<Submission[]>([]);const[chatPending,setChatPending]=useState<ChatMessage[]>([]);const[editing,setEditing]=useState<MobilizationEvent|null>(null);const[posterFile,setPosterFile]=useState<File|null>(null);const[posterPreview,setPosterPreview]=useState<string|null>(null);const[indexingPosters,setIndexingPosters]=useState(false);const[posterIndexProgress,setPosterIndexProgress]=useState('');const[message,setMessage]=useState('');const[saving,setSaving]=useState(false);const[submitting,setSubmitting]=useState<string|null>(null);const[subPosterUrls,setSubPosterUrls]=useState<Record<string,string>>({});const[adminQuery,setAdminQuery]=useState('');const[adminDate,setAdminDate]=useState('');const[adminStatus,setAdminStatus]=useState('');const[analyticsRows,setAnalyticsRows]=useState<PageViewRow[]>([]);const[geoBusy,setGeoBusy]=useState(false);const[geoOptions,setGeoOptions]=useState<any[]>([]);
 const blank=():MobilizationEvent=>({
   id:'',
   title:'',
@@ -777,6 +777,60 @@ const blank=():MobilizationEvent=>({
     }finally{
       setSaving(false);
     }
+  };
+  const resolveEditingGeography=async()=>{
+    if(!editing||geoBusy)return;
+    setGeoBusy(true);setGeoOptions([]);setMessage('Validando município no IBGE e procurando o ponto indicado no Maps…');
+    try{
+      const{data:sessionData}=await db.auth.getSession();
+      const token=sessionData.session?.access_token;
+      if(!token)throw new Error('Sua sessão expirou. Entre novamente no painel administrativo.');
+      const response=await fetch('/api/resolve-location',{
+        method:'POST',
+        headers:{'content-type':'application/json','authorization':'Bearer '+token},
+        body:JSON.stringify({
+          title:editing.title,description:editing.description||'',city:editing.city,
+          state:editing.state,venue:editing.venue,address:editing.address||'',
+          postText:editing.notes||'',posterText:[editing.title,editing.description,editing.notes].filter(Boolean).join(' ')
+        })
+      });
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(typeof payload.error==='string'?payload.error:'Não foi possível validar o local.');
+      const location=payload.location||{};
+      setEditing(prev=>prev?{...prev,
+        city:location.city?normalizePtTitle(location.city):(location.city_needs_clear?'':prev.city),
+        state:location.state?String(location.state).toUpperCase():prev.state,
+        venue:location.venue?normalizePtTitle(location.venue):prev.venue,
+        address:location.address?normalizePtTitle(location.address):prev.address,
+        lat:typeof location.lat==='number'?location.lat:(location.city_needs_clear?null:prev.lat),
+        lng:typeof location.lng==='number'?location.lng:(location.city_needs_clear?null:prev.lng)
+      }:prev);
+      const options=Array.isArray(location.geography_options)?location.geography_options.filter((option:any)=>option&&typeof option.title==='string'):[];
+      setGeoOptions(options);
+      const warnings=Array.isArray(location.geography_warnings)?location.geography_warnings:[];
+      setMessage(location.geography_status==='verified_place'
+        ?'Local identificado no Google Maps. Endereço e coordenadas foram preenchidos; confira o resultado antes de salvar.'
+        :options.length
+          ?'O Google Maps retornou mais de uma possibilidade. Escolha manualmente o local correto na lista abaixo.'
+          :payload.googleMapsConfigured
+            ?'Validação geográfica concluída com ressalvas. Confira os avisos e preencha qualquer campo que permaneceu vazio.'
+            :'Município conferido no IBGE quando reconhecido. Para procurar endereço e coordenadas exatas, configure a chave Google Maps/Places no Cloudflare. '+warnings.slice(0,2).join(' '));
+    }catch(error){
+      setMessage(error instanceof Error?error.message:'Falha na validação geográfica. Confira os campos manualmente.');
+    }finally{setGeoBusy(false)}
+  };
+  const useGeographyOption=(option:any)=>{
+    if(!editing)return;
+    setEditing({...editing,
+      venue:option.title?normalizePtTitle(option.title):editing.venue,
+      address:option.address?normalizePtTitle(option.address):editing.address,
+      city:option.city?normalizePtTitle(option.city):editing.city,
+      state:option.state?String(option.state).toUpperCase():editing.state,
+      lat:typeof option.lat==='number'?option.lat:null,
+      lng:typeof option.lng==='number'?option.lng:null
+    });
+    setGeoOptions([]);
+    setMessage('Resultado geográfico selecionado manualmente. Confira o endereço e as coordenadas antes de salvar.');
   };
   const remove=async(e:MobilizationEvent)=>{if(!e.db_id||!confirm(`Excluir ${e.title}?`))return;const{error}=await db.from('events').delete().eq('id',e.db_id);if(error)setMessage(error.message);else{setMessage('Evento excluído.');await loadAdmin()}};
   const createFromSubmission=async(s:Submission)=>{setSubmitting(s.id);setMessage('');try{const slug=slugify(`${s.date||'sem-data'}-${s.city||'brasil'}-${s.title}`)||crypto.randomUUID();const{data:e,error}=await db.from('events').insert({slug,title:s.title,type:'Manifestação',date:s.date||new Date().toISOString().slice(0,10),time:s.time||null,time_label:s.time_label||null,city:s.city||'Brasil',state:s.state||'',venue:s.venue||'A conferir',status:'pending',is_public:false,lat:null,lng:null,image_url:null,notes:`Enviado por ${s.display_name}. ${s.message||''}`.trim()}).select().single();if(error)throw error;await db.from('event_sources').insert({event_id:e.id,source_id:ADMIN_SOURCE_FALLBACK});if(s.poster_path){const{data:blob,error:downErr}=await db.storage.from(SUBMISSION_STORAGE_BUCKET).download(s.poster_path);if(downErr)throw downErr;const ext=s.poster_path.split('.').pop()||'jpg';const path=`events/${e.id}-submission.${ext}`;const{error:upErr}=await db.storage.from(ADMIN_STORAGE_BUCKET).upload(path,blob,{upsert:true,contentType:blob.type||'image/jpeg'});if(upErr)throw upErr;const{data:pub}=db.storage.from(ADMIN_STORAGE_BUCKET).getPublicUrl(path);await db.from('events').update({image_url:pub.publicUrl}).eq('id',e.id)}await db.from('event_submissions').update({status:'approved',reviewed_at:new Date().toISOString(),reviewed_by:user.id}).eq('id',s.id);setMessage('Rascunho criado no painel. Revise e publique quando estiver pronto.');await loadAdmin();const fresh=await getAdminEvents();const created=fresh.find(x=>x.db_id===e.id);if(created)setEditing(created)}catch(error){setMessage(error instanceof Error?error.message:'Falha ao transformar o envio em evento.')}finally{setSubmitting(null)}}

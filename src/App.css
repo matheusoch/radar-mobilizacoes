@@ -507,3 +507,36 @@ body{background:var(--page);color:var(--ink)}
 }
 
 .auth-forgot,.mode-switch{display:flex;width:fit-content;max-width:100%}
+
+
+/* Admin: importação de cartazes e revisão de candidatos extraídos por OCR */
+.poster-import-help{margin:7px 0 12px;color:var(--muted);font-size:12px;line-height:1.55}
+.poster-file-button{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 13px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font-size:12px;font-weight:800;cursor:pointer}
+.poster-file-button input{display:block;max-width:100%;font:inherit;font-weight:500}
+.poster-paste-zone{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding:15px;border:1px dashed #b5b1a8;border-radius:12px;background:#fffefa;color:#57534c;font-size:12px;line-height:1.5;cursor:text}
+.poster-paste-zone:focus{outline:2px solid #a21d35;outline-offset:2px}
+.poster-ocr-button{margin-top:10px;display:inline-flex;align-items:center;gap:7px}
+.poster-meta,.poster-ocr-status,.poster-quality-warning,.poster-quality-review{display:block;margin-top:8px;font-size:12px;line-height:1.5}
+.poster-ocr-status{color:var(--good);font-weight:700}
+.poster-quality-warning{padding:9px 10px;border-left:3px solid #b42318;background:#fff0ee;color:#8b1a12}
+.poster-quality-review{padding:9px 10px;border-left:3px solid #ba7a00;background:#fff6df;color:#785000}
+.poster-candidates{display:grid;gap:10px;margin-top:15px}
+.poster-candidates-heading{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px}
+.poster-candidates-heading span{color:var(--muted);font-size:11px}
+.poster-candidate{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fffefa;min-width:0}
+.poster-candidate-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;font-size:12px;line-height:1.45}
+.poster-candidate>p{margin:0;font-size:12px;line-height:1.5;color:#454545;overflow-wrap:anywhere}
+.poster-candidate .button{justify-self:start;padding:8px 11px;font-size:12px}
+.poster-duplicate,.poster-new{display:inline-flex;align-items:center;gap:4px;white-space:normal;font-size:10px;font-weight:800}
+.poster-duplicate{color:#8b4211}
+.poster-new{color:#19633f}
+.poster-duplicate-details{padding:8px 9px;border-radius:8px;background:#fff4e8;color:#80410d;font-size:11px;line-height:1.5}
+.poster-candidate details{font-size:11px;color:var(--muted)}
+.poster-candidate details p{margin:5px 0 0;line-height:1.5;overflow-wrap:anywhere}
+.poster-ocr-result{margin-top:10px;font-size:12px}
+.poster-ocr-result summary{cursor:pointer;font-weight:700}
+.poster-ocr-result pre{max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:10px;border-radius:8px;background:#f0eee7;font-size:11px;line-height:1.45}
+.maps-verification{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fffefa;font-size:12px}
+.maps-verification a{font-weight:800;color:var(--accent);text-decoration:underline}
+.maps-verification small{display:block;flex-basis:100%;margin:0;color:var(--muted);line-height:1.5}
+@media(max-width:620px){.poster-file-button{width:100%;align-items:flex-start;flex-direction:column}.poster-file-button input{max-width:100%;width:100%}.poster-candidate-top{display:grid}.poster-paste-zone{justify-content:flex-start}}

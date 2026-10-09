@@ -1,6 +1,7 @@
 export type PosterCandidate = {
   id: string; title?: string; type?: string; date?: string; time?: string; time_label?: string;
   city?: string; state?: string; venue?: string; address?: string; confidence?: number; sourceLines: string[];
+  organization?: string; hashtags?: string[]; evidence?: string[]; missing_fields?: string[]; inferred_title?: boolean; ai_confidence?: string; source_url?: string;
 };
 type OcrWorker = { recognize:(image:File)=>Promise<{data:{text:string;confidence?:number}}>; terminate:()=>Promise<void> };
 type TesseractApi = { createWorker:(languages:string,oem?:number)=>Promise<OcrWorker> };

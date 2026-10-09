@@ -811,13 +811,14 @@ const blank=():MobilizationEvent=>({
       const options=Array.isArray(location.geography_options)?location.geography_options.filter((option:any)=>option&&typeof option.title==='string'):[];
       setGeoOptions(options);
       const warnings=Array.isArray(location.geography_warnings)?location.geography_warnings:[];
+      const geoSource=String(location.geography_source||'');
       setMessage(location.geography_status==='verified_place'
-        ?'Local identificado no Google Maps. Endereço e coordenadas foram preenchidos; confira o resultado antes de salvar.'
+        ?(geoSource.includes('OpenStreetMap')?'Ponto localizado no OpenStreetMap; cidade, endereço e coordenadas foram extraídos do mapa. Confira o ponto antes de salvar.':'Local identificado no Google Maps. Endereço e coordenadas foram preenchidos; confira o resultado antes de salvar.')
         :options.length
-          ?'O Google Maps retornou mais de uma possibilidade. Escolha manualmente o local correto na lista abaixo.'
+          ?'Foram encontradas várias possibilidades cartográficas. Escolha manualmente o ponto correto na lista abaixo.'
           :payload.googleMapsConfigured
             ?'Validação geográfica concluída com ressalvas. Confira os avisos e preencha qualquer campo que permaneceu vazio.'
-            :'Município conferido no IBGE quando reconhecido. Para procurar endereço e coordenadas exatas, configure a chave Google Maps/Places no Cloudflare. '+warnings.slice(0,2).join(' '));
+            :'Município comparado com o IBGE. A pesquisa de pontos usa OpenStreetMap quando disponível; '+warnings.slice(0,2).join(' '));
     }catch(error){
       setMessage(error instanceof Error?error.message:'Falha na validação geográfica. Confira os campos manualmente.');
     }finally{setGeoBusy(false)}

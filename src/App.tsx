@@ -381,11 +381,14 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
   </div>;
 
   const ss=sources.filter(s=>event.source_ids.includes(s.id));
-  const concreteEventLocation=hasSpecificEventLocation(event.venue,event.address,event.city);
+  const concreteEventLocation=hasSpecificEventLocation(event.venue,event.address,event.city)||(typeof event.lat==='number'&&Number.isFinite(event.lat)&&typeof event.lng==='number'&&Number.isFinite(event.lng));
   const directionsQuery=[event.address,concreteEventLocation?event.venue:'',event.city,event.state,'Brasil'].filter(Boolean).join(', ');
-  const directionsUrl=concreteEventLocation
-    ?'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(directionsQuery)
-    :'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(directionsQuery);
+  const hasCoordinates=typeof event.lat==='number'&&Number.isFinite(event.lat)&&typeof event.lng==='number'&&Number.isFinite(event.lng);
+  const directionsUrl=hasCoordinates
+    ?'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(event.lat+','+event.lng)
+    :concreteEventLocation
+      ?'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(directionsQuery)
+      :'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(directionsQuery);
   const calendarDate=event.date.replace(/-/g,'');
   const calendarStartTime=event.time ? event.time.replace(':','')+'00' : '000000';
   const calendarStart=calendarDate+'T'+calendarStartTime;
@@ -871,7 +874,7 @@ const blank=():MobilizationEvent=>({
       const target=sameEvent&&prev?prev:blank();
       const noteParts=[target.notes,evidenceNotes].filter(Boolean);
       const uniqueNotes=[...new Set(noteParts)];
-      return {...target,title:candidate.title?normalizePtTitle(candidate.title):target.title,type:candidate.type?normalizePtTitle(candidate.type):target.type,date:candidate.date||target.date,time:candidate.time||target.time,time_label:candidate.time_label?normalizePtTitle(candidate.time_label):target.time_label,city:candidate.city?normalizePtTitle(candidate.city):target.city,state:candidate.state?candidate.state.toUpperCase():target.state,venue:candidateVenue||target.venue,address:candidate.address?normalizePtTitle(candidate.address):target.address,description:candidate.description?normalizePtSentence(candidate.description):target.description,notes:uniqueNotes.join('\n'),public:sameEvent?target.public:false,status:sameEvent?target.status:'pending'};
+      return {...target,title:candidate.title?normalizePtTitle(candidate.title):target.title,type:candidate.type?normalizePtTitle(candidate.type):target.type,date:candidate.date||target.date,time:candidate.time||target.time,time_label:candidate.time_label?normalizePtTitle(candidate.time_label):target.time_label,city:candidate.city?normalizePtTitle(candidate.city):(candidate.city_needs_clear?'':target.city),state:candidate.state?candidate.state.toUpperCase():target.state,venue:candidateVenue||target.venue,address:candidate.address?normalizePtTitle(candidate.address):target.address,description:candidate.description?normalizePtSentence(candidate.description):target.description,lat:typeof candidate.lat==='number'?candidate.lat:(candidate.city_needs_clear?null:target.lat),lng:typeof candidate.lng==='number'?candidate.lng:(candidate.city_needs_clear?null:target.lng),notes:uniqueNotes.join('\n'),public:sameEvent?target.public:false,status:sameEvent?target.status:'pending'};
     });
     setPosterFile(file||null);
     setPosterPreview(previewUrl||(sameEvent?editing?.image_url||null:null));

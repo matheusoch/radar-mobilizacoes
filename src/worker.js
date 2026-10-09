@@ -253,7 +253,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
    warnings.push("O texto do campo Cidade era genérico e não identifica um município.");
   }else if(cityValue&&stateOnly){
    result.city="";result.city_needs_clear=true;
-   if(!result.state&&stateNameCode)result.state=stateNameCode;
+   if(!result.state&&stateNameCode){const groupState=stateMentionAsGroupClue(sourceText);const stateExplicit=hints.some(item=>item.code===stateNameCode);if(!(groupState?.code===stateNameCode&&!stateExplicit))result.state=stateNameCode;}
    warnings.push("O texto identificado em Cidade é o nome de um estado, não de um município; confirme se esse estado é realmente o da mobilização.");
   }else if(cityValue&&groupWithState){
    result.city="";result.city_needs_clear=true;

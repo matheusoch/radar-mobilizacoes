@@ -71,6 +71,173 @@ async function fetchTweet(url){
  }
  return {text:"",url:canonical,error:"Não foi possível obter o texto do link automaticamente. Cole o texto da publicação; a URL ainda pode ser usada como fonte."};
 }
+
+const querySchema={type:"object",additionalProperties:false,properties:{queries:{type:"array",maxItems:4,items:{type:"string"}}},required:["queries"]};
+async function responseJson(url,headers={}){
+ try{
+  const r=await fetch(url,{headers,signal:AbortSignal.timeout(6500)});
+  if(!r.ok)return {ok:false,status:r.status,data:null};
+  const data=await r.json();return {ok:true,status:r.status,data};
+ }catch{return {ok:false,status:0,data:null}}
+}
+function shortText(value,max=500){return clean(typeof value==="string"?value:"").slice(0,max)}
+function parseModelObject(result){
+ let parsed=result&&result.response!==undefined?result.response:result;
+ if(typeof parsed==="string"){
+  const value=parsed.trim(),fence=String.fromCharCode(96).repeat(3);
+  if(value.startsWith(fence)){const start=value.indexOf("\n"),end=value.lastIndexOf(fence);if(start>=0&&end>start)parsed=value.slice(start+1,end).trim();else parsed=value}else parsed=value;
+  parsed=JSON.parse(parsed);
+ }
+ return parsed&&typeof parsed==="object"?parsed:{};
+}
+function buildFallbackQueries(body){
+ const candidates=Array.isArray(body.candidates)?body.candidates.slice(0,8):[];
+ const all=[shortText(body.postText,6000),shortText(body.posterText,9000)].filter(Boolean).join("\n");
+ const terms=[];
+ const add=value=>{const q=shortText(value,100).replace(/^[#\\s]+|[#\\s]+$/g,"").replace(/\\s+/g," ").trim();if(q&&q.split(" ").filter(x=>x.length>2).length>=1&&!terms.some(x=>norm(x)===norm(q)))terms.push(q)};
+ for(const item of candidates){
+  const title=shortText(item.title,100),city=shortText(item.city,50),venue=shortText(item.venue,60),org=shortText(item.organization,70);
+  if(title)add([title,city].filter(Boolean).join(" "));
+  if(org)add([org,city].filter(Boolean).join(" "));
+  if(venue)add([venue,city].filter(Boolean).join(" "));
+ }
+ const tags=[...new Set((all.match(/#[\\p{L}\\p{N}_]+/gu)||[]).map(x=>x.slice(1)))];
+ for(const tag of tags.slice(0,3))add("#"+tag);
+ const lines=all.split(/\\r?\\n/).map(clean).filter(x=>x.length>=10&&x.length<=115&&!/^https?:/i.test(x));
+ for(const line of lines.slice(0,4))add(line);
+ if(!terms.length)add(all.slice(0,90));
+ return terms.slice(0,4);
+}
+function scoreResearchResult(item,queries,seedText){
+ const corpus=norm([item.title,item.text,item.author,seedText].filter(Boolean).join(" "));
+ const seed=norm(seedText);
+ const seedTerms=[...new Set(seed.split(" ").filter(t=>t.length>3))].slice(0,35);
+ let matches=0;for(const t of seedTerms)if(corpus.includes(t))matches++;
+ const queryNorm=queries.map(norm);
+ let score=seedTerms.length?Math.round(45*matches/seedTerms.length):25;
+ if(queryNorm.some(q=>q&&corpus.includes(q)))score=Math.max(score,82);
+ const common=queries.flatMap(q=>norm(q).split(" ")).filter(t=>t.length>3);
+ const qMatches=common.filter((t,i,a)=>a.indexOf(t)===i&&corpus.includes(t)).length;
+ score=Math.min(99,Math.max(score,Math.round(55*qMatches/Math.max(1,new Set(common).size))));
+ return score;
+}
+async function searchBluesky(query){
+ const url="https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q="+encodeURIComponent(query)+"&limit=10&sort=latest";
+ const r=await responseJson(url);
+ if(!r.ok)return {ok:false,items:[]};
+ const posts=Array.isArray(r.data.posts)?r.data.posts:[];
+ return {ok:true,items:posts.map(entry=>{
+  const post=entry.post||entry, record=post.record||{}, author=post.author||{};
+  const uri=post.uri||"", parts=uri.split("/");
+  const key=parts[parts.length-1],handle=author.handle||"";
+  const link=handle&&key?"https://bsky.app/profile/"+handle+"/post/"+key:"";
+  return {platform:"Bluesky",title:shortText(record.text||"",150)||"Publicação no Bluesky",text:shortText(record.text||"",700),url:link,author:shortText(author.displayName||handle,100),handle:shortText(handle,100),publishedAt:shortText(record.createdAt||"",50),likes:Number(post.likeCount)||0,reposts:Number(post.repostCount)||0};
+ }).filter(x=>x.url&&x.text)};
+}
+async function searchMastodonInstance(host,query,token){
+ const headers=token&&host==="mastodon.social"?{Authorization:"Bearer "+token}:{};
+ const url="https://"+host+"/api/v2/search?q="+encodeURIComponent(query)+"&type=statuses&limit=10";
+ const r=await responseJson(url,headers);
+ if(!r.ok)return {ok:false,items:[]};
+ const statuses=Array.isArray(r.data.statuses)?r.data.statuses:[];
+ return {ok:true,items:statuses.map(s=>({
+  platform:"Mastodon",title:shortText((s.account&& (s.account.display_name||s.account.acct))||"Publicação no Mastodon",150),
+  text:shortText((s.content||"").replace(/<br\\s*\\/?\\s*>/gi," ").replace(/<[^>]+>/g," ").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'"),700),
+  url:shortText(s.url||s.uri,500),author:shortText(s.account?.display_name||s.account?.acct||"",100),handle:shortText(s.account?.acct||"",100),publishedAt:shortText(s.created_at||"",50),likes:Number(s.favourites_count)||0,reposts:Number(s.reblogs_count)||0
+ })).filter(x=>/^https:\/\//.test(x.url)&&x.text)};
+}
+async function searchX(query,token){
+ const url="https://api.x.com/2/tweets/search/recent?query="+encodeURIComponent(query+" -is:retweet")+" &max_results=10&tweet.fields=created_at,author_id,public_metrics,entities&expansions=author_id&user.fields=username,name";
+ const fixed=url.replace(" +&max_results","&max_results");
+ const r=await responseJson(fixed,{Authorization:"Bearer "+token});
+ if(!r.ok)return {ok:false,items:[]};
+ const users=new Map((r.data.includes?.users||[]).map(u=>[u.id,u]));
+ const tweets=Array.isArray(r.data.data)?r.data.data:[];
+ return {ok:true,items:tweets.map(t=>{const author=users.get(t.author_id)||{};const metrics=t.public_metrics||{};return {
+  platform:"X",title:shortText(t.text,150)||"Publicação no X",text:shortText(t.text,700),url:"https://x.com/"+(author.username||"i/web")+"/status/"+t.id,
+  author:shortText(author.name||author.username||"",100),handle:shortText(author.username||"",100),publishedAt:shortText(t.created_at||"",50),likes:Number(metrics.like_count)||0,reposts:Number(metrics.retweet_count)||0
+ }}).filter(x=>x.text)};
+}
+async function searchGoogle(query,apiKey,cx){
+ const params=new URLSearchParams({key:apiKey,cx,q:query,num:"10"});
+ const r=await responseJson("https://customsearch.googleapis.com/customsearch/v1?"+params.toString());
+ if(!r.ok)return {ok:false,items:[]};
+ const items=Array.isArray(r.data.items)?r.data.items:[];
+ return {ok:true,items:items.map(x=>({platform:"Web",title:shortText(x.title,180),text:shortText(x.snippet,700),url:shortText(x.link,500),author:shortText(x.displayLink||"",100),publishedAt:"",likes:0,reposts:0})).filter(x=>/^https:\/\//.test(x.url)&&x.text)};
+}
+async function searchYouTube(query,apiKey){
+ const params=new URLSearchParams({key:apiKey,part:"snippet",q:query,type:"video",maxResults:"10",regionCode:"BR",relevanceLanguage:"pt"});
+ const r=await responseJson("https://www.googleapis.com/youtube/v3/search?"+params.toString());
+ if(!r.ok)return {ok:false,items:[]};
+ const items=Array.isArray(r.data.items)?r.data.items:[];
+ return {ok:true,items:items.map(x=>({platform:"YouTube",title:shortText(x.snippet?.title,180),text:shortText(x.snippet?.description,700),url:x.id?.videoId?"https://www.youtube.com/watch?v="+x.id.videoId:"",author:shortText(x.snippet?.channelTitle||"",100),publishedAt:shortText(x.snippet?.publishedAt||"",50),likes:0,reposts:0})).filter(x=>x.url&&x.text)};
+}
+async function researchHandler(request,env){
+ if(request.method!=="POST")return json({error:"Método não permitido."},405);
+ if(!(await getAdmin(request,env)))return json({error:"É necessário entrar com uma conta administradora válida."},403);
+ let raw="";try{raw=await request.text()}catch{}
+ if(raw.length>30000)return json({error:"Material muito grande; reduza o texto e tente novamente."},413);
+ let body;try{body=JSON.parse(raw)}catch{return json({error:"Pedido de pesquisa inválido."},400)}
+ const postText=shortText(body.postText,8000),posterText=shortText(body.posterText,12000),postUrl=shortText(body.postUrl,500);
+ const candidates=Array.isArray(body.candidates)?body.candidates.slice(0,8):[];
+ const seedText=[postText,posterText,candidates.map(x=>[x.title,x.organization,x.hashtags?.join(" "),x.city,x.state,x.venue].filter(Boolean).join(" ")).join("\\n")].filter(Boolean).join("\\n");
+ if(!seedText.trim()&&!postUrl)return json({error:"Anexe um pôster, cole o texto ou informe uma publicação para servir de ponto de partida."},400);
+ let queries=[];
+ if(env.AI&&env.AI.run){
+  try{
+   const source="TEXTO DO POST:\\n"+(postText||"(ausente)")+"\\nOCR DO PÔSTER:\\n"+(posterText||"(ausente)")+"\\nCANDIDATOS EXTRAÍDOS:\\n"+JSON.stringify(candidates);
+   const prompt="Gere de 1 a 4 consultas curtas de busca para localizar outras publicações sobre o mesmo evento ou movimento. Priorize nome específico da mobilização, organização, hashtag, local e data quando existentes. Não use consultas genéricas como apenas ato, protesto ou manifestação. Não invente nomes que não aparecem no material. As consultas podem ser frases literais ou combinações de termos. Retorne apenas JSON no formato exigido.";
+   const result=await env.AI.run(MODEL,{messages:[{role:"system",content:prompt},{role:"user",content:source}],response_format:{type:"json_schema",json_schema:querySchema},temperature:0,max_tokens:500});
+   const parsed=parseModelObject(result);
+   if(Array.isArray(parsed.queries))queries=parsed.queries.map(q=>shortText(q,100)).filter(Boolean).slice(0,4);
+  }catch{}
+ }
+ const fallback=buildFallbackQueries(body);
+ for(const q of fallback)if(!queries.some(existing=>norm(existing)===norm(q))&&queries.length<4)queries.push(q);
+ queries=[...new Set(queries.map(q=>shortText(q,100)).filter(Boolean))].slice(0,4);
+ if(!queries.length)return json({error:"Não consegui extrair termos suficientes para a busca. Acrescente o nome do movimento, uma hashtag ou o texto do post."},422);
+ const providerStatus=[
+  {platform:"Bluesky",status:"pending",message:"Pesquisa pública",count:0},
+  {platform:"Mastodon",status:"pending",message:"Pesquisa pública, conforme configuração de cada servidor",count:0},
+  {platform:"X",status:env.X_BEARER_TOKEN?"pending":"not_configured",message:env.X_BEARER_TOKEN?"Pesquisa recente habilitada":"Configure X_BEARER_TOKEN para pesquisar publicações do X automaticamente",count:0},
+  {platform:"Web",status:env.GOOGLE_CSE_API_KEY&&env.GOOGLE_CSE_CX?"pending":"not_configured",message:env.GOOGLE_CSE_API_KEY&&env.GOOGLE_CSE_CX?"Pesquisa Web habilitada":"Configure GOOGLE_CSE_API_KEY e GOOGLE_CSE_CX para ampliar a busca na Web",count:0},
+  {platform:"YouTube",status:env.YOUTUBE_API_KEY?"pending":"not_configured",message:env.YOUTUBE_API_KEY?"Pesquisa no YouTube habilitada":"Configure YOUTUBE_API_KEY para pesquisar vídeos automaticamente",count:0}
+ ];
+ const work=[];
+ for(const query of queries){
+  work.push((async()=>({provider:"Bluesky",result:await searchBluesky(query)}))());
+  for(const host of ["mastodon.social","mastodon.online"])work.push((async()=>({provider:"Mastodon",result:await searchMastodonInstance(host,query,env.MASTODON_ACCESS_TOKEN)}))());
+ }
+ if(env.X_BEARER_TOKEN)for(const query of queries.slice(0,2))work.push((async()=>({provider:"X",result:await searchX(query,env.X_BEARER_TOKEN)}))());
+ if(env.GOOGLE_CSE_API_KEY&&env.GOOGLE_CSE_CX)for(const query of queries.slice(0,2))work.push((async()=>({provider:"Web",result:await searchGoogle(query,env.GOOGLE_CSE_API_KEY,env.GOOGLE_CSE_CX)}))());
+ if(env.YOUTUBE_API_KEY&&queries.length)work.push((async()=>({provider:"YouTube",result:await searchYouTube(queries[0],env.YOUTUBE_API_KEY)}))());
+ const fetched=await Promise.all(work);
+ const all=fetched.flatMap(x=>x.result.items.map(item=>({...item,query:x.provider==="Web"||x.provider==="YouTube"||x.provider==="X"||x.provider==="Mastodon"||x.provider==="Bluesky"?undefined:undefined})));
+ const unique=new Map();
+ for(const item of all){const key=item.url.toLowerCase().replace(/[?#].*$/,"");if(key&&!unique.has(key))unique.set(key,item)}
+ const results=[...unique.values()].map(item=>({...item,relevance:scoreResearchResult(item,queries,seedText)}))
+  .sort((a,b)=>b.relevance-a.relevance||String(b.publishedAt).localeCompare(String(a.publishedAt))).slice(0,35);
+ for(const status of providerStatus){
+  const providerItems=fetched.filter(x=>x.provider===status.platform);
+  if(status.platform==="Mastodon"){
+   const successes=providerItems.filter(x=>x.result.ok).length;
+   status.status=successes?"searched": "unavailable";
+   status.count=results.filter(x=>x.platform==="Mastodon").length;
+   if(!successes)status.message="Os servidores consultados não disponibilizaram a busca por texto";
+  }else if(status.platform==="Bluesky"){
+   const successes=providerItems.filter(x=>x.result.ok).length;
+   status.status=successes?"searched":"unavailable";
+   status.count=results.filter(x=>x.platform==="Bluesky").length;
+   if(!successes)status.message="Não foi possível consultar a busca pública nesta tentativa";
+  }else if(status.status==="pending"){
+   const successes=providerItems.filter(x=>x.result.ok).length;
+   status.status=successes?"searched":"unavailable";
+   status.count=results.filter(x=>x.platform===status.platform).length;
+   if(!successes)status.message="A API não respondeu ou a credencial não tem permissão/quota disponível";
+  }
+ }
+ return json({queries,results,providers:providerStatus,sourceUrl:postUrl,summary:results.length?"Foram encontradas publicações potencialmente relacionadas; confira a correspondência antes de aproveitar os dados.":"Nenhum resultado correspondente apareceu nas fontes consultadas. Isso não prova que o evento não exista.",limitations:["A busca cobre apenas fontes públicas e APIs habilitadas; grupos privados do WhatsApp não são consultados.","O X e a busca Web exigem credenciais próprias para pesquisa ampla.","Instagram, Facebook e TikTok não oferecem busca pública irrestrita por qualquer evento para esta aplicação; acessos adicionais dependem de APIs, permissões ou elegibilidade."]});
+}
 async function handler(request,env){
  if(request.method!=="POST")return json({error:"Método não permitido."},405);
  if(!env.AI||!env.AI.run)return json({error:"O serviço de IA não está habilitado no Worker."},503);
@@ -126,4 +293,4 @@ async function handler(request,env){
   return json({events:cleaned,sourceUrl:tweet.url||postUrl,urlError:tweet.error});
  }catch{return json({error:"A IA não conseguiu organizar essas informações desta vez. Confira o texto e tente novamente."},502)}
 }
-export default {async fetch(request,env){const url=new URL(request.url);if(url.pathname==="/api/interpret-events")return handler(request,env);return env.ASSETS.fetch(request)}};
+export default {async fetch(request,env){const url=new URL(request.url);if(url.pathname==="/api/interpret-events")return handler(request,env);if(url.pathname==="/api/research-events")return researchHandler(request,env);return env.ASSETS.fetch(request)}};

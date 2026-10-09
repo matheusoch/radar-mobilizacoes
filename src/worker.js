@@ -70,6 +70,16 @@ async function getIBGEMunicipalities(){
  }
  return ibgeMunicipalitiesPromise;
 }
+function stateMentionAsGroupClue(text){
+ const t=geoNorm(text);
+ for(const [code,name] of stateDirectory){
+  const stateName=geoNorm(name);
+  if(!stateName)continue;
+  const pattern=new RegExp("(?:^| )(?:juventude|jovens|estudantes|estudantil|trabalhadores|trabalhadoras|moradores|moradoras|militantes|povo|coletivo|coletiva|alunos|alunas|professores|professoras|comunidade|sindicato|movimento|organizacao|grupo) (?:de|do|da|dos|das) "+escapeRegex(stateName)+"(?: |$)");
+  if(pattern.test(t))return {code,name};
+ }
+ return null;
+}
 function stateHints(text){
  const t=geoNorm(text),found=[];
  for(const [code,name] of stateDirectory){
@@ -264,8 +274,11 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
  if(cityCouldBeGroupOrigin){result.city_inferred_from_context=true;warnings.push("O nome do município também aparece como origem de um grupo/organização; não o trate como local confirmado sem endereço ou ponto de encontro.");}
  const shouldSearchPlace=Boolean(queryVenue||result.address);
  if(allowMaps&&shouldSearchPlace){
-  const stateName=stateDirectory.find(([code])=>code===result.state)?.[1]||"";
-  const query=[queryVenue,result.address,result.city,stateName,"Brasil"].filter(Boolean).join(", ");
+  const groupStateClue=stateMentionAsGroupClue(sourceText);
+  const reliableCity=result.city_inferred_from_context?"":result.city;
+  const reliableState=result.city_inferred_from_context?"":(stateDirectory.find(([code])=>code===result.state)?.[1]||"");
+  const stateSearchHint=reliableState||(groupStateClue&&!result.state?groupStateClue.name:"");
+  const query=[queryVenue,result.address,reliableCity,stateSearchHint,"Brasil"].filter(Boolean).join(", ");
   const places=await searchGooglePlaces(query,env);
   if(places.configured&&places.items.length&&places.items.some(place=>getPlaceCityAndState(place,municipalities,result.state)!==null)){
    const scored=places.items.map(place=>({...place,...scorePlaceResult(place,query,queryVenue,result.city,result.state,municipalities)})).filter(place=>place.geo!==null).sort((a,b)=>b.score-a.score);
@@ -282,7 +295,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
    const preciseName=norm(top.displayName?.text||"");
    const requestedName=norm(queryVenue);
    const nameSupported=requestedName&&(preciseName===requestedName||preciseName.includes(requestedName)||requestedName.includes(preciseName));
-   const regionSupported=(!result.state||top.geo?.state===result.state)&&(!result.city||!top.geo?.city||norm(top.geo.city)===norm(result.city));
+   const regionSupported=result.city_inferred_from_context||((!result.state||top.geo?.state===result.state)&&(!result.city||!top.geo?.city||norm(top.geo.city)===norm(result.city)));
    const gap=!next||top.score-(next.score||0)>=15;
    if(topOption&&top.score>=70&&nameSupported&&regionSupported&&gap){
     result.venue=topOption.title;

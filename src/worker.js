@@ -212,18 +212,27 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   }
  }else{
   const cityValue=clean(result.city);
-  const stateNameCode=stateCodeByName.get(geoNorm(cityValue))||"";
+  const cityKey=geoNorm(cityValue);
+  const stateNameCode=stateCodeByName.get(cityKey)||"";
   const stateOnly=Boolean(stateNameCode)||Boolean(hints.length===1&&geoNorm(cityValue)===geoNorm(hints[0].name));
-  if(cityValue&&looksLikePlaceName(cityValue)&&!result.venue){
-   result.venue=titleCase(cityValue);result.city="";result.city_needs_clear=true;
+  const genericLocation=/^(brasil|br|local|local a confirmar|local nao informado|nao informado|a conferir|presencial|online|virtual)$/.test(cityKey);
+  const embeddedState=stateDirectory.find(([code,name])=>geoNorm(name)&&new RegExp("(?:^| )"+escapeRegex(geoNorm(name))+"(?: |$)").test(cityKey));
+  const groupWithState=Boolean(embeddedState&&/(juventude|jovens|estudantes|trabalhadores|trabalhadoras|moradores|moradoras|militantes|coletivo|coletiva|alunos|alunas|professores|professoras|comunidade|sindicato|movimento|organizacao|grupo)/.test(cityKey));
+  if(cityValue&&looksLikePlaceName(cityValue)){
+   if(!result.venue)result.venue=titleCase(cityValue);
+   result.city="";result.city_needs_clear=true;
    warnings.push("O texto que estava no campo Cidade parece ser um ponto de referência/local, não um município.");
+  }else if(cityValue&&genericLocation){
+   result.city="";result.city_needs_clear=true;
+   warnings.push("O texto do campo Cidade era genérico e não identifica um município.");
   }else if(cityValue&&stateOnly){
    result.city="";result.city_needs_clear=true;
    if(!result.state&&stateNameCode)result.state=stateNameCode;
-   warnings.push("O texto identificado em Cidade é o nome de um estado, não de um município; a UF foi mantida apenas como pista, confirme se o evento ocorre nesse estado.");
-  }else if(cityValue&&hints.length===1&&norm(cityValue).includes(norm(hints[0].name))&&!looksLikePlaceName(cityValue)){
+   warnings.push("O texto identificado em Cidade é o nome de um estado, não de um município; confirme se esse estado é realmente o da mobilização.");
+  }else if(cityValue&&groupWithState){
    result.city="";result.city_needs_clear=true;
-   warnings.push("O campo Cidade parece conter o nome de uma organização/grupo e uma UF, não um município; a UF fica como pista de pesquisa.");
+   result.state="";
+   warnings.push("O campo Cidade contém o nome de um grupo/organização associado a um estado, não um município. A UF do grupo não foi assumida como a UF do evento.");
   }else if(cityValue){
    warnings.push("O município informado não foi confirmado na base do IBGE; confira antes de publicar.");
   }

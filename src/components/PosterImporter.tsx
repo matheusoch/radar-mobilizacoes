@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useState} from 'react';
-import {AlertTriangle,CheckCircle2,ClipboardPaste,ExternalLink,Image as ImageIcon,RefreshCw,Upload} from 'lucide-react';
+import {AlertTriangle,CheckCircle2,ClipboardPaste,ExternalLink,Image as ImageIcon,MapPinned,RefreshCw,Upload} from 'lucide-react';
 import {extractPosterEvents,extractPosterEventsFromText,normalizePtSentence,normalizePtTitle,type PosterCandidate} from '../lib/posterOcr';
 import type {MobilizationEvent} from '../types';
 

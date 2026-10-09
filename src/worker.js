@@ -223,6 +223,78 @@ async function searchGooglePlaces(query,env){
   return {configured:true,items:Array.isArray(data.places)?data.places:[]};
  }catch{return {configured:true,items:[],error:"Não foi possível consultar o Google Places."}}
 }
+
+const photonMemo=new Map();
+let photonLastRequestAt=0;
+const photonProviderName="Photon / OpenStreetMap";
+async function searchPhotonPlaces(query,municipalities,preferredState=""){
+ const cacheKeyText=geoNorm(query);
+ if(!cacheKeyText)return {configured:true,items:[],provider:photonProviderName,error:"Consulta geográfica vazia."};
+ if(photonMemo.has(cacheKeyText))return {configured:true,items:photonMemo.get(cacheKeyText),provider:photonProviderName};
+ let cache=null,keyRequest=null;
+ try{
+  if(typeof caches!=="undefined"&&caches.default){
+   cache=caches.default;
+   const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(cacheKeyText));
+   const hash=Array.from(new Uint8Array(digest)).map(byte=>byte.toString(16).padStart(2,"0")).join("");
+   keyRequest=new Request("https://agenda-mobilizacoes.participa.workers.dev/__geo-cache/photon/"+hash);
+   const cached=await cache.match(keyRequest);
+   if(cached){
+    const items=await cached.json();
+    if(Array.isArray(items)){photonMemo.set(cacheKeyText,items);return {configured:true,items,provider:photonProviderName,cached:true};}
+   }
+  }
+ }catch{}
+ const wait=Math.max(0,1000-(Date.now()-photonLastRequestAt));
+ if(wait)await new Promise(resolve=>setTimeout(resolve,wait));
+ photonLastRequestAt=Date.now();
+ const url="https://photon.komoot.io/api/?q="+encodeURIComponent(query)+"&lang=pt&limit=5";
+ let response;
+ try{
+  response=await fetch(url,{headers:{"accept":"application/json","user-agent":"AgendaMobilizacoes/1.0 (+https://agenda-mobilizacoes.participa.workers.dev)","referer":"https://agenda-mobilizacoes.participa.workers.dev/"},signal:AbortSignal.timeout(8000)});
+ }catch{return {configured:true,items:[],provider:photonProviderName,error:"O serviço geográfico público não respondeu. Tente novamente ou revise o local manualmente."};}
+ if(!response.ok)return {configured:true,items:[],provider:photonProviderName,error:"A busca geográfica pública respondeu HTTP "+response.status+"; o resultado precisa ser conferido manualmente."};
+ let data;
+ try{data=await response.json()}catch{return {configured:true,items:[],provider:photonProviderName,error:"O serviço geográfico retornou uma resposta inválida."};}
+ const features=Array.isArray(data.features)?data.features:[];
+ const items=features.map((feature,index)=>{
+  const properties=feature.properties||{},coordinates=feature.geometry?.coordinates||[];
+  const lng=Number(coordinates[0]),lat=Number(coordinates[1]);
+  const country=clean(properties.country||"");
+  const countryCode=clean(properties.countrycode||"").toLowerCase();
+  if((countryCode&&countryCode!=="br")||(country&&!/brasil|brazil/i.test(country)))return null;
+  if(!Number.isFinite(lat)||!Number.isFinite(lng)||lat < -34||lat > 6||lng < -75||lng > -30)return null;
+  const stateName=clean(properties.state||"");
+  const stateCode=stateDirectory.find(([code,name])=>norm(name)===norm(stateName)||code.toLowerCase()===stateName.toLowerCase())?.[0]||"";
+  const rawCity=clean(properties.city||properties.municipality||properties.locality||"");
+  const cityMatch=getMunicipalityMatch(rawCity,municipalities,stateCode||preferredState);
+  const cityName=cityMatch.match?.name||"";
+  const matchedState=cityMatch.match?.uf||stateCode||preferredState||"";
+  const components=[];
+  if(rawCity)components.push({longText:rawCity,shortText:rawCity,types:cityMatch.match?["locality","political"]:["administrative_area_level_2","political"]});
+  if(stateName||matchedState)components.push({longText:stateName||stateDirectory.find(([code])=>code===matchedState)?.[1]||"",shortText:matchedState,types:["administrative_area_level_1","political"]});
+  components.push({longText:country||"Brasil",shortText:countryCode?countryCode.toUpperCase():"BR",types:["country","political"]});
+  const name=clean(properties.name||properties.street||properties.city||properties.locality||properties.district||properties.county||"");
+  const addressParts=[properties.housenumber,properties.street,properties.district,properties.city||properties.municipality||properties.locality,stateName,"Brasil"].map(clean).filter(Boolean);
+  const displayAddress=addressParts.length?addressParts.join(", "):clean(properties.name||"Local encontrado no OpenStreetMap");
+  const itemId=String(properties.osm_type||"photon")+"-"+String(properties.osm_id||index);
+  return {
+   id:itemId,displayName:{text:name||displayAddress.split(",")[0]||"Local encontrado no mapa"},
+   formattedAddress:clean(displayAddress),location:{latitude:lat,longitude:lng},
+   addressComponents:components,
+   types:[clean(properties.type),clean(properties.osm_key),clean(properties.osm_value)].filter(Boolean),
+   googleMapsUri:"https://www.google.com/maps/dir/?api=1&destination="+encodeURIComponent(lat+","+lng),
+   photonProperties:{rawCity,cityName,state:matchedState,category:clean(properties.osm_key),type:clean(properties.osm_value)}
+  };
+ }).filter(Boolean);
+ const unique=[...new Map(items.map(item=>[item.id,item])).values()].slice(0,5);
+ photonMemo.set(cacheKeyText,unique);
+ if(photonMemo.size>200)photonMemo.delete(photonMemo.keys().next().value);
+ if(cache&&keyRequest){
+  try{await cache.put(keyRequest,new Response(JSON.stringify(unique),{headers:{"content-type":"application/json; charset=utf-8","cache-control":"public, max-age=86400"}}));}catch{}
+ }
+ return {configured:true,items:unique,provider:photonProviderName,error:unique.length?"":"A busca pública não encontrou um ponto correspondente no Brasil."};
+}
 function scorePlaceResult(place,query,venue,city,state,municipalities){
  const queryKey=norm(query),venueKey=norm(venue),name=norm(place.displayName?.text||"");
  const address=norm(place.formattedAddress||"");

@@ -49,13 +49,33 @@ export default function PosterImporter({currentImage,existingEvents,onFileSelect
   }catch(error){setStatus(error instanceof Error?error.message:'Falha no OCR. O pôster foi anexado e você pode preencher manualmente.')}
   finally{setBusy(false)}
  },[onCandidatesFound,onFileSelected]);
+ const loadPastedImageUrl=useCallback(async(url:string)=>{
+  try{
+   const response=await fetch(url,{mode:'cors'});
+   if(!response.ok)throw new Error('O site de origem não permitiu baixar a imagem diretamente.');
+   const blob=await response.blob();
+   if(!blob.type.startsWith('image/'))throw new Error('O link copiado não aponta diretamente para um arquivo de imagem. Use “Copiar imagem” ou selecione o arquivo baixado.');
+   const nameFromUrl=(new URL(url)).pathname.split('/').pop()||'poster';
+   const ext=nameFromUrl.match(/\.(jpg|jpeg|jfif|png|webp|gif)$/i)?.[1]||(blob.type.split('/')[1]||'jpg');
+   await processFile(new File([blob],nameFromUrl.includes('.')?nameFromUrl:'poster.'+ext,{type:blob.type||'image/jpeg'}));
+  }catch(error){setStatus(error instanceof Error?error.message:'Não consegui ler a imagem pelo link copiado. Salve o pôster e selecione o arquivo.')}
+ },[processFile]);
  useEffect(()=>{
   const onPaste=(event:ClipboardEvent)=>{
-   const item=Array.from(event.clipboardData?.items||[]).find(entry=>entry.kind==='file'&&entry.type.startsWith('image/'));
-   const file=item?.getAsFile();if(file){event.preventDefault();void processFile(file)}
+   const items=Array.from(event.clipboardData?.items||[]);
+   const item=items.find(entry=>entry.kind==='file'&&entry.type.startsWith('image/'));
+   const file=item?.getAsFile();
+   if(file){event.preventDefault();void processFile(file);return}
+   const html=event.clipboardData?.getData('text/html')||'';
+   const imgSrc=html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1];
+   const text=(event.clipboardData?.getData('text/uri-list')||event.clipboardData?.getData('text/plain')||'').split(/\r?\n/).find(line=>/^https?:\/\//i.test(line.trim()))?.trim();
+   const url=imgSrc||text;
+   if(url&&/^https?:\/\//i.test(url)&&(/\.(jpe?g|jfif|png|webp|gif)(?:[?#]|$)/i.test(url)||/pbs\.twimg\.com\/media\//i.test(url))){
+    event.preventDefault();void loadPastedImageUrl(url);
+   }
   };
   window.addEventListener('paste',onPaste);return()=>window.removeEventListener('paste',onPaste);
- },[processFile]);
+ },[processFile,loadPastedImageUrl]);
  const visibleImage=preview||currentImage||null;
  return <div className="poster-upload full">
   <div className="poster-upload-label"><ImageIcon size={17}/><strong>Importar pôster e extrair eventos</strong></div>
@@ -63,7 +83,7 @@ export default function PosterImporter({currentImage,existingEvents,onFileSelect
   {visibleImage&&<img src={visibleImage} alt="Pré-visualização do pôster original" className="poster-preview"/>}
   {dimensions&&<small className={Number(dimensions.split(' × ')[0])<700?'poster-quality-warning':Number(dimensions.split(' × ')[0])<900?'poster-quality-review':'poster-meta'}>Resolução do arquivo: <strong>{dimensions}</strong>. {Number(dimensions.split(' × ')[0])<700?'Atenção: resolução baixa; prefira baixar o pôster original em maior tamanho antes de publicar.':Number(dimensions.split(' × ')[0])<900?'Vale conferir a nitidez em tamanho grande.':'Resolução adequada para conferência; o arquivo original será enviado sem recorte nem redimensionamento.'}</small>}
   <label className="poster-file-button"><Upload size={16}/> Selecionar JPG / JFIF / PNG / WEBP / GIF<input type="file" accept=".jpg,.jpeg,.jfif,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif" onChange={e=>{const file=e.target.files?.[0];if(file)void processFile(file);e.currentTarget.value=''}}/></label>
-  <div className="poster-paste-zone" tabIndex={0} onPaste={e=>{const item=Array.from(e.clipboardData.items).find(entry=>entry.kind==='file'&&entry.type.startsWith('image/'));const file=item?.getAsFile();if(file){e.preventDefault();void processFile(file)}}}><ClipboardPaste size={17}/> Clique aqui e use <strong>Ctrl+V</strong> para colar um pôster copiado.</div>
+  <div className="poster-paste-zone" tabIndex={0} onPaste={e=>{const item=Array.from(e.clipboardData.items).find(entry=>entry.kind==='file'&&entry.type.startsWith('image/'));const file=item?.getAsFile();if(file){e.preventDefault();e.stopPropagation();void processFile(file)}}}><ClipboardPaste size={17}/> Clique aqui e use <strong>Ctrl+V</strong> para colar um pôster copiado.</div>
   {selected&&<button type="button" className="button ghost poster-ocr-button" disabled={busy} onClick={()=>void processFile(selected)}><RefreshCw size={15}/>{busy?'Extraindo texto…':'Ler texto novamente'}</button>}
   {status&&<small className={busy?'poster-meta':'poster-ocr-status'}>{status}</small>}
   <small>{selected?'Arquivo original selecionado.':'Nenhum pôster novo selecionado.'} Limite de 8 MB por imagem. A ferramenta não altera nem apaga pôsteres já cadastrados.</small>

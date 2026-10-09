@@ -96,7 +96,8 @@ export default function PosterImporter({currentImage,existingEvents,onFileSelect
     evidence:Array.isArray(event.evidence)?event.evidence.filter((value:unknown)=>typeof value==='string'):[],
     missing_fields:Array.isArray(event.missing_fields)?event.missing_fields.filter((value:unknown)=>typeof value==='string'):[],
     inferred_title:Boolean(event.inferred_title),
-    description:typeof event.description==='string'&&event.description?normalizePtSentence(event.description):undefined,\n    ai_confidence:typeof event.confidence==='string'?event.confidence:'baixa',
+    description:typeof event.description==='string'&&event.description?normalizePtSentence(event.description):undefined,
+    ai_confidence:typeof event.confidence==='string'?event.confidence:'baixa',
     source_url:typeof event.source_url==='string'&&event.source_url?event.source_url:(typeof payload.sourceUrl==='string'&&payload.sourceUrl?payload.sourceUrl:postUrl.trim()||undefined),
     sourceLines:Array.isArray(event.evidence)?event.evidence.filter((value:unknown)=>typeof value==='string'):[],
   }));

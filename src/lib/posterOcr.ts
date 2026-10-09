@@ -20,6 +20,23 @@ const states=new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS
 const cityUF:Record<string,string>={'belo horizonte':'MG','sao paulo':'SP','rio de janeiro':'RJ','duque de caxias':'RJ','nova iguacu':'RJ','niteroi':'RJ','sao goncalo':'RJ','campinas':'SP','sao jose dos campos':'SP','santos':'SP','brasilia':'DF','goiania':'GO','cuiaba':'MT','campo grande':'MS','palmas':'TO','belem':'PA','braganca':'PA','manaus':'AM','fortaleza':'CE','caucaia':'CE','salvador':'BA','feira de santana':'BA','recife':'PE','serra talhada':'PE','natal':'RN','teresina':'PI','sao luis':'MA','macapa':'AP','curitiba':'PR','maringa':'PR','ponta grossa':'PR','florianopolis':'SC','balneario camboriu':'SC','porto alegre':'RS','rio grande':'RS','vitoria':'ES','sao mateus':'ES','ouro preto':'MG','uberlandia':'MG','sao joao del rei':'MG','arapiraca':'AL','boa vista':'RR','blumenau':'SC','seropedica':'RJ','tres rios':'RJ','campo mourao':'PR'};
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const clean=(s:string)=>s.replace(/[•●▪■]+/g,' ').replace(/\s+/g,' ').replace(/^[\s:|–—-]+|[\s|]+$/g,'').trim();
+const SMALL_TITLE_WORDS=new Set(['a','as','o','os','um','uma','uns','umas','de','da','das','do','dos','e','em','no','na','nos','nas','por','para','com','pelo','pela','pelos','pelas','ao','à','às','ou']);
+const TITLE_ACRONYMS:Record<string,string>={ufmg:'UFMG',dce:'DCE',mst:'MST',pt:'PT',psol:'PSOL',pcb:'PCB',pcdob:'PCdoB',pstu:'PSTU',cut:'CUT',une:'UNE',bh:'BH',stf:'STF',tse:'TSE',ufrj:'UFRJ',unesp:'Unesp',usp:'USP',uol:'UOL'};
+export function normalizePtTitle(value:string):string{
+ const words=value.replace(/\\s+/g,' ').trim().toLocaleLowerCase('pt-BR').split(' ');
+ return words.map((word,index)=>{
+  const hyphenated=word.split('-').map(part=>{
+   const key=norm(part);
+   if(TITLE_ACRONYMS[key])return TITLE_ACRONYMS[key];
+   return part?part.charAt(0).toLocaleUpperCase('pt-BR')+part.slice(1):part;
+  }).join('-');
+  return index>0&&SMALL_TITLE_WORDS.has(word)?word:hyphenated;
+ }).join(' ');
+}
+export function normalizePtSentence(value:string):string{
+ return value.replace(/\\s+/g,' ').trim().toLocaleLowerCase('pt-BR')
+  .replace(/(^|[.!?]\\s+)([a-záàâãéêíóôõúüç])/gu,(_m,lead,letter)=>lead+letter.toLocaleUpperCase('pt-BR'));
+}
 const TIME_RE=/\b([01]?\d|2[0-3])\s*(?:h\s*([0-5]\d)?|:([0-5]\d))\b/gi;
 function prettyCity(s:string){
  const map:Record<string,string>={'sao paulo':'São Paulo','rio de janeiro':'Rio de Janeiro','belo horizonte':'Belo Horizonte','duque de caxias':'Duque de Caxias','nova iguacu':'Nova Iguaçu','sao luis':'São Luís','sao goncalo':'São Gonçalo','feira de santana':'Feira de Santana','campo grande':'Campo Grande','campo mourao':'Campo Mourão','ouro preto':'Ouro Preto','ponta grossa':'Ponta Grossa','balneario camboriu':'Balneário Camboriú','sao jose dos campos':'São José dos Campos','sao joao del rei':'São João del-Rei','rio grande':'Rio Grande','sao mateus':'São Mateus','goiania':'Goiânia','cuiaba':'Cuiabá','belem':'Belém','braganca':'Bragança','macapa':'Macapá','niteroi':'Niterói','maringa':'Maringá','brasilia':'Brasília','vitoria':'Vitória','uberlandia':'Uberlândia','arapiraca':'Arapiraca','florianopolis':'Florianópolis','seropedica':'Seropédica','tres rios':'Três Rios'};

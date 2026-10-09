@@ -49,7 +49,9 @@ const stateDirectory=[
 ];
 const stateCodeByName=new Map(stateDirectory.map(([code,name])=>[norm(name),code]));
 let ibgeMunicipalitiesPromise=null;
-const escapeRegex=value=>value.replace(/[.*+?^$|(){}[\\]\\]/g,char=>String.fromCharCode(92)+char);
+const regexSpecials=new Set([".", "*", "+", "?", "^", "$", "|", "(", ")", "{", "}", "[", "]", String.fromCharCode(92)]);
+const escapeRegex=value=>Array.from(value).map(char=>regexSpecials.has(char)?String.fromCharCode(92)+char:char).join("");
+const geoNorm=value=>typeof value==="string"?value.normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim():"";
 async function getIBGEMunicipalities(){
  if(!ibgeMunicipalitiesPromise){
   ibgeMunicipalitiesPromise=(async()=>{
@@ -69,7 +71,7 @@ async function getIBGEMunicipalities(){
  return ibgeMunicipalitiesPromise;
 }
 function stateHints(text){
- const t=norm(text),found=[];
+ const t=geoNorm(text),found=[];
  for(const [code,name] of stateDirectory){
   const nameNorm=norm(name);
   if(nameNorm&&new RegExp("(^| )"+escapeRegex(nameNorm)+"( |$)").test(t))found.push({code,name});
@@ -81,7 +83,7 @@ function looksLikePlaceName(value){
  return /\b(palacio|palace|sede|tre|tribunal|masp|praca|largo|caixa d agua|caixas d agua|campus|rodoviaria|estacao|terminal|sindicato|auditorio|teatro|assembleia|catedral|igreja|parque|mercado|estadio|centro|escola|universidade|prefeitura|camara|congresso|monumento|viaduto|ponte|farol|quadra|ginasio|pavilhao|ponto de encontro|predio|edificio|secretaria|forum)\b/.test(v);
 }
 function cityMatchesForText(text,municipalities,state){
- const t=norm(text);
+ const t=geoNorm(text);
  const found=municipalities.filter(item=>item.key.length>3&&new RegExp("(^| )"+escapeRegex(item.key)+"( |$)").test(t));
  const filtered=state?found.filter(item=>item.uf===state):found;
  return [...new Map(filtered.map(item=>[item.key+"|"+item.uf,item])).values()].sort((a,b)=>b.key.length-a.key.length);

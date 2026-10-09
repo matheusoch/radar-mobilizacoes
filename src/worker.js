@@ -17,7 +17,7 @@ const validDate=x=>{const v=clean(x);if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return ""
 const validTime=x=>{const m=clean(x).match(/^(\d{1,2}):([0-5]\d)$/);return !m||Number(m[1])>23?"":String(Number(m[1])).padStart(2,"0")+":"+m[2]};
 const validState=x=>/^[A-Z]{2}$/.test(clean(x).toUpperCase())?clean(x).toUpperCase():"";
 const smallTitleWords=new Set(["a","as","o","os","um","uma","uns","umas","de","da","das","do","dos","e","em","no","na","nos","nas","por","para","com","pelo","pela","pelos","pelas","ao","à","às","ou"]);
-const titleAcronyms={ufmg:"UFMG",dce:"DCE",mst:"MST",pt:"PT",psol:"PSOL",pcb:"PCB",pcdob:"PCdoB",pstu:"PSTU",cut:"CUT",une:"UNE",bh:"BH",stf:"STF",tse:"TSE",tre:"TRE",masp:"MASP",ibge:"IBGE",ufrj:"UFRJ",unesp:"Unesp",usp:"USP"};
+const titleAcronyms={ufmg:"UFMG",dce:"DCE",mst:"MST",pt:"PT",psol:"PSOL",pcb:"PCB",pcdob:"PCdoB",pstu:"PSTU",cut:"CUT",une:"UNE",bh:"BH",stf:"STF",tse:"TSE",tre:"TRE",trt:"TRT",tj:"TJ",tcu:"TCU",mp:"MP",mpf:"MPF",mpt:"MPT",masp:"MASP",dnit:"DNIT",ibge:"IBGE",ufrj:"UFRJ",ufba:"UFBA",ufro:"UFRO",unir:"UNIR",ufrgs:"UFRGS",ufsc:"UFSC",ufpr:"UFPR",uerj:"UERJ",uff:"UFF",unesp:"Unesp",usp:"USP"};
 const norm=x=>clean(x).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
 const titleCase=x=>clean(x).replace(/[’‘]/g,"'").toLocaleLowerCase("pt-BR").split(/\s+/).filter(Boolean).map((word,index)=>{
  const cooked=word.split("-").map(part=>titleAcronyms[norm(part)]||part.charAt(0).toLocaleUpperCase("pt-BR")+part.slice(1)).join("-");
@@ -92,7 +92,7 @@ function stateHints(text){
 }
 function looksLikePlaceName(value){
  const v=norm(value);
- return /\b(palacio|palace|sede|tre|tribunal|masp|praca|largo|caixa d agua|caixas d agua|campus|rodoviaria|estacao|terminal|sindicato|auditorio|teatro|assembleia|catedral|igreja|parque|mercado|estadio|centro|escola|universidade|prefeitura|camara|congresso|monumento|viaduto|ponte|farol|quadra|ginasio|pavilhao|ponto de encontro|predio|edificio|secretaria|forum)\b/.test(v);
+ return /\b(palacio|palace|sede|tre|tribunal|masp|praca|largo|caixa d agua|caixas d agua|campus|rodoviaria|estacao|terminal|sindicato|auditorio|teatro|assembleia|catedral|igreja|parque|mercado|estadio|centro|escola|universidade|prefeitura|camara|congresso|monumento|viaduto|ponte|farol|quadra|ginasio|pavilhao|ponto de encontro|predio|edificio|secretaria|forum|museu|memorial|biblioteca|hospital|cartorio|centro cultural|casa do estudante|praia|orla|balneario|feira|rua|avenida|travessa|alameda|rodovia|estrada)\b/.test(v);
 }
 function extractVenueClue(text){
  const lines=String(text||"").split(/\r?\n/).map(clean).filter(Boolean);
@@ -117,6 +117,15 @@ function cityMatchesForText(text,municipalities,state){
  const found=municipalities.filter(item=>item.key.length>3&&t.includes(" "+item.key+" "));
  const filtered=state?found.filter(item=>item.uf===state):found;
  return [...new Map(filtered.map(item=>[item.key+"|"+item.uf,item])).values()].sort((a,b)=>b.key.length-a.key.length);
+}
+function municipalityAppearsOnlyAsGroupOrigin(text,municipality){
+ const city=geoNorm(municipality);
+ if(!city)return false;
+ const identity="(?:juventude|jovens|estudantes|estudantil|trabalhadores|trabalhadoras|moradores|moradoras|militantes|povo|coletivo|coletiva|alunos|alunas|professores|professoras|comunidade|sindicato|movimento|organizacao|grupo)";
+ const groupPattern=new RegExp("(?:^| )"+identity+" (?:de|do|da|dos|das) "+escapeRegex(city)+"(?: |$)");
+ const explicitLocationPattern=new RegExp("(?:^| )(?:em|no|na|nos|nas|para|na cidade de|no municipio de|na localidade de|local em|evento em|ato em|concentracao em|encontro em|marcha em|caminhada em) "+escapeRegex(city)+"(?: |$)");
+ const lines=String(text||"").split(/[\r\n.!?;]+/).map(geoNorm).filter(Boolean);
+ return lines.some(line=>groupPattern.test(line))&&!lines.some(line=>explicitLocationPattern.test(line));
 }
 function getMunicipalityMatch(value,municipalities,state){
  const key=norm(value);
@@ -206,15 +215,22 @@ function scorePlaceResult(place,query,venue,city,state,municipalities){
 async function resolveEventGeography(event,context,env,municipalities,allowMaps=true){
  const result={...event};
  const warnings=[];
- const sourceText=[context.postText,context.posterText,context.title,context.description,context.organization,context.venue,context.address,context.city,(context.evidence||[]).join(" ")].filter(Boolean).join(" ");
- const cityEvidenceText=[result.city,result.title,result.description,result.organization,result.venue,result.address,(context.evidence||[]).join(" "),context.cityEvidence||"",context.postText||"",context.posterText||""].filter(Boolean).join(" ");
+ const sourceText=[context.postText,context.posterText,context.title,context.description,context.organization,context.venue,context.address,context.city,(context.evidence||[]).join("\n")].filter(Boolean).join("\n");
+ const cityEvidenceText=[result.city,result.title,result.description,result.organization,result.venue,result.address,(context.evidence||[]).join("\n"),context.cityEvidence||"",context.postText||"",context.posterText||""].filter(Boolean).join("\n");
  const identityClue=(city)=>new RegExp("(?:^| )(?:juventude|jovens|estudantes|estudantil|trabalhadores|trabalhadoras|moradores|moradoras|militantes|povo|coletivo|coletiva|alunos|alunas|professores|professoras|comunidade|sindicato|movimento|organizacao|grupo) (?:de|do|da|dos|das|em) "+escapeRegex(geoNorm(city))+"(?: |$)").test(geoNorm(sourceText));
  const hints=stateHints([result.state,sourceText].filter(Boolean).join(" "));
  let state=validState(result.state);
  if(!state&&hints.length===1)state=hints[0].code;
  result.state=state;
  let cityMatch=getMunicipalityMatch(result.city,municipalities,state);
- if(cityMatch.match){
+ if(cityMatch.match&&municipalityAppearsOnlyAsGroupOrigin(sourceText,cityMatch.match.name)){
+   result.city="";
+   result.city_needs_clear=true;
+   result.city_inferred_from_context=false;
+   cityMatch={match:null,ambiguous:[]};
+   warnings.push("O município mencionado aparece como origem/identidade do grupo (por exemplo, 'Estudantes de ...'), não como local confirmado do evento. Foi deixado em branco para validar o ponto de encontro no mapa.");
+  }
+  if(cityMatch.match){
   result.city=cityMatch.match.name;
   if(!state||state!==cityMatch.match.uf){
    if(state&&state!==cityMatch.match.uf)warnings.push("A UF informada conflita com a base oficial; foi usada a UF do município validado pelo IBGE.");
@@ -251,7 +267,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   const inferredCities=cityMatchesForText(cityEvidenceText,municipalities,state);
   const contextMatches=inferredCities.filter(item=>{
    const re=new RegExp("(?:de|do|da|dos|das|em|na|no|para|a|ao)\\s+"+escapeRegex(item.key)+"(?:\\s|$)");
-   return re.test(geoNorm(sourceText));
+   return re.test(geoNorm(sourceText))&&!municipalityAppearsOnlyAsGroupOrigin(sourceText,item.name);
   });
   const choices=contextMatches;
   const unique=[...new Map(choices.map(item=>[item.key+"|"+item.uf,item])).values()];

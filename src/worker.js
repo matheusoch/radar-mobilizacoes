@@ -64,7 +64,7 @@ async function handler(request,env){
  try{
   const result=await env.AI.run(MODEL,{messages:[{role:"system",content:system},{role:"user",content}],response_format:{type:"json_schema",json_schema:schema},temperature:0,max_tokens:4200});
   let parsed=result&&result.response!==undefined?result.response:result;
-  if(typeof parsed==="string")parsed=JSON.parse(parsed.replace(/^\\u0060\\u0060\\u0060(?:json)?\s*/i,"").replace(/\s*\\u0060\\u0060\\u0060$/,""));
+  if(typeof parsed==="string"){const value=parsed.trim();const fence=String.fromCharCode(96).repeat(3);if(value.startsWith(fence)){const start=value.indexOf("\n");const end=value.lastIndexOf(fence);if(start>=0&&end>start)parsed=value.slice(start+1,end).trim();else parsed=value;}else parsed=value;parsed=JSON.parse(parsed)}
   const events=Array.isArray(parsed.events)?parsed.events:[];
   const cleaned=events.slice(0,20).map((event,index)=>({
    id:"ai-"+index+"-"+String(event.date||"sem-data"),title:clean(event.title),type:clean(event.type),date:validDate(event.date),time:validTime(event.time),

@@ -853,6 +853,7 @@ const blank=():MobilizationEvent=>({
     setMessage(candidates.length>1?'O pôster parece conter '+candidates.length+' atividades. A primeira sugestão foi carregada no editor; confira a lista e selecione outras atividades conforme necessário.':'Sugestões extraídas do pôster. Confira os campos antes de salvar.');
   };
   const useOcrCandidate=(candidate:PosterCandidate,file?:File,previewUrl?:string)=>{
+    setGeoOptions([]);
     const normalizeText=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
     const sameDate=Boolean(editing?.db_id&&(!candidate.date||candidate.date===editing.date));
     const sameCity=Boolean(editing?.db_id&&(!candidate.city||normalizeText(candidate.city)===normalizeText(editing.city)));

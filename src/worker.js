@@ -295,6 +295,90 @@ async function searchPhotonPlaces(query,municipalities,preferredState=""){
  }
  return {configured:true,items:unique,provider:photonProviderName,error:unique.length?"":"A busca pública não encontrou um ponto correspondente no Brasil."};
 }
+function osmPlaceComponents(address){
+ const stateName=clean(address.state||"");
+ const stateMatch=stateDirectory.find(([code,name])=>geoNorm(name)===geoNorm(stateName));
+ const cityName=clean(address.city||address.town||address.village||address.municipality||address.hamlet||address.locality||"");
+ const countyName=clean(address.county||address.city_district||"");
+ const countryName=clean(address.country||"");
+ const component=(longText,shortText,types)=>({longText:longText||"",shortText:shortText||longText||"",types});
+ const items=[];
+ if(stateName)items.push(component(stateName,stateMatch?.[0]||"",["administrative_area_level_1"]));
+ if(cityName)items.push(component(cityName,cityName,["locality"]));
+ if(countyName)items.push(component(countyName,countyName,["administrative_area_level_2"]));
+ if(countryName)items.push(component(countryName,geoNorm(address.country_code)==="br"?"BR":countryName,["country"]));
+ return items;
+}
+async function searchOpenStreetMap(query,venue,city,state,municipalities){
+ const params=new URLSearchParams({q:query,format:"jsonv2",addressdetails:"1",namedetails:"1",limit:"5",countrycodes:"br","accept-language":"pt-BR"});
+ const url="https://nominatim.openstreetmap.org/search?"+params.toString();
+ const cacheKey=new Request(url,{method:"GET"});
+ let rows=null;
+ try{
+  if(typeof caches!=="undefined"&&caches.default){
+   const cached=await caches.default.match(cacheKey);
+   if(cached)rows=await cached.json();
+  }
+ }catch{}
+ if(!Array.isArray(rows)){
+  const wait=Math.max(0,1100-(Date.now()-lastNominatimRequestAt));
+  if(wait)await new Promise(resolve=>setTimeout(resolve,wait));
+  lastNominatimRequestAt=Date.now();
+  try{
+   const response=await fetch(url,{
+    headers:{
+     "accept":"application/json",
+     "accept-language":"pt-BR",
+     "user-agent":"AgendaDeMobilizacoes/1.0 (+https://agenda-mobilizacoes.participa.workers.dev/; event-location-verification)"
+    },
+    signal:AbortSignal.timeout(8000)
+   });
+   if(!response.ok)return {configured:true,items:[],source:"OpenStreetMap/Nominatim",error:"OpenStreetMap respondeu HTTP "+response.status};
+   const raw=await response.text();
+   try{rows=JSON.parse(raw)}catch{return {configured:true,items:[],source:"OpenStreetMap/Nominatim",error:"A resposta cartográfica não pôde ser lida."}}
+   if(!Array.isArray(rows))rows=[];
+   try{
+    if(typeof caches!=="undefined"&&caches.default){
+     await caches.default.put(cacheKey,new Response(JSON.stringify(rows),{headers:{"content-type":"application/json; charset=utf-8","cache-control":"public, max-age=604800"}}));
+    }
+   }catch{}
+  }catch{return {configured:true,items:[],source:"OpenStreetMap/Nominatim",error:"Não foi possível consultar o OpenStreetMap nesta tentativa."}}
+ }
+ const items=rows.filter(row=>{
+  const addr=row.address||{};
+  if(geoNorm(addr.country_code||"")!=="br"&&!/brasil|brazil/i.test(addr.country||""))return false;
+  const type=geoNorm(row.type||"");
+  const addressType=geoNorm(row.addresstype||"");
+  if(["state","country","county","municipality","administrative"].includes(type)||["state","country","county","municipality","administrative"].includes(addressType))return false;
+  return Boolean(row.lat&&row.lon&&row.display_name);
+ }).map(row=>{
+  const name=clean(row.name||String(row.display_name).split(",")[0]);
+  const title=name||clean(String(row.display_name).split(",")[0]);
+  const address=clean(row.display_name);
+  const components=osmPlaceComponents(row.address||{});
+  const lat=Number(row.lat),lng=Number(row.lon);
+  const mapUrl=Number.isFinite(lat)&&Number.isFinite(lng)?"https://www.openstreetmap.org/?mlat="+encodeURIComponent(lat)+"&mlon="+encodeURIComponent(lng)+"#map=17/"+encodeURIComponent(lat)+"/"+encodeURIComponent(lng):"";
+  return {
+   id:"osm-"+String(row.osm_type||"item")+"-"+String(row.osm_id||row.place_id||""),
+   displayName:{text:title},formattedAddress:address,
+   location:{latitude:lat,longitude:lng},addressComponents:components,
+   types:["point_of_interest"],googleMapsUri:mapUrl,
+   _source:"OpenStreetMap/Nominatim",_osmType:row.type,_osmCategory:row.category
+  };
+ });
+ const scored=items.map(place=>({...place,...scorePlaceResult(place,query,venue,city,state,municipalities)}))
+  .filter(place=>place.geo!==null)
+  .sort((a,b)=>b.score-a.score);
+ return {configured:true,items:scored,source:"OpenStreetMap/Nominatim",error:""};
+}
+async function searchPlacesWithFallback(query,venue,city,state,env,municipalities){
+ const google=await searchGooglePlaces(query,env);
+ if(google.configured&&google.items.length)return {...google,source:"Google Maps / Places API"};
+ const osm=await searchOpenStreetMap(query,venue,city,state,municipalities);
+ if(osm.items.length)return osm;
+ if(google.configured)return {...google,source:"Google Maps / Places API",fallbackError:osm.error||""};
+ return {...osm,configured:false,source:"OpenStreetMap/Nominatim",error:osm.error||"Nenhum resultado foi encontrado no OpenStreetMap."};
+}
 function scorePlaceResult(place,query,venue,city,state,municipalities){
  const queryKey=norm(query),venueKey=norm(venue),name=norm(place.displayName?.text||"");
  const address=norm(place.formattedAddress||"");

@@ -430,10 +430,14 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   const reliableState=result.city_inferred_from_context?"":(stateDirectory.find(([code])=>code===result.state)?.[1]||"");
   const originStateName=originCityHint?stateDirectory.find(([code])=>code===originCityHint.uf)?.[1]||"": "";
   const stateSearchHint=reliableState||(originStateName&&!result.state?originStateName:"")||(groupStateClue&&!result.state?groupStateClue.name:"");
-  const query=[queryVenue,result.address,reliableCity,stateSearchHint,"Brasil"].filter(Boolean).join(", ");
-  const places=await searchPlacesWithFallback(query,queryVenue,result.city||originCityHint?.name||"",result.state||originCityHint?.uf||"",env,municipalities,allowOSMFallback);
-  if(places.configured&&places.items.length&&places.items.some(place=>getPlaceCityAndState(place,municipalities,result.state)!==null)){
-   const scored=places.items.map(place=>({...place,...scorePlaceResult(place,query,queryVenue,result.city,result.state,municipalities)})).filter(place=>place.geo!==null).sort((a,b)=>b.score-a.score);
+  // Group/organization state names are search clues, not event geography by themselves.
+  // Use them to constrain candidate discovery, but only assign the event's UF after the selected place confirms it.
+  const expectedCity=result.city||originCityHint?.name||"";
+  const expectedState=result.state||originCityHint?.uf||groupStateClue?.code||"";
+  const query=[queryVenue,result.address,expectedCity,stateSearchHint,"Brasil"].filter(Boolean).join(", ");
+  const places=await searchPlacesWithFallback(query,queryVenue,expectedCity,expectedState,env,municipalities,allowOSMFallback);
+  if(places.configured&&places.items.length&&places.items.some(place=>getPlaceCityAndState(place,municipalities,expectedState)!==null)){
+   const scored=places.items.map(place=>({...place,...scorePlaceResult(place,query,queryVenue,expectedCity,expectedState,municipalities)})).filter(place=>place.geo!==null).sort((a,b)=>b.score-a.score);
    const options=scored.map(place=>({
     id:clean(place.id),title:clean(place.displayName?.text)||"Local no Google Maps",
     address:clean(place.formattedAddress),lat:Number.isFinite(place.location?.latitude)?place.location.latitude:null,
@@ -447,8 +451,6 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
    const preciseName=norm(top.displayName?.text||"");
    const requestedName=norm(queryVenue);
    const nameSupported=requestedName&&(preciseName===requestedName||preciseName.includes(requestedName)||requestedName.includes(preciseName));
-   const expectedCity=result.city||originCityHint?.name||"";
-   const expectedState=result.state||originCityHint?.uf||"";
    const regionSupported=expectedCity
     ?Boolean(top.geo?.city&&norm(top.geo.city)===norm(expectedCity)&&(!expectedState||top.geo?.state===expectedState))
     :expectedState

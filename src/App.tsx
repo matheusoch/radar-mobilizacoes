@@ -691,7 +691,16 @@ const blank=():MobilizationEvent=>({
     setMessage('');
     try{
       const baseSlug=slugify(`${editing.date}-${editing.city}-${editing.title}`)||crypto.randomUUID();
-      const payload={slug:editing.db_id?editing.id:baseSlug,title:editing.title,type:editing.type,date:editing.date,time:editing.time?(/^\d{1,2}:\d{2}$/.test(editing.time)?`${editing.time.padStart(5,'0')}:00`:editing.time):null,time_label:editing.time_label||null,city:editing.city,state:editing.state,venue:editing.venue,address:editing.address||null,description:editing.description||null,status:editing.status,is_public:editing.public,lat:editing.lat??null,lng:editing.lng??null,image_url:editing.image_url||null,notes:editing.notes||null};
+      const rawTime=(editing.time??'').trim();
+      let normalizedTime:string|null=null;
+      if(rawTime){
+        const match=rawTime.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+        if(!match)throw new Error('No campo Hora, informe apenas HH:MM (ex.: 15:00) ou deixe vazio e preencha o rótulo do horário.');
+        const hours=Number(match[1]),minutes=Number(match[2]);
+        if(hours>23||minutes>59)throw new Error('Horário inválido. Use um horário entre 00:00 e 23:59.');
+        normalizedTime=`${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:00`;
+      }
+      const payload={slug:editing.db_id?editing.id:baseSlug,title:editing.title,type:editing.type,date:editing.date,time:normalizedTime,time_label:editing.time_label?.trim()||null,city:editing.city,state:editing.state,venue:editing.venue,address:editing.address||null,description:editing.description||null,status:editing.status,is_public:editing.public,lat:editing.lat??null,lng:editing.lng??null,image_url:editing.image_url||null,notes:editing.notes||null};
       let savedId:string;
       let savedSlug:string;
       if(editing.db_id){

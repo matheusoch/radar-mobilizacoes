@@ -593,7 +593,7 @@ const blank=():MobilizationEvent=>({
   id:'',
   title:'',
   type:'Manifestação',
-  date:new Date().toISOString().slice(0,10),
+  date:'',
   time:'',
   time_label:'',
   city:'',
@@ -690,6 +690,10 @@ const blank=():MobilizationEvent=>({
   if(!authorized)return <div className="container page narrow"><div className="eyebrow">ADMIN</div><h1>Conta sem permissão.</h1><p className="page-lead">A conta está autenticada, mas ainda não foi vinculada à tabela de administradores.</p><button className="button ghost" onClick={()=>db.auth.signOut()}>Sair</button></div>;
   const save=async()=>{
     if(!editing)return;
+    if(!editing.title.trim()||!editing.date||!editing.city.trim()){
+      setMessage('Antes de salvar, preencha pelo menos Título, Data e Cidade. A data não será presumida automaticamente.');
+      return;
+    }
     setSaving(true);
     setMessage('');
     let eventDataSaved=false;
@@ -770,7 +774,7 @@ const blank=():MobilizationEvent=>({
     });
     setMessage(candidates.length>1?'O pôster parece conter '+candidates.length+' atividades. A primeira sugestão foi carregada no editor; confira a lista e selecione outras atividades conforme necessário.':'Sugestões extraídas do pôster. Confira os campos antes de salvar.');
   };
-  const useOcrCandidate=(candidate:PosterCandidate,file:File,previewUrl:string)=>{
+  const useOcrCandidate=(candidate:PosterCandidate,file?:File,previewUrl?:string)=>{
     const normalizeText=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
     const sameDate=Boolean(editing?.db_id&&(!candidate.date||candidate.date===editing.date));
     const sameCity=Boolean(editing?.db_id&&(!candidate.city||normalizeText(candidate.city)===normalizeText(editing.city)));
@@ -778,12 +782,23 @@ const blank=():MobilizationEvent=>({
     const venueMatches=Boolean(candidate.venue&&normalizeText(candidate.venue)===normalizeText(editing?.venue||''));
     const timeMatches=Boolean(candidate.time&&editing?.time&&candidate.time.slice(0,5)===editing.time.slice(0,5));
     const sameEvent=Boolean(editing?.db_id&&sameDate&&sameCity&&(titleMatches&&(venueMatches||timeMatches||!candidate.venue)||venueMatches&&timeMatches));
+    const evidenceNotes=[
+      candidate.source_url?'Fonte original: '+candidate.source_url:'',
+      candidate.organization?'Organização mencionada: '+candidate.organization:'',
+      candidate.hashtags?.length?'Hashtags encontradas: '+candidate.hashtags.join(' '):'',
+      candidate.evidence?.length?'Evidências da extração: '+candidate.evidence.join(' | '):'',
+      candidate.missing_fields?.length?'Campos a confirmar: '+candidate.missing_fields.join(', '):'',
+      candidate.inferred_title?'Título sintetizado a partir do contexto; confirmar se representa o nome oficial.':''
+    ].filter(Boolean).join('\n');
     setEditing(prev=>{
       const target=sameEvent&&prev?prev:blank();
-      return {...target,title:candidate.title||target.title,type:candidate.type||target.type,date:candidate.date||target.date,time:candidate.time||target.time,time_label:candidate.time_label||target.time_label,city:candidate.city||target.city,state:candidate.state||target.state,venue:candidate.venue||target.venue,address:candidate.address||target.address,public:sameEvent?target.public:false,status:sameEvent?target.status:'pending'};
+      const noteParts=[target.notes,evidenceNotes].filter(Boolean);
+      const uniqueNotes=[...new Set(noteParts)];
+      return {...target,title:candidate.title||target.title,type:candidate.type||target.type,date:candidate.date||target.date,time:candidate.time||target.time,time_label:candidate.time_label||target.time_label,city:candidate.city||target.city,state:candidate.state||target.state,venue:candidate.venue||target.venue,address:candidate.address||target.address,description:candidate.description||target.description,notes:uniqueNotes.join('\n'),public:sameEvent?target.public:false,status:sameEvent?target.status:'pending'};
     });
-    setPosterFile(file);setPosterPreview(previewUrl);
-    setMessage(sameEvent?'Sugestão relacionada ao evento em edição. Confira as alterações antes de salvar.':'Sugestão carregada como novo rascunho. O alerta de duplicidade serve para conferência; nada é excluído automaticamente.');
+    setPosterFile(file||null);
+    setPosterPreview(previewUrl||(sameEvent?editing?.image_url||null:null));
+    setMessage(sameEvent?'Sugestão relacionada ao evento em edição. Confira os campos e a fonte antes de salvar.':'Sugestão carregada como rascunho. Confirme data, local, título e possível duplicidade antes de salvar.');
   };
   const indexExistingPosters=async()=>{
     if(indexingPosters)return;
@@ -838,7 +853,7 @@ const blank=():MobilizationEvent=>({
     {chatPending.length>0&&<section className="admin-section"><div className="section-head compact"><div><div className="eyebrow">MODERAÇÃO</div><h2>{chatPending.length} mensagem{chatPending.length===1?'':'s'} aguardando revisão</h2></div></div><div className="review-card-list">{chatPending.map(m=><article className="chat-review" key={m.id}><div><div className="review-meta"><strong>{m.display_name}</strong><span>{new Date(m.created_at).toLocaleString('pt-BR')}</span></div><p>{m.content}</p></div><div className="review-actions"><button className="button primary" onClick={()=>reviewChat(m,'approved')}>Aprovar</button><button className="button ghost" onClick={()=>reviewChat(m,'rejected')}>Rejeitar</button><button className="button ghost danger" onClick={()=>reviewChat(m,'spam')}><Flag size={15}/>Spam</button></div></article>)}</div></section>}
     {editing&&<div className="edit-card"><div className="edit-card-head"><div><div className="eyebrow">EDITOR</div><h2>{editing.db_id?'Editar evento':'Adicionar evento'}</h2></div><button className="button ghost" onClick={()=>setEditing(null)}>Fechar</button></div><div className="edit-grid"><label>Título<input value={editing.title} onChange={e=>setEditing({...editing,title:e.target.value})}/></label><label>Tipo<select value={editing.type} onChange={e=>setEditing({...editing,type:e.target.value})}>{['Manifestação','Ato','Plenária','Assembleia','Reunião','Debate','Caminhada','Panfletagem','Atividade cultural/política','Atividade universitária','Plenária online','Mobilização','Oficina'].map(x=><option key={x}>{x}</option>)}</select></label><label>Data<input type="date" value={editing.date} onChange={e=>setEditing({...editing,date:e.target.value})}/></label><label>Hora numérica<input type="text" inputMode="text" autoComplete="off" placeholder="15:00 ou 15h" value={(editing.time??'').slice(0,5)} onChange={e=>setEditing({...editing,time:e.target.value.replace(/[^0-9:hH]/g,'').slice(0,5)})}/></label><label className="full">Rótulo do horário<input placeholder="Ex.: 16h concentração / 17h saída" value={editing.time_label??''} onChange={e=>setEditing({...editing,time_label:e.target.value})}/></label><label>Cidade<input value={editing.city} onChange={e=>setEditing({...editing,city:e.target.value})}/></label><label>Estado<input maxLength={2} value={editing.state} onChange={e=>setEditing({...editing,state:e.target.value.toUpperCase()})}/></label><label className="full">Local<input value={editing.venue} onChange={e=>setEditing({...editing,venue:e.target.value})}/></label><label className="full">Endereço<input value={editing.address??''} onChange={e=>setEditing({...editing,address:e.target.value})}/></label><div className="full maps-verification"><MapPinned size={16}/><a href={'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent([editing.address,editing.venue,editing.city,editing.state,'Brasil'].filter(Boolean).join(', '))} target="_blank" rel="noreferrer">Conferir local no Google Maps / Como chegar</a><small>O link usa os campos preenchidos. Confira se o resultado corresponde ao endereço correto antes de salvar.</small></div><label>Status<select value={editing.status} onChange={e=>setEditing({...editing,status:e.target.value as any})}>{['confirmed','updated','warning','pending'].map(x=><option key={x}>{x}</option>)}</select></label><label>Latitude<input value={editing.lat??''} onChange={e=>setEditing({...editing,lat:e.target.value?Number(e.target.value):null})}/></label><label>Longitude<input value={editing.lng??''} onChange={e=>setEditing({...editing,lng:e.target.value?Number(e.target.value):null})}/></label><label className="full">Descrição<textarea value={editing.description??''} onChange={e=>setEditing({...editing,description:e.target.value})}/></label>
 <label className="full">Observação<textarea value={editing.notes??''} onChange={e=>setEditing({...editing,notes:e.target.value})}/></label>
-<PosterImporter currentImage={editing.image_url} existingEvents={events} onFileSelected={(file,previewUrl)=>{setPosterFile(file);setPosterPreview(previewUrl);setMessage('')}} onCandidatesFound={candidates=>applyOcrCandidates(candidates)} onUseCandidate={useOcrCandidate}/>
+<PosterImporter currentImage={editing.image_url} existingEvents={events} getAuthToken={async()=>{const{data}=await db.auth.getSession();return data.session?.access_token||null}} onFileSelected={(file,previewUrl)=>{setPosterFile(file);setPosterPreview(previewUrl);setMessage('')}} onCandidatesFound={candidates=>applyOcrCandidates(candidates)} onUseCandidate={useOcrCandidate}/>
 <div className="source-picker full"><div className="poster-upload-label"><ExternalLink size={17}/><strong>Fontes do evento</strong></div>
 <div className="source-checks">{sources.map(s=><label key={s.id}><input type="checkbox" checked={editing.source_ids.includes(s.id)} onChange={e=>setEditing({...editing,source_ids:e.target.checked?[...editing.source_ids,s.id]:editing.source_ids.filter(id=>id!==s.id)})}/><span>{s.account_name}<small>{s.url}</small></span></label>)}</div></div>
 <label className="check full"><input type="checkbox" checked={editing.public} onChange={e=>setEditing({...editing,public:e.target.checked})}/> Publicar no radar</label></div>

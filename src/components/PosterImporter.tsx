@@ -21,7 +21,7 @@ function normalizeCandidate(candidate:PosterCandidate):PosterCandidate{
   address:candidate.address?normalizePtTitle(candidate.address):candidate.address,
   organization:candidate.organization?normalizePtTitle(candidate.organization):candidate.organization,
   description:candidate.description?normalizePtSentence(candidate.description):candidate.description,
-  time_label:candidate.time_label?normalizePtSentence(candidate.time_label):candidate.time_label
+  time_label:candidate.time_label?normalizePtTitle(candidate.time_label):candidate.time_label
  };
 }
 function tokenSimilarity(a:string,b:string){
@@ -86,7 +86,7 @@ export default function PosterImporter({currentImage,existingEvents,onFileSelect
     type:typeof event.type==='string'?normalizePtTitle(event.type):undefined,
     date:typeof event.date==='string'&&event.date?event.date:undefined,
     time:typeof event.time==='string'&&event.time?event.time:undefined,
-    time_label:typeof event.time_label==='string'&&event.time_label?normalizePtSentence(event.time_label):undefined,
+    time_label:typeof event.time_label==='string'&&event.time_label?normalizePtTitle(event.time_label):undefined,
     city:typeof event.city==='string'&&event.city?normalizePtTitle(event.city):undefined,
     state:typeof event.state==='string'&&event.state?event.state:undefined,
     venue:typeof event.venue==='string'&&event.venue?normalizePtTitle(event.venue):undefined,

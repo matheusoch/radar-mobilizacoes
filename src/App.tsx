@@ -618,7 +618,7 @@ function ChatPage(){
     if(error||!data)return;
     let combined=data as ChatMessage[];
     const loadedIds=new Set(combined.map(message=>message.id));
-    const missingParentIds=[...new Set(combined.map(message=>message.parent_message_id).filter((id):id is string=>Boolean(id)&&!loadedIds.has(id)))];
+    const missingParentIds=[...new Set(combined.map(message=>message.parent_message_id).filter((id):id is string=>typeof id==='string'&&!loadedIds.has(id)))];
     if(missingParentIds.length){
       const{data:parents,error:parentsError}=await supabase.from('chat_messages').select('*').in('id',missingParentIds);
       if(!parentsError&&parents)combined=[...combined,...parents as ChatMessage[]];

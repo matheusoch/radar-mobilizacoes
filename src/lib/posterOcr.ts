@@ -5,7 +5,7 @@ export type GeographyPlaceOption = {
 export type PosterCandidate = {
   id: string; title?: string; type?: string; date?: string; time?: string; time_label?: string;
   city?: string; state?: string; venue?: string; address?: string; confidence?: number; sourceLines: string[];
-  organization?: string; description?: string; hashtags?: string[]; evidence?: string[]; missing_fields?: string[]; inferred_title?: boolean; ai_confidence?: string; source_url?: string;
+  organization?: string; description?: string; hashtags?: string[]; evidence?: string[]; missing_fields?: string[]; inferred_title?: boolean; ai_confidence?: string; source_url?: string; latitude?:number; longitude?:number; geo_precision?:string; geo_source?:string; geo_label?:string; geo_url?:string;
   lat?:number|null; lng?:number|null; maps_url?:string;
   city_needs_clear?:boolean; geography_status?:string; geography_source?:string; geography_confidence?:string;
   geography_warnings?:string[]; geography_options?:GeographyPlaceOption[];

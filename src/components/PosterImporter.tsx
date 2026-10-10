@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useState} from 'react';
 import {AlertTriangle,CheckCircle2,ClipboardPaste,ExternalLink,Image as ImageIcon,MapPinned,RefreshCw,Upload} from 'lucide-react';
-import {extractPosterEvents,extractPosterEventsFromText,normalizePtSentence,normalizePtTitle,type PosterCandidate} from '../lib/posterOcr';
+import {extractPosterEvents,extractPosterEventsFromText,normalizeEventType,normalizePtSentence,normalizePtTitle,type PosterCandidate} from '../lib/posterOcr';
 import type {MobilizationEvent} from '../types';
 
 type Props={
@@ -15,7 +15,7 @@ const normalized=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').t
 function normalizeCandidate(candidate:PosterCandidate):PosterCandidate{
  return {...candidate,
   title:candidate.title?normalizePtTitle(candidate.title):candidate.title,
-  type:candidate.type?normalizePtTitle(candidate.type):candidate.type,
+  type:candidate.type?normalizeEventType(candidate.type):candidate.type,
   city:candidate.city?normalizePtTitle(candidate.city):candidate.city,
   venue:candidate.venue?normalizePtTitle(candidate.venue):candidate.venue,
   address:candidate.address?normalizePtTitle(candidate.address):candidate.address,
@@ -88,7 +88,7 @@ const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiB
    const mapped:PosterCandidate[]=(Array.isArray(payload.events)?payload.events:[]).map((event:any,index:number)=>({
     id:String(event.id||'ai-suggestion-'+index),
     title:typeof event.title==='string'?normalizePtTitle(event.title):undefined,
-    type:typeof event.type==='string'?normalizePtTitle(event.type):undefined,
+    type:typeof event.type==='string'?normalizeEventType(event.type):undefined,
     date:typeof event.date==='string'&&event.date?event.date:undefined,
     time:typeof event.time==='string'&&event.time?event.time:undefined,
     time_label:typeof event.time_label==='string'&&event.time_label?normalizePtTitle(event.time_label):undefined,

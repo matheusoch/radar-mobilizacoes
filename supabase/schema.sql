@@ -142,9 +142,12 @@ create table if not exists public.chat_messages(
   created_at timestamptz not null default now(),
   reviewed_at timestamptz,
   reviewed_by uuid references auth.users(id) on delete set null,
+  parent_message_id uuid references public.chat_messages(id) on delete cascade,
   constraint chat_messages_content_len_chk check(char_length(trim(content)) between 1 and 1200),
   constraint chat_messages_display_name_len_chk check(char_length(trim(display_name)) between 1 and 60)
 );
+
+create index if not exists chat_messages_parent_message_id_idx on public.chat_messages(parent_message_id);
 
 create table if not exists public.event_submissions(
   id uuid primary key default gen_random_uuid(),

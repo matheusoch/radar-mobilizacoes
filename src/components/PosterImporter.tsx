@@ -12,6 +12,25 @@ type Props={
   getAuthToken:()=>Promise<string|null>;
 };
 const normalized=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+async function createVisionImageData(file:File|null):Promise<string>{
+ if(!file)return '';
+ try{
+  const bitmap=await createImageBitmap(file);
+  try{
+   for(const maxDimension of [1400,1100,850]){
+    const scale=Math.min(1,maxDimension/Math.max(bitmap.width,bitmap.height));
+    const width=Math.max(1,Math.round(bitmap.width*scale));
+    const height=Math.max(1,Math.round(bitmap.height*scale));
+    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+    const context=canvas.getContext('2d');if(!context)continue;
+    context.fillStyle='#ffffff';context.fillRect(0,0,width,height);context.drawImage(bitmap,0,0,width,height);
+    const data=canvas.toDataURL('image/jpeg',0.78);
+    if(data.length<=950000)return data;
+   }
+  }finally{bitmap.close()}
+ }catch{}
+ return '';
+}
 function normalizeCandidate(candidate:PosterCandidate):PosterCandidate{
  return {...candidate,
   title:candidate.title?normalizePtTitle(candidate.title):candidate.title,
@@ -70,6 +89,7 @@ const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiB
  const interpretCombined=async(extraResearchResults:ResearchResult[]=[] )=>{
   const combinedPost=postText.trim();
   const combinedPoster=rawText.trim();
+  const imageData=await createVisionImageData(selected);
   if(!combinedPost&&!combinedPoster&&!postUrl.trim()&&!candidates.length){
    setAiStatus('Cole o texto da publicação, informe o link de um post público ou selecione um pôster.');
    return;
@@ -81,7 +101,7 @@ const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiB
    const response=await fetch('/api/interpret-events',{
     method:'POST',
     headers:{'content-type':'application/json','authorization':'Bearer '+token},
-    body:JSON.stringify({postText:combinedPost,postUrl:postUrl.trim(),posterText:combinedPoster,researchResults:extraResearchResults.slice(0,20).map(result=>({platform:result.platform,title:result.title,url:result.url,author:result.author,publishedAt:result.publishedAt,text:result.text}))})
+    body:JSON.stringify({postText:combinedPost,postUrl:postUrl.trim(),posterText:combinedPoster,researchResults:extraResearchResults.slice(0,20).map(result=>({platform:result.platform,title:result.title,url:result.url,author:result.author,publishedAt:result.publishedAt,text:result.text})),imageData:imageData||undefined})
    });
    const payload=await response.json().catch(()=>({}));
    if(!response.ok)throw new Error(typeof payload.error==='string'?payload.error:'A interpretação por IA não está disponível no momento.');
@@ -124,7 +144,8 @@ const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiB
   setCandidates(mapped);
   onCandidatesFound(mapped,[combinedPost,combinedPoster].filter(Boolean).join('\n\n'));
   const urlWarning=payload.urlError?' '+payload.urlError:'';
-  setAiStatus(mapped.length+' sugestão(ões) estruturada(s) pela IA. Confira evidências, campos ausentes e possíveis duplicatas antes de salvar.'+urlWarning);
+  const visionWarning=payload.visionStatus==='used'?' A leitura visual direta do pôster também foi utilizada.':payload.visionStatus==='unavailable'?' Aviso: a leitura visual não ficou disponível nesta tentativa; confira atentamente a transcrição OCR.':'';
+  setAiStatus(mapped.length+' sugestão(ões) estruturada(s) pela IA. Confira evidências, campos ausentes e possíveis duplicatas antes de salvar.'+visionWarning+urlWarning);
   if(!mapped.length)setAiStatus('A IA não encontrou um evento claro. Revise o texto bruto e acrescente contexto; nenhum evento foi salvo.');
   }catch(error){
    const sourceText=[combinedPost,combinedPoster].filter(Boolean).join('\n\n');

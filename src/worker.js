@@ -513,8 +513,8 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   const stateSearchHint=reliableState||(originStateName&&!result.state?originStateName:"")||(groupStateClue&&!result.state?groupStateClue.name:"");
   // Group/organization state names are search clues, not event geography by themselves.
   // Use them to constrain candidate discovery, but only assign the event's UF after the selected place confirms it.
-  const expectedCity=result.city||"";
-  const searchCity=result.city||originCityHint?.name||"";
+  const expectedCity=result.city_inferred_from_context?"":(result.city||"");
+  const searchCity=result.city_inferred_from_context?"":(result.city||"");
   const expectedState=result.state||groupStateClue?.code||"";
   const query=[queryVenue,result.address,searchCity,stateSearchHint,"Brasil"].filter(Boolean).join(", ");
   const places=await searchPlacesWithFallback(query,queryVenue,searchCity,expectedState,env,municipalities,allowOSMFallback);
@@ -538,7 +538,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
     ?Boolean(top.geo?.city&&norm(top.geo.city)===norm(expectedCity)&&(!expectedState||top.geo?.state===expectedState))
     :expectedState
      ?top.geo?.state===expectedState
-     :false;
+     :Boolean(top.geo?.city&&top.geo?.state&&/brasil|brazil/i.test(top.geo?.country||"")&&top.score>=85);
    const gap=!next||top.score-(next.score||0)>=15;
    if(topOption&&top.score>=70&&nameSupported&&regionSupported&&gap){
     result.venue=topOption.title;

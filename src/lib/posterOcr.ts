@@ -28,7 +28,7 @@ const cityUF:Record<string,string>={'belo horizonte':'MG','sao paulo':'SP','rio 
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const clean=(s:string)=>s.replace(/[•●▪■]+/g,' ').replace(/\s+/g,' ').replace(/^[\s:|–—-]+|[\s|]+$/g,'').trim();
 const SMALL_TITLE_WORDS=new Set(['a','as','o','os','um','uma','uns','umas','de','da','das','do','dos','e','em','no','na','nos','nas','por','para','com','pelo','pela','pelos','pelas','ao','à','às','ou']);
-const TITLE_ACRONYMS:Record<string,string>={ufmg:'UFMG',dce:'DCE',mst:'MST',pt:'PT',psol:'PSOL',pcb:'PCB',pcdob:'PCdoB',pstu:'PSTU',cut:'CUT',une:'UNE',bh:'BH',stf:'STF',tse:'TSE',tre:'TRE',trt:'TRT',tj:'TJ',tcu:'TCU',mp:'MP',mpf:'MPF',mpt:'MPT',masp:'MASP',ibge:'IBGE',dnit:'DNIT',bndes:'BNDES',ufrj:'UFRJ',ufba:'UFBA',ufro:'UFRO',unir:'UNIR',ufrgs:'UFRGS',ufsc:'UFSC',ufpr:'UFPR',uerj:'UERJ',uff:'UFF',unesp:'Unesp',usp:'USP',uol:'UOL'};
+const TITLE_ACRONYMS:Record<string,string>={ac:"AC",al:"AL",ap:"AP",am:"AM",ba:"BA",ce:"CE",df:"DF",es:"ES",go:"GO",ma:"MA",mt:"MT",ms:"MS",mg:"MG",pa:"PA",pb:"PB",pr:"PR",pe:"PE",pi:"PI",rj:"RJ",rn:"RN",rs:"RS",ro:"RO",rr:"RR",sc:"SC",sp:"SP",se:"SE",to:"TO",ufmg:"UFMG",dce:"DCE",mst:"MST",pt:"PT",psol:"PSOL",pcb:"PCB",pcdob:"PCdoB",pstu:"PSTU",cut:"CUT",ctb:"CTB",une:"UNE",ubes:"UBES",ujs:"UJS",bh:"BH",stf:"STF",tse:"TSE",tre:"TRE",trt:"TRT",tj:"TJ",tcu:"TCU",mp:"MP",mpf:"MPF",mpt:"MPT",masp:"MASP",ibge:"IBGE",dnit:"DNIT",bndes:"BNDES",ufrj:"UFRJ",ufba:"UFBA",ufro:"UFRO",unir:"UNIR",ufrgs:"UFRGS",ufsc:"UFSC",ufpr:"UFPR",uerj:"UERJ",uff:"UFF",unesp:"Unesp",usp:"USP",uol:"UOL"}
 export function normalizePtTitle(value:string):string{
  const words=value.replace(/[’‘]/g,"'").replace(/\s+/g,' ').trim().toLocaleLowerCase('pt-BR').split(' ');
  const result=words.map((word,index)=>{
@@ -41,6 +41,19 @@ export function normalizePtTitle(value:string):string{
  }).join(' ');
  return result.replace(/\bD'([a-záàâãéêíóôõúüç])/gu,(_m,letter)=>"d'"+letter.toLocaleUpperCase('pt-BR'));
 }
+const EVENT_TYPE_LABELS:Record<string,string>={
+ 'manifestacao':'Manifestação','ato':'Ato','plenaria':'Plenária','assembleia':'Assembleia','reuniao':'Reunião',
+ 'debate':'Debate','caminhada':'Caminhada','panfletagem':'Panfletagem','bandeiraco':'Bandeiraço','adesivaco':'Adesivaço',
+ 'carreata':'Carreata','mutirao':'Mutirão','mobilizacao de rua':'Mobilização de rua',
+ 'atividade cultural politica':'Atividade cultural/política','atividade universitaria':'Atividade universitária',
+ 'plenaria online':'Plenária online','mobilizacao':'Mobilização','oficina':'Oficina',
+ 'bicicletada':'Bicicletada','vigilia':'Vigília','aula publica':'Aula pública','faixaco':'Faixaço',
+ 'encontro':'Encontro','ato ecumenico':'Ato Ecumênico'
+};
+export function normalizeEventType(value:string):string{
+ const key=norm(value);
+ return EVENT_TYPE_LABELS[key]||normalizePtTitle(value);
+}
 export function normalizePtSentence(value:string):string{
  return value.replace(/\s+/g,' ').trim().toLocaleLowerCase('pt-BR')
   .replace(/(^|[.!?]\s+)([a-záàâãéêíóôõúüç])/gu,(_m,lead,letter)=>lead+letter.toLocaleUpperCase('pt-BR'));
@@ -52,22 +65,29 @@ function prettyCity(s:string){
 }
 function inferType(s:string):string|undefined{
  const t=norm(s);
- if(/lambe|lambes|lambe lambe|colagem de cartaz|colar cartaz|colagem de cartazes|colar lambes|colagem de lambe|colagem de lambes|panfletagem|distribuicao de material|distribuicao de panfleto|entrega de material|entrega de panfleto|distribuicao de jornal|entrega de jornal|abordagem de rua|brigada de material|agitacao de rua/.test(t))return 'Panfletagem';
- if(/brigada de rua|blitz/.test(t))return 'Mobilização de rua';
+ if(/adesivaco|adesivagem|adesivacao|colagem de adesivos|entrega de adesivos/.test(t))return 'Adesivaço';
+ if(/lambe|lambes|colagem de cartaz|colar cartaz|colagem de cartazes|colar lambes|colagem de lambe|colagem de lambes|panfletagem|panfletar|distribuicao de material|distribuicao de panfleto|entrega de material|entrega de panfleto|distribuicao de jornal|entrega de jornal|abordagem de rua|brigada de material|agitacao de rua|cartazagem/.test(t))return 'Panfletagem';
+ if(/bandeiracao|bandeiraco|bandeirada|hasteamento de bandeiras/.test(t))return 'Bandeiraço';
+ if(/brigada de rua|blitz|mobilizacao de rua/.test(t))return 'Mobilização de rua';
  if(/mutirao/.test(t))return 'Mutirão';
- if(/caminhada|passeata|marcha/.test(t))return 'Caminhada';
- if(/bandeiracao|bandeiraco/.test(t))return 'Bandeiraço';
- if(/adesivaco/.test(t))return 'Adesivaço';
+ if(/bicicletada|pedalada coletiva|marcha ciclista/.test(t))return 'Bicicletada';
+ if(/vigilia/.test(t))return 'Vigília';
+ if(/aula publica|aulao publico/.test(t))return 'Aula pública';
+ if(/faixaco|pintura de faixa coletiva/.test(t))return 'Faixaço';
+ if(/caminhada|passeata|marcha|cortejo/.test(t))return 'Caminhada';
  if(/carreata/.test(t))return 'Carreata';
+ if(/plenaria online|plenaria virtual/.test(t))return 'Plenária online';
  if(/plenaria/.test(t))return 'Plenária';
  if(/assembleia/.test(t))return 'Assembleia';
  if(/oficina/.test(t))return 'Oficina';
- if(/debate|roda de conversa/.test(t))return 'Debate';
+ if(/debate|roda de conversa|mesa redonda|seminario|cine debate/.test(t))return 'Debate';
  if(/reuniao/.test(t))return 'Reunião';
- if(/ato publico|ato político|ato politico|\bato\b/.test(t))return 'Ato';
+ if(/encontro/.test(t))return 'Encontro';
+ if(/ato ecumenico/.test(t))return 'Ato Ecumênico';
+ if(/ato publico|ato politico|\\bato\\b/.test(t))return 'Ato';
  if(/manifestacao|protesto/.test(t))return 'Manifestação';
  if(/universidade|universitario|estudantes|campus|uf[a-z]{2}/.test(t))return 'Atividade universitária';
- if(/samba|show|cultural/.test(t))return 'Atividade cultural/política';
+ if(/samba|show|cultural|sarau|festival|cine debate/.test(t))return 'Atividade cultural/política';
  return /mobilizacao/.test(t)?'Mobilização':undefined;
 }
 function dateInLine(line:string):string|undefined{

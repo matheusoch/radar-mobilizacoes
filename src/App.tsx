@@ -669,9 +669,27 @@ const blank=():MobilizationEvent=>({
       if(subError)setMessage(subError.message);
       else if(chatError)setMessage(chatError.message);
       const cutoff=new Date(Date.now()-30*864e5).toISOString();
-      const{data:analyticsData,error:analyticsError}=await db.from('page_views').select('path,event_id,visitor_id,created_at').gte('created_at',cutoff).order('created_at',{ascending:false}).limit(10000);
-      if(analyticsError) setMessage(analyticsError.message);
-      setAnalyticsRows((analyticsData||[]) as PageViewRow[]);
+      const analyticsRowsAll:PageViewRow[]=[];
+      const analyticsPageSize=1000;
+      let analyticsOffset=0;
+      let analyticsHasMore=true;
+      while(analyticsHasMore){
+        const{data:analyticsData,error:analyticsError}=await db.from('page_views')
+          .select('id,path,event_id,visitor_id,created_at')
+          .gte('created_at',cutoff)
+          .order('created_at',{ascending:false})
+          .order('id',{ascending:false})
+          .range(analyticsOffset,analyticsOffset+analyticsPageSize-1);
+        if(analyticsError){
+          setMessage(analyticsError.message);
+          break;
+        }
+        const batch=(analyticsData||[]) as PageViewRow[];
+        analyticsRowsAll.push(...batch);
+        analyticsHasMore=batch.length===analyticsPageSize;
+        analyticsOffset+=batch.length;
+      }
+      setAnalyticsRows(analyticsRowsAll);
       for(const item of (subData||[]) as Submission[]){
         if(item.poster_path&&!subPosterUrls[item.id]){
           const{data}=await db.storage.from(SUBMISSION_STORAGE_BUCKET).createSignedUrl(item.poster_path,3600);

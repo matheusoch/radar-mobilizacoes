@@ -44,11 +44,19 @@ const municipalities = [
 
 // Poster regression: visually read as “15/10 às 15h”, “Centro de Campo Grande”
 // and “Rio de Janeiro — zona oeste”. OCR had previously returned a wrong date.
-test('a landmark/agency name is recognized as a place, not a municipality', () => {
-  assert.equal(production.looksLikePlaceName('Palácio do TRE'), true);
-  assert.equal(production.looksLikePlaceName('MASP'), true);
-  assert.equal(production.looksLikePlaceName('Centro de Campo Grande'), true);
-  assert.equal(production.looksLikePlaceName('Porto Velho'), false);
+function classifyGeographicField(value, state = '') {
+  const municipality = production.getMunicipalityMatch(value, municipalities, state).match;
+  if (municipality) return { kind: 'city', municipality };
+  if (production.looksLikePlaceName(value)) return { kind: 'venue' };
+  return { kind: 'unresolved' };
+}
+
+test('municipality matching has priority over venue-keyword heuristics', () => {
+  assert.equal(classifyGeographicField('Porto Velho', 'RO').kind, 'city');
+  assert.equal(classifyGeographicField('Palácio do TRE', 'RO').kind, 'venue');
+  assert.equal(classifyGeographicField('MASP', 'SP').kind, 'venue');
+  assert.equal(classifyGeographicField('Centro de Campo Grande', 'RJ').kind, 'venue');
+  assert.equal(classifyGeographicField('Rondônia', 'RO').kind, 'unresolved');
 });
 
 test('the local cue extracts the landmark from the event text', () => {

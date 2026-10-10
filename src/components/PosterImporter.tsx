@@ -89,19 +89,19 @@ const [postText,setPostText]=useState(''),[postUrl,setPostUrl]=useState(''),[aiB
  const interpretCombined=async(extraResearchResults:ResearchResult[]=[] )=>{
   const combinedPost=postText.trim();
   const combinedPoster=rawText.trim();
-  const imageData=await createVisionImageData(selected);
   if(!combinedPost&&!combinedPoster&&!postUrl.trim()&&!candidates.length){
    setAiStatus('Cole o texto da publicação, informe o link de um post público ou selecione um pôster.');
    return;
   }
-  setAiBusy(true);setAiStatus('Combinando o texto do post e o texto do pôster para identificar todas as mobilizações…');
+  setAiBusy(true);setAiStatus(selected?'Lendo o pôster e combinando a leitura visual com o OCR e o contexto do post…':'Combinando o texto do post, o OCR e o contexto para identificar as mobilizações…');
   try{
+   const imageData=await createVisionImageData(selected);
    const token=await getAuthToken();
    if(!token)throw new Error('A sessão expirou. Entre novamente no painel administrativo.');
    const response=await fetch('/api/interpret-events',{
     method:'POST',
     headers:{'content-type':'application/json','authorization':'Bearer '+token},
-    body:JSON.stringify({postText:combinedPost,postUrl:postUrl.trim(),posterText:combinedPoster,researchResults:extraResearchResults.slice(0,20).map(result=>({platform:result.platform,title:result.title,url:result.url,author:result.author,publishedAt:result.publishedAt,text:result.text})),imageData:imageData||undefined})
+    body:JSON.stringify({postText:combinedPost,postUrl:postUrl.trim(),posterText:combinedPoster,researchResults:extraResearchResults.slice(0,20).map(result=>({platform:result.platform,title:result.title,url:result.url,author:result.author,publishedAt:result.publishedAt,text:result.text})),imageData:imageData||undefined,imageDataStatus:selected?(imageData?'sent':'failed'):'none'})
    });
    const payload=await response.json().catch(()=>({}));
    if(!response.ok)throw new Error(typeof payload.error==='string'?payload.error:'A interpretação por IA não está disponível no momento.');

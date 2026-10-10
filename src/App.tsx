@@ -151,11 +151,12 @@ function NotificationBell(){
     return()=>data.subscription.unsubscribe();
   },[]);
   useEffect(()=>{
-    if(!supabase||!user?.id){setNotifications([]);return;}
+    const db=supabase;
+    if(!db||!user?.id){setNotifications([]);return;}
     let active=true;
     const load=async()=>{
       setLoading(true);
-      const{data,error}=await supabase.from('notifications')
+      const{data,error}=await db.from('notifications')
         .select('id,type,actor_name,chat_message_id,parent_message_id,message_preview,created_at,read_at')
         .eq('user_id',user.id)
         .order('created_at',{ascending:false})

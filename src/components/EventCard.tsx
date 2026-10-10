@@ -8,8 +8,8 @@ type Attendance={count:number;attending:boolean};
 function formatEventTime(value?:string|null){
   if(!value?.trim())return 'Horário não informado';
   const text=value.trim();
-  const match=text.match(/\\b([01]?\\d|2[0-3])\\s*(?:h(?:oras?)?\\s*([0-5]\\d)?|:\\s*([0-5]\\d))/i)
-    ?? ( /^(?:[01]?\\d|2[0-3])$/.test(text) ? text.match(/^([01]?\\d|2[0-3])$/) : null );
+  const match=text.match(/\b([01]?\d|2[0-3])\s*(?:h(?:oras?)?\s*([0-5]\d)?|:\s*([0-5]\d))/i)
+    ?? (/^(?:[01]?\d|2[0-3])$/.test(text) ? text.match(/^([01]?\d|2[0-3])$/) : null);
   if(!match)return 'Horário não informado';
   const hour=String(Number(match[1]));
   const minute=match[2]??match[3];

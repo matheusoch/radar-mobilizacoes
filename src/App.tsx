@@ -2,7 +2,7 @@ import {useEffect,useMemo,useState} from 'react';
 import type {ChangeEvent,FormEvent,ReactNode} from 'react';
 import React from 'react';
 import {Link,Navigate,Route,Routes,useLocation,useNavigate,useParams} from 'react-router-dom';
-import {CalendarDays,CalendarPlus,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search,BarChart3,Eye,KeyRound,Users,ChevronLeft,ChevronRight,Share2,Star} from 'lucide-react';
+import {CalendarDays,CalendarPlus,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search,BarChart3,Eye,KeyRound,Users,ChevronLeft,ChevronRight,Share2,Star,Bell} from 'lucide-react';
 import './App.css';
 // Tema único: o aplicativo mantém a aparência clara padrão.
 import EventCard from './components/EventCard';
@@ -128,6 +128,74 @@ function agendaFilterOptions(events:MobilizationEvent[],filters:FiltersState,tod
   return selected&&!options.includes(selected)?[selected,...options]:options;
 }
 
+type AppNotification={
+  id:string;
+  type:'chat_reply';
+  actor_name:string;
+  chat_message_id:string;
+  parent_message_id:string;
+  message_preview:string;
+  created_at:string;
+  read_at:string|null;
+};
+
+function NotificationBell(){
+  const[user,setUser]=useState<any>(null);
+  const[notifications,setNotifications]=useState<AppNotification[]>([]);
+  const[open,setOpen]=useState(false);
+  const[loading,setLoading]=useState(false);
+  useEffect(()=>{
+    if(!supabase)return;
+    supabase.auth.getUser().then(({data})=>setUser(data.user));
+    const{data}=supabase.auth.onAuthStateChange((_event,session)=>setUser(session?.user??null));
+    return()=>data.subscription.unsubscribe();
+  },[]);
+  useEffect(()=>{
+    if(!supabase||!user?.id){setNotifications([]);return;}
+    let active=true;
+    const load=async()=>{
+      setLoading(true);
+      const{data,error}=await supabase.from('notifications')
+        .select('id,type,actor_name,chat_message_id,parent_message_id,message_preview,created_at,read_at')
+        .eq('user_id',user.id)
+        .order('created_at',{ascending:false})
+        .limit(20);
+      if(active&&!error)setNotifications((data||[]) as AppNotification[]);
+      if(active)setLoading(false);
+    };
+    void load();
+    const interval=window.setInterval(()=>void load(),15000);
+    return()=>{active=false;window.clearInterval(interval)};
+  },[user?.id]);
+  const unreadCount=notifications.filter(item=>!item.read_at).length;
+  const markRead=async(id:string)=>{
+    if(!supabase||!user?.id)return;
+    const readAt=new Date().toISOString();
+    const{error}=await supabase.from('notifications').update({read_at:readAt}).eq('id',id).eq('user_id',user.id).is('read_at',null);
+    if(!error)setNotifications(previous=>previous.map(item=>item.id===id?{...item,read_at:readAt}:item));
+  };
+  const markAllRead=async()=>{
+    if(!supabase||!user?.id||!unreadCount)return;
+    const readAt=new Date().toISOString();
+    const{error}=await supabase.from('notifications').update({read_at:readAt}).eq('user_id',user.id).is('read_at',null);
+    if(!error)setNotifications(previous=>previous.map(item=>({...item,read_at:item.read_at||readAt})));
+  };
+  return <div className="notification-area">
+    <button type="button" className={'notification-toggle'+(open?' is-open':'')} aria-label={unreadCount?unreadCount+' notificações não lidas':'Notificações'} aria-expanded={open} onClick={()=>setOpen(value=>!value)}>
+      <Bell size={19}/>{unreadCount>0&&<span className="notification-count">{unreadCount>9?'9+':unreadCount}</span>}
+    </button>
+    {open&&<div className="notifications-popover" role="dialog" aria-label="Notificações">
+      <div className="notifications-header"><div><strong>Notificações</strong><span>{unreadCount?unreadCount+' não lida(s)':'Tudo em dia'}</span></div>{unreadCount>0&&<button type="button" onClick={()=>void markAllRead()}>Marcar todas como lidas</button>}</div>
+      {!user?<div className="notifications-empty"><p>Entre na sua conta para acompanhar respostas aos seus comentários.</p><Link to="/entrar?next=%2Fchat" className="button primary" onClick={()=>setOpen(false)}>Entrar</Link></div>
+      :loading&&notifications.length===0?<div className="notifications-empty">Carregando notificações…</div>
+      :notifications.length===0?<div className="notifications-empty"><Bell size={22}/><p>Você ainda não tem notificações.</p><span>Quando alguém responder a um comentário seu, o aviso aparecerá aqui.</span></div>
+      :<div className="notification-list">{notifications.map(item=><Link key={item.id} to={'/chat?mensagem='+encodeURIComponent(item.chat_message_id)} className={'notification-item'+(!item.read_at?' unread':'')} onClick={()=>{setOpen(false);if(!item.read_at)void markRead(item.id)}}>
+        <span className="notification-dot" aria-hidden="true"/><span className="notification-copy"><strong>{item.actor_name==='Admin'?'A equipe da Agenda respondeu ao seu comentário':item.actor_name+' respondeu ao seu comentário'}</strong><span>{item.message_preview}</span><small>{new Date(item.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</small></span>
+      </Link>)}</div>}
+    </div>}
+  </div>;
+}
+
 function Layout({children}:{children:ReactNode}){
   const[open,setOpen]=useState(false);
   const location=useLocation();
@@ -149,6 +217,7 @@ function Layout({children}:{children:ReactNode}){
           <Link onClick={()=>setOpen(false)} className="admin-link" to="/admin">Admin</Link>
           {location.pathname==='/admin'&&<Link onClick={()=>setOpen(false)} to="/admin/moderacao">Moderação comunitária</Link>}
         </nav>
+        <NotificationBell/>
       </div>
     </header>
     <main>{children}</main>

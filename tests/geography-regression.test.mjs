@@ -116,7 +116,7 @@ test('vision reader passes the poster image to Qwen and returns its visual trans
   assert.equal(capturedModel, '@cf/qwen/qwen3.8-27b');
   assert.equal(capturedMessages[1].content[1].image_url.url, imageData);
   assert.equal(result.status, 'used');
-  assert.match(result.text, /15\\/10/);
+  assert.ok(result.text.includes('15/10'));
 });
 
 test('vision reader safely falls back to OCR when the vision model is unavailable', async () => {

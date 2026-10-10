@@ -375,7 +375,7 @@ async function searchPlacesWithFallback(query,venue,city,state,env,municipalitie
  const osm=await searchOpenStreetMap(query,venue,city,state,municipalities);
  if(osm.items.length)return osm;
  if(google.configured)return {...google,source:"Google Maps / Places API",fallbackError:osm.error||""};
- return {...osm,configured:false,source:"OpenStreetMap/Photon",error:osm.error||"Nenhum resultado foi encontrado no OpenStreetMap."};
+ return {...osm,configured:true,googleMapsConfigured:false,source:"OpenStreetMap/Photon",error:osm.error||"Nenhum resultado correspondente foi encontrado no OpenStreetMap."};
 }
 function scorePlaceResult(place,query,venue,city,state,municipalities){
  const queryKey=norm(query),venueKey=norm(venue),name=norm(place.displayName?.text||"");
@@ -553,7 +553,7 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
     result.geography_source=places.source||"Google Maps / Places API";
     result.geography_confidence="baixa";
     warnings.push("O mapa retornou locais com nomes semelhantes, mas nenhum confirmou a mesma cidade/UF indicada pelas evidências. Nenhum ponto foi associado automaticamente.");
-   else if(!places.configured){
+   }else if(!places.configured){
    result.geography_status="maps_not_configured";
    result.geography_source="IBGE + OpenStreetMap";
    warnings.push("O município foi comparado com o IBGE, mas nenhum ponto foi confirmado no mapa. Confira o nome do local e tente novamente. Para resultados premium, configure GOOGLE_MAPS_API_KEY no Cloudflare.");

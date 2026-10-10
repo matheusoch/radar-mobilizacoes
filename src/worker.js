@@ -124,7 +124,7 @@ function stateHints(text){
 }
 function looksLikePlaceName(value){
  const v=geoNorm(value);
- return /\\b(palacio|palace|sede|tre|tribunal|masp|praca|largo|caixa d agua|caixas d agua|campus|rodoviaria|estacao|terminal|sindicato|auditorio|teatro|assembleia|catedral|igreja|parque|mercado|estadio|centro|escola|universidade|prefeitura|camara|congresso|monumento|viaduto|ponte|farol|quadra|ginasio|pavilhao|ponto de encontro|predio|edificio|secretaria|forum|museu|memorial|biblioteca|hospital|cartorio|centro cultural|casa do estudante|praia|orla|balneario|feira|rua|avenida|travessa|alameda|rodovia|estrada|patio|armazem do campo|centro academico|diretorio academico|diretorio central|reitoria|instituto|faculdade|delegacia|quartel|conselho|salao|galeria|esquina|lago|porto|mercad|casa de cultura|centro comunitario|centro popular|espaco cultural|cozinha solidaria)\\b/.test(v);
+ return /\b(palacio|palace|sede|tre|tribunal|masp|praca|largo|caixa d agua|caixas d agua|campus|rodoviaria|estacao|terminal|sindicato|auditorio|teatro|assembleia|catedral|igreja|parque|mercado|estadio|centro|escola|universidade|prefeitura|camara|congresso|monumento|viaduto|ponte|farol|quadra|ginasio|pavilhao|ponto de encontro|predio|edificio|secretaria|forum|museu|memorial|biblioteca|hospital|cartorio|centro cultural|casa do estudante|praia|orla|balneario|feira|rua|avenida|travessa|alameda|rodovia|estrada|patio|armazem do campo|centro academico|diretorio academico|diretorio central|reitoria|instituto|faculdade|delegacia|quartel|conselho|salao|galeria|esquina|lago|porto|mercad|casa de cultura|centro comunitario|centro popular|espaco cultural|cozinha solidaria)\b/.test(v);
 }
 function extractVenueClue(text){
  const lines=String(text||"").split(/\r?\n/).map(clean).filter(Boolean);
@@ -224,26 +224,26 @@ function getMunicipalityMatch(value,municipalities,state){
 }
 function inferTypeFromMobilization(text,currentType){
  const t=norm(text);
- if(/\\b(adesivaco|adesivagem|adesivacao|colagem de adesivos|entrega de adesivos)\\b/.test(t))return "Adesivaço";
- if(/\\b(lambe lambe|lambes|lambe|colagem de cartaz|colagem de cartazes|colagem de lambe|colagem de lambes|distribuicao de panfleto|distribuicao de panfletos|panfletagem|panfletar|entrega de material|entrega de panfleto|entrega de panfletos|distribuicao de material|distribuicao de jornal|entrega de jornal|cartazagem|agitacao de rua)\\b/.test(t))return "Panfletagem";
- if(/\\b(bandeiraco|bandeirada|hasteamento de bandeiras)\\b/.test(t))return "Bandeiraço";
- if(/\\b(carreata)\\b/.test(t))return "Carreata";
- if(/\\b(mutirao)\\b/.test(t))return "Mutirão";
- if(/\\b(blitz|brigada de rua|mobilizacao de rua)\\b/.test(t))return "Mobilização de rua";
- if(/\\b(bicicletada|pedalada coletiva|marcha ciclista)\\b/.test(t))return "Bicicletada";
- if(/\\b(vigilia)\\b/.test(t))return "Vigília";
- if(/\\b(aula publica|aulao publico)\\b/.test(t))return "Aula pública";
- if(/\\b(faixaco|pintura de faixa coletiva)\\b/.test(t))return "Faixaço";
- if(/\\b(caminhada|passeata|marcha|cortejo)\\b/.test(t))return "Caminhada";
- if(/\\b(plenaria online|plenaria virtual)\\b/.test(t))return "Plenária online";
- if(/\\b(plenaria)\\b/.test(t))return "Plenária";
- if(/\\b(assembleia)\\b/.test(t))return "Assembleia";
- if(/\\b(oficina)\\b/.test(t))return "Oficina";
- if(/\\b(debate|roda de conversa|mesa redonda|seminario|cine debate)\\b/.test(t))return "Debate";
- if(/\\b(reuniao)\\b/.test(t))return "Reunião";
- if(/\\b(encontro)\\b/.test(t))return "Encontro";
- if(/\\b(ato ecumenico)\\b/.test(t))return "Ato Ecumênico";
- if(/\\b(ato publico|ato politico|ato|manifestacao|protesto)\\b/.test(t))return norm(currentType)==="manifestacao"?"Manifestação":"Ato";
+ if(/\b(adesivaco|adesivagem|adesivacao|colagem de adesivos|entrega de adesivos)\b/.test(t))return "Adesivaço";
+ if(/\b(lambe lambe|lambes|lambe|colagem de cartaz|colagem de cartazes|colagem de lambe|colagem de lambes|distribuicao de panfleto|distribuicao de panfletos|panfletagem|panfletar|entrega de material|entrega de panfleto|entrega de panfletos|distribuicao de material|distribuicao de jornal|entrega de jornal|cartazagem|agitacao de rua)\b/.test(t))return "Panfletagem";
+ if(/\b(bandeiraco|bandeirada|hasteamento de bandeiras)\b/.test(t))return "Bandeiraço";
+ if(/\b(carreata)\b/.test(t))return "Carreata";
+ if(/\b(mutirao)\b/.test(t))return "Mutirão";
+ if(/\b(blitz|brigada de rua|mobilizacao de rua)\b/.test(t))return "Mobilização de rua";
+ if(/\b(bicicletada|pedalada coletiva|marcha ciclista)\b/.test(t))return "Bicicletada";
+ if(/\b(vigilia)\b/.test(t))return "Vigília";
+ if(/\b(aula publica|aulao publico)\b/.test(t))return "Aula pública";
+ if(/\b(faixaco|pintura de faixa coletiva)\b/.test(t))return "Faixaço";
+ if(/\b(caminhada|passeata|marcha|cortejo)\b/.test(t))return "Caminhada";
+ if(/\b(plenaria online|plenaria virtual)\b/.test(t))return "Plenária online";
+ if(/\b(plenaria)\b/.test(t))return "Plenária";
+ if(/\b(assembleia)\b/.test(t))return "Assembleia";
+ if(/\b(oficina)\b/.test(t))return "Oficina";
+ if(/\b(debate|roda de conversa|mesa redonda|seminario|cine debate)\b/.test(t))return "Debate";
+ if(/\b(reuniao)\b/.test(t))return "Reunião";
+ if(/\b(encontro)\b/.test(t))return "Encontro";
+ if(/\b(ato ecumenico)\b/.test(t))return "Ato Ecumênico";
+ if(/\b(ato publico|ato politico|ato|manifestacao|protesto)\b/.test(t))return norm(currentType)==="manifestacao"?"Manifestação":"Ato";
  return currentType||"";
 }
 function normalizeEventTypeServer(value){

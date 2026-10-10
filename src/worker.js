@@ -15,9 +15,10 @@ const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:
 const clean=x=>typeof x==="string"?x.trim().slice(0,500):"";
 const validDate=x=>{const v=clean(x);if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return "";const d=new Date(v+"T12:00:00Z");return Number.isNaN(d.getTime())||d.toISOString().slice(0,10)!==v?"":v};
 const validTime=x=>{const m=clean(x).match(/^(\d{1,2}):([0-5]\d)$/);return !m||Number(m[1])>23?"":String(Number(m[1])).padStart(2,"0")+":"+m[2]};
-const validState=x=>/^[A-Z]{2}$/.test(clean(x).toUpperCase())?clean(x).toUpperCase():"";
+const VALID_STATE_CODES=new Set(["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"]);
+const validState=x=>{const code=clean(x).toUpperCase();return VALID_STATE_CODES.has(code)?code:""};
 const smallTitleWords=new Set(["a","as","o","os","um","uma","uns","umas","de","da","das","do","dos","e","em","no","na","nos","nas","por","para","com","pelo","pela","pelos","pelas","ao","à","às","ou"]);
-const titleAcronyms={ufmg:"UFMG",dce:"DCE",mst:"MST",pt:"PT",psol:"PSOL",pcb:"PCB",pcdob:"PCdoB",pstu:"PSTU",cut:"CUT",une:"UNE",bh:"BH",stf:"STF",tse:"TSE",tre:"TRE",trt:"TRT",tj:"TJ",tcu:"TCU",mp:"MP",mpf:"MPF",mpt:"MPT",masp:"MASP",dnit:"DNIT",ibge:"IBGE",ufrj:"UFRJ",ufba:"UFBA",ufro:"UFRO",unir:"UNIR",ufrgs:"UFRGS",ufsc:"UFSC",ufpr:"UFPR",uerj:"UERJ",uff:"UFF",unesp:"Unesp",usp:"USP"};
+const titleAcronyms={ac:"AC",al:"AL",ap:"AP",am:"AM",ba:"BA",ce:"CE",df:"DF",es:"ES",go:"GO",ma:"MA",mt:"MT",ms:"MS",mg:"MG",pa:"PA",pb:"PB",pr:"PR",pe:"PE",pi:"PI",rj:"RJ",rn:"RN",rs:"RS",ro:"RO",rr:"RR",sc:"SC",sp:"SP",se:"SE",to:"TO",ufmg:"UFMG",dce:"DCE",mst:"MST",pt:"PT",psol:"PSOL",pcb:"PCB",pcdob:"PCdoB",pstu:"PSTU",cut:"CUT",ctb:"CTB",une:"UNE",ubes:"UBES",ujs:"UJS",bh:"BH",stf:"STF",tse:"TSE",tre:"TRE",trt:"TRT",tj:"TJ",tcu:"TCU",mp:"MP",mpf:"MPF",mpt:"MPT",masp:"MASP",dnit:"DNIT",ibge:"IBGE",bndes:"BNDES",ufrj:"UFRJ",ufba:"UFBA",ufro:"UFRO",unir:"UNIR",ufrgs:"UFRGS",ufsc:"UFSC",ufpr:"UFPR",uerj:"UERJ",uff:"UFF",unesp:"Unesp",usp:"USP"}
 const norm=x=>clean(x).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
 const titleCase=x=>clean(x).replace(/[’‘]/g,"'").toLocaleLowerCase("pt-BR").split(/\s+/).filter(Boolean).map((word,index)=>{
  const cooked=word.split("-").map(part=>titleAcronyms[norm(part)]||part.charAt(0).toLocaleUpperCase("pt-BR")+part.slice(1)).join("-");
@@ -122,8 +123,8 @@ function stateHints(text){
  return [...new Map(found.map(x=>[x.code,x])).values()];
 }
 function looksLikePlaceName(value){
- const v=norm(value);
- return /\b(palacio|palace|sede|tre|tribunal|masp|praca|largo|caixa d agua|caixas d agua|campus|rodoviaria|estacao|terminal|sindicato|auditorio|teatro|assembleia|catedral|igreja|parque|mercado|estadio|centro|escola|universidade|prefeitura|camara|congresso|monumento|viaduto|ponte|farol|quadra|ginasio|pavilhao|ponto de encontro|predio|edificio|secretaria|forum|museu|memorial|biblioteca|hospital|cartorio|centro cultural|casa do estudante|praia|orla|balneario|feira|rua|avenida|travessa|alameda|rodovia|estrada)\b/.test(v);
+ const v=geoNorm(value);
+ return /\\b(palacio|palace|sede|tre|tribunal|masp|praca|largo|caixa d agua|caixas d agua|campus|rodoviaria|estacao|terminal|sindicato|auditorio|teatro|assembleia|catedral|igreja|parque|mercado|estadio|centro|escola|universidade|prefeitura|camara|congresso|monumento|viaduto|ponte|farol|quadra|ginasio|pavilhao|ponto de encontro|predio|edificio|secretaria|forum|museu|memorial|biblioteca|hospital|cartorio|centro cultural|casa do estudante|praia|orla|balneario|feira|rua|avenida|travessa|alameda|rodovia|estrada|patio|armazem do campo|centro academico|diretorio academico|diretorio central|reitoria|instituto|faculdade|delegacia|quartel|conselho|salao|galeria|esquina|lago|porto|mercad|casa de cultura|centro comunitario|centro popular|espaco cultural|cozinha solidaria)\\b/.test(v);
 }
 function extractVenueClue(text){
  const lines=String(text||"").split(/\r?\n/).map(clean).filter(Boolean);
@@ -167,6 +168,43 @@ function municipalityAppearsOnlyAsGroupOrigin(text,municipality){
  const explicitLocationPattern=new RegExp("(?:^| )(?:em|no|na|nos|nas|para|na cidade de|no municipio de|na localidade de|local em|evento em|ato em|concentracao em|encontro em|marcha em|caminhada em) "+escapeRegex(city)+"(?: |$)");
  const lines=String(text||"").split(/[\r\n.!?;]+/).map(geoNorm).filter(Boolean);
  return lines.some(line=>groupPattern.test(line))&&!lines.some(line=>explicitLocationPattern.test(line));
+}
+function editDistanceBounded(a,b,maxDistance){
+ if(Math.abs(a.length-b.length)>maxDistance)return maxDistance+1;
+ let previous=Array.from({length:b.length+1},(_,index)=>index);
+ for(let i=1;i<=a.length;i++){
+  const current=[i];let rowMin=i;
+  for(let j=1;j<=b.length;j++){
+   const cost=a[i-1]===b[j-1]?0:1;
+   const value=Math.min(current[j-1]+1,previous[j]+1,previous[j-1]+cost);
+   current[j]=value;if(value<rowMin)rowMin=value;
+  }
+  if(rowMin>maxDistance)return maxDistance+1;
+  previous=current;
+ }
+ return previous[b.length];
+}
+function getFuzzyMunicipalityMatch(value,municipalities,state){
+ const key=geoNorm(value),tokens=key.split(" ").filter(Boolean);
+ if(key.length<5||!tokens.length||looksLikePlaceName(key)||stateCodeByName.has(key))return {match:null,ambiguous:[]};
+ const pool=state?municipalities.filter(item=>item.uf===state):municipalities;
+ const maxTotal=key.length>=13?2:1,matches=[];
+ for(const municipality of pool){
+  const cityTokens=municipality.key.split(" ").filter(Boolean);
+  if(cityTokens.length!==tokens.length||Math.abs(municipality.key.length-key.length)>maxTotal)continue;
+  let distance=0,valid=true;
+  for(let index=0;index<tokens.length;index++){
+   const allowance=Math.min(1,maxTotal-distance);
+   const partDistance=editDistanceBounded(tokens[index],cityTokens[index],allowance);
+   if(partDistance>allowance){valid=false;break}
+   distance+=partDistance;if(distance>maxTotal){valid=false;break}
+  }
+  if(valid&&distance>0)matches.push({item:municipality,distance});
+ }
+ if(!matches.length)return {match:null,ambiguous:[]};
+ matches.sort((a,b)=>a.distance-b.distance);
+ const nearest=matches.filter(item=>item.distance===matches[0].distance);
+ return nearest.length===1?{match:nearest[0].item,ambiguous:[]}:{match:null,ambiguous:nearest.map(item=>item.item)};
 }
 function getMunicipalityMatch(value,municipalities,state){
  const key=norm(value);
@@ -375,6 +413,10 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
  if(!state&&hints.length===1)state=hints[0].code;
  result.state=state;
  let cityMatch=getMunicipalityMatch(result.city,municipalities,state);
+ if(!cityMatch.match&&clean(result.city)&&!looksLikePlaceName(result.city)&&!stateCodeByName.has(geoNorm(result.city))){
+  const fuzzy=getFuzzyMunicipalityMatch(result.city,municipalities,state);
+  if(fuzzy.match){cityMatch=fuzzy;warnings.push("O nome do município foi corrigido por uma pequena diferença de grafia/OCR e conferido na base do IBGE. Confira se corresponde ao evento.");}
+ }
  if(cityMatch.match&&municipalityAppearsOnlyAsGroupOrigin(sourceText,cityMatch.match.name)){
    result.city="";
    result.city_needs_clear=true;
@@ -418,7 +460,8 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
    result.state="";
    warnings.push("O campo Cidade contém o nome de um grupo/organização associado a um estado, não um município. A UF do grupo não foi assumida como a UF do evento.");
   }else if(cityValue){
-   warnings.push("O município informado não foi confirmado na base do IBGE; confira antes de publicar.");
+   result.city="";result.city_needs_clear=true;
+    warnings.push("O texto no campo Cidade não corresponde a um município da base oficial do IBGE. Foi deixado em branco; confirme se o nome é de um local, organização ou município com grafia diferente.");
   }
  }
  if(!result.city){

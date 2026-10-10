@@ -503,9 +503,10 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
   const expectedState=result.state||groupStateClue?.code||"";
   const query=[queryVenue,result.address,searchCity,stateSearchHint,"Brasil"].filter(Boolean).join(", ");
   const places=await searchPlacesWithFallback(query,queryVenue,searchCity,expectedState,env,municipalities,allowOSMFallback);
-  if(places.configured&&places.items.length&&places.items.some(place=>getPlaceCityAndState(place,municipalities,expectedState)!==null)){
-   const scored=places.items.map(place=>({...place,...scorePlaceResult(place,query,queryVenue,expectedCity,expectedState,municipalities)})).filter(place=>place.geo!==null).sort((a,b)=>b.score-a.score);
-   const options=scored.map(place=>({
+  const allScored=places.items.map(place=>({...place,...scorePlaceResult(place,query,queryVenue,expectedCity,expectedState,municipalities)})).filter(place=>place.geo!==null);
+   const scored=allScored.filter(place=>(!expectedCity||geoNorm(place.geo?.city||"")===geoNorm(expectedCity))&&(!expectedState||place.geo?.state===expectedState)).sort((a,b)=>b.score-a.score);
+   if(places.configured&&scored.length){
+    const options=scored.map(place=>({
     id:clean(place.id),title:clean(place.displayName?.text)||"Local no Google Maps",
     address:clean(place.formattedAddress),lat:Number.isFinite(place.location?.latitude)?place.location.latitude:null,
     lng:Number.isFinite(place.location?.longitude)?place.location.longitude:null,
@@ -546,7 +547,13 @@ async function resolveEventGeography(event,context,env,municipalities,allowMaps=
      ?(places.source==="OpenStreetMap/Photon"?"O OpenStreetMap retornou opções possivelmente relacionadas; escolha manualmente o ponto correto.":"O Google Maps retornou opções possivelmente relacionadas; escolha manualmente o local correto.")
      :(places.error||"Nenhuma fonte cartográfica confirmou esse ponto com segurança."));
    }
-  }else if(!places.configured){
+  }else if(places.configured&&allScored.length){
+    result.geography_options=[];
+    result.geography_status="place_not_found";
+    result.geography_source=places.source||"Google Maps / Places API";
+    result.geography_confidence="baixa";
+    warnings.push("O mapa retornou locais com nomes semelhantes, mas nenhum confirmou a mesma cidade/UF indicada pelas evidências. Nenhum ponto foi associado automaticamente.");
+   else if(!places.configured){
    result.geography_status="maps_not_configured";
    result.geography_source="IBGE + OpenStreetMap";
    warnings.push("O município foi comparado com o IBGE, mas nenhum ponto foi confirmado no mapa. Confira o nome do local e tente novamente. Para resultados premium, configure GOOGLE_MAPS_API_KEY no Cloudflare.");

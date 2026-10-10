@@ -611,3 +611,13 @@ body{background:var(--page);color:var(--ink)}
 .agenda-sort label{font-size:12px;font-weight:800;color:var(--muted);white-space:nowrap}
 .agenda-sort select{border:1px solid var(--line);background:#fff;padding:10px 12px;border-radius:10px;color:var(--ink);font:inherit;min-width:180px;max-width:100%}
 @media(max-width:620px){.section-tools{width:100%;justify-content:space-between;align-items:center;gap:10px}.agenda-sort{flex:1;justify-content:flex-end;min-width:0}.agenda-sort select{min-width:0;flex:1}}
+
+
+/* Filtros de mídia e ordenação do cadastro administrativo. */
+.admin-filter-summary{display:grid;gap:3px;text-align:right}
+.admin-filter-row{grid-template-columns:minmax(220px,1.6fr) 145px minmax(145px,1fr) minmax(150px,1fr) minmax(175px,1.2fr) auto}
+.admin-media-status{display:inline-flex;align-items:center;gap:4px;border-radius:7px;padding:4px 6px;font-size:10px;font-weight:800;white-space:nowrap}
+.admin-media-status.has-media{background:var(--goodbg);color:var(--good)}
+.admin-media-status.missing-media{background:var(--warnbg);color:var(--warn)}
+@media(max-width:800px){.admin-filter-summary{text-align:left}.admin-filter-row{grid-template-columns:1fr 1fr}.admin-filter-row input:first-child{grid-column:1/-1}.admin-filter-row input,.admin-filter-row select{min-width:0}}
+@media(max-width:560px){.admin-filter-row{grid-template-columns:1fr}.admin-filter-row input:first-child{grid-column:auto}.admin-filter-summary{width:100%}.admin-filter-row .clear-btn{width:100%;justify-content:center}}

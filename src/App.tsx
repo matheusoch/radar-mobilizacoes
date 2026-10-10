@@ -50,6 +50,7 @@ function safeName(email?:string|null){return email?.split('@')[0] || 'Participan
 function formatParticipants(count:number){if(count>=10000)return (count/1000).toFixed(1).replace('.',',')+' mil';return count.toLocaleString('pt-BR')}
 type AgendaModality='Presencial'|'Virtual'|'Híbrido'|'Não informado';
 type AgendaFilterField='state'|'city'|'type'|'modality';
+type AgendaSort='relevance'|'city'|'state';
 function localDateKey(date=new Date()){
   return [date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
 }
@@ -159,12 +160,23 @@ function Home({events}:{events:MobilizationEvent[]}){
   lastDate.setDate(lastDate.getDate()+7);
   const lastDay=localDateKey(lastDate);
   const[filters,setFilters]=useState<FiltersState>({search:'',state:'',city:'',type:'',period:'upcoming',modality:''});
+  const[sortBy,setSortBy]=useState<AgendaSort>('relevance');
   const states=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'state'),[events,filters,today,lastDay]);
   const cities=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'city'),[events,filters,today,lastDay]);
   const types=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'type'),[events,filters,today,lastDay]);
   const modalities:AgendaModality[]=['Presencial','Virtual','Híbrido'];
   const filtered=useMemo(()=>events.filter(event=>matchesAgendaFilters(event,filters,today,lastDay)),[events,filters,today,lastDay]);
   const[attendance,setAttendance]=useState<Record<string,{count:number;attending:boolean}>>({});
+  const orderedEvents=useMemo(()=>{
+    const copy=[...filtered];
+    const compareText=(a:string,b:string)=>a.localeCompare(b,'pt-BR',{sensitivity:'base'});
+    const compareDate=(a:MobilizationEvent,b:MobilizationEvent)=>a.date.localeCompare(b.date)||(a.time||'99:99').localeCompare(b.time||'99:99')||compareText(a.title,b.title);
+    if(sortBy==='city')return copy.sort((a,b)=>compareText(a.city,b.city)||compareText(a.state,b.state)||compareDate(a,b));
+    if(sortBy==='state')return copy.sort((a,b)=>compareText(a.state,b.state)||compareText(a.city,b.city)||compareDate(a,b));
+    const statusRank:Record<MobilizationEvent['status'],number>={confirmed:3,updated:2,warning:1,pending:0};
+    const participantCount=(event:MobilizationEvent)=>event.db_id?(attendance[event.db_id]?.count??0):0;
+    return copy.sort((a,b)=>(participantCount(b)-participantCount(a))||(statusRank[b.status]-statusRank[a.status])||compareDate(a,b));
+  },[filtered,sortBy,attendance]);
   useEffect(()=>{
     const ids=events.map(e=>e.db_id).filter((id):id is string=>Boolean(id));
     getAttendanceStatus(ids).then(setAttendance).catch(()=>setAttendance({}));
@@ -180,7 +192,7 @@ function Home({events}:{events:MobilizationEvent[]}){
       else alert(message);
     }
   };
-  return <><section className="hero"><div className="container hero-grid"><div><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> AGENDA DE MOBILIZAÇÕES</div><h1>Eventos e mobilizações pelo Brasil.</h1><p>Agenda de atos, manifestações, plenárias e encontros em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, organizados por data e cidade e acompanhados de fontes para conferência.</p><div className="hero-actions"><Link to="/calendario" className="button primary"><CalendarDays size={18}/>Ver calendário</Link><Link to="/divulgar" className="button ghost"><ImageIcon size={18}/>Criar divulgação</Link><Link to="/chat" className="button ghost"><MessageCircle size={18}/>Enviar atualização</Link></div></div><div className="hero-card"><div className="hero-stat"><strong>{events.length}</strong><span>eventos públicos</span></div><div className="hero-stat"><strong>{states.length}</strong><span>estados representados</span></div><div className="hero-stat"><strong>{events.filter(e=>e.status!=='warning').length}</strong><span>sem alerta de divergência</span></div></div></div></section><section className="container section"><Filters value={filters} onChange={setFilters} states={states} cities={cities} types={types} modalities={modalities}/><div className="section-head"><div><div className="eyebrow">AGENDA</div><h2>{filtered.length} evento{filtered.length===1?'':'s'}</h2></div><div className="legend">Informação rastreável</div></div><div className="event-grid">{filtered.map(e=><EventCard key={e.id} event={e} attendance={e.db_id?attendance[e.db_id]:undefined} onAttendance={()=>handleAttendance(e)}/>)}</div>{!filtered.length&&<div className="empty"><Info/><h3>Nenhum evento encontrado</h3><p>Tente outro termo ou remova alguns filtros.</p></div>}</section></>
+  return <><section className="hero"><div className="container hero-grid"><div><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> AGENDA DE MOBILIZAÇÕES</div><h1>Eventos e mobilizações pelo Brasil.</h1><p>Agenda de atos, manifestações, plenárias e encontros em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, organizados por data e cidade e acompanhados de fontes para conferência.</p><div className="hero-actions"><Link to="/calendario" className="button primary"><CalendarDays size={18}/>Ver calendário</Link><Link to="/divulgar" className="button ghost"><ImageIcon size={18}/>Criar divulgação</Link><Link to="/chat" className="button ghost"><MessageCircle size={18}/>Enviar atualização</Link></div></div><div className="hero-card"><div className="hero-stat"><strong>{events.length}</strong><span>eventos públicos</span></div><div className="hero-stat"><strong>{states.length}</strong><span>estados representados</span></div><div className="hero-stat"><strong>{events.filter(e=>e.status!=='warning').length}</strong><span>sem alerta de divergência</span></div></div></div></section><section className="container section"><Filters value={filters} onChange={setFilters} states={states} cities={cities} types={types} modalities={modalities}/><div className="section-head"><div><div className="eyebrow">AGENDA</div><h2>{filtered.length} evento{filtered.length===1?'':'s'}</h2></div><div className="section-tools"><div className="legend">Informação rastreável</div><div className="agenda-sort"><label htmlFor="agenda-sort">Ordenar por</label><select id="agenda-sort" aria-label="Ordenar eventos por" title="Mais participantes primeiro; em empate, eventos confirmados e os mais próximos." value={sortBy} onChange={event=>setSortBy(event.target.value as AgendaSort)}><option value="relevance">Mais relevantes</option><option value="city">Cidade (A–Z)</option><option value="state">Estado (A–Z)</option></select></div></div></div><div className="event-grid">{orderedEvents.map(e=><EventCard key={e.id} event={e} attendance={e.db_id?attendance[e.db_id]:undefined} onAttendance={()=>handleAttendance(e)}/>)}</div>{!filtered.length&&<div className="empty"><Info/><h3>Nenhum evento encontrado</h3><p>Tente outro termo ou remova alguns filtros.</p></div>}</section></>
 }
 
 function escapeIcsText(value:string){

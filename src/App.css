@@ -603,3 +603,11 @@ body{background:var(--page);color:var(--ink)}
  .geography-option{display:grid;grid-template-columns:1fr}
  .geography-option-actions{justify-content:flex-start}
 }
+
+
+/* Ordenação da agenda: separada dos filtros de busca. */
+.section-tools{display:flex;align-items:center;justify-content:flex-end;gap:16px;flex-wrap:wrap}
+.agenda-sort{display:flex;align-items:center;gap:8px}
+.agenda-sort label{font-size:12px;font-weight:800;color:var(--muted);white-space:nowrap}
+.agenda-sort select{border:1px solid var(--line);background:#fff;padding:10px 12px;border-radius:10px;color:var(--ink);font:inherit;min-width:180px;max-width:100%}
+@media(max-width:620px){.section-tools{width:100%;justify-content:space-between;align-items:center;gap:10px}.agenda-sort{flex:1;justify-content:flex-end;min-width:0}.agenda-sort select{min-width:0;flex:1}}

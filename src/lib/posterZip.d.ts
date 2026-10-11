@@ -15,7 +15,15 @@ export type PosterZipPoster = {
 
 export type PosterZipManifest = {
   version: number;
-  matches: Array<Record<string, unknown>>;
+  matches: Array<{
+    event_id: string;
+    file: string;
+    sha256: string;
+    source_index: number;
+    source_filename: string;
+    reason: string;
+    confidence: string;
+  }>;
   posters: PosterZipPoster[];
   source_images: number;
   unique_files: number;

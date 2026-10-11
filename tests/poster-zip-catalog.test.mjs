@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { unzipPosterPackage, createCatalogOnlyManifest } from '../src/lib/posterZip.js';
+import { unzipPosterPackage, createCatalogOnlyManifest, posterIndexUpsertOptions } from '../src/lib/posterZip.js';
 
 const crc32 = data => {
   let crc = 0xffffffff;
@@ -138,5 +138,17 @@ test('corrupt ZIP fails with a readable error', async () => {
   await assert.rejects(
     unzipPosterPackage(asFile(Buffer.from('not a zip'))),
     /ZIP não tem um diretório válido/
+  );
+});
+
+
+test('catalog-only index writes ignore existing SHA conflicts to preserve stored event links', () => {
+  assert.deepEqual(
+    posterIndexUpsertOptions(true),
+    { onConflict: 'sha256', ignoreDuplicates: true }
+  );
+  assert.deepEqual(
+    posterIndexUpsertOptions(false),
+    { onConflict: 'sha256', ignoreDuplicates: false }
   );
 });

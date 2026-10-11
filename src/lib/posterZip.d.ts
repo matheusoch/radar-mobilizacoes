@@ -34,3 +34,7 @@ export type PosterZipManifest = {
 
 export function unzipPosterPackage(file: File, depth?: number): Promise<Map<string, Blob>>;
 export function createCatalogOnlyManifest(archive: Map<string, Blob>): Promise<PosterZipManifest>;
+export function posterIndexUpsertOptions(catalogOnly?: boolean): {
+  onConflict: 'sha256';
+  ignoreDuplicates: boolean;
+};

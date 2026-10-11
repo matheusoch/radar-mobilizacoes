@@ -38,3 +38,5 @@ export function posterIndexUpsertOptions(catalogOnly?: boolean): {
   onConflict: 'sha256';
   ignoreDuplicates: boolean;
 };
+export function posterMimeType(path: string): string;
+export function createPosterUploadBlob(blob: Blob, path: string): Blob;

@@ -10,16 +10,21 @@ const hex=(buffer:ArrayBuffer)=>Array.from(new Uint8Array(buffer)).map(v=>v.toSt
 
 export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promise<unknown>}){
   const[zip,setZip]=useState<File|null>(null),[files,setFiles]=useState<Map<string,Blob>|null>(null),[rows,setRows]=useState<Row[]>([]),[manifest,setManifest]=useState<Manifest|null>(null);
-  const[busy,setBusy]=useState(false),[progress,setProgress]=useState(''),[notice,setNotice]=useState(''),[all,setAll]=useState(false);
+  const[busy,setBusy]=useState(false),[progress,setProgress]=useState(''),[notice,setNotice]=useState(''),[all,setAll]=useState(false),[sourceText,setSourceText]=useState('');
   const ready=rows.filter(r=>r.result==='ready').length;
   const existing=rows.filter(r=>r.result==='existing').length;
   const failed=rows.filter(r=>r.result==='failed').length;
 
   const inspect=async()=>{
     if(!zip)return;
-    setBusy(true);setNotice('');setRows([]);setFiles(null);setManifest(null);setProgress('Lendo e verificando o ZIP completo…');
+    setBusy(true);setNotice('');setRows([]);setFiles(null);setManifest(null);setSourceText('');setProgress('Lendo e verificando o ZIP completo…');
     try{
       const archive=await unzipPosterPackage(zip);
+      const textEntries=[...archive.entries()].filter(([path])=>path.startsWith('__text__/'));
+      if(textEntries.length){
+        const sections=await Promise.all(textEntries.map(async([path,blob])=>'===== '+path.slice('__text__/'.length)+' =====\\n'+await blob.text()));
+        setSourceText(sections.join('\\n\\n'));
+      }
       const manifestBlob=archive.get('poster-import-manifest.json');
       let parsed:Manifest;
       if(manifestBlob){
@@ -133,9 +138,10 @@ export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promis
   const statusText=(r:Row)=>r.result==='ready'?'Pronto para importar':r.result==='existing'?'Mídia preservada':r.result==='linked'?'Importado':r.result==='failed'?'Falha':r.result==='missing-event'?'Evento ausente':'Ignorado';
   return <section className="admin-section poster-reconcile-panel">
     <div className="section-head compact"><div><div className="eyebrow">MÍDIA · ÍNDICE COMPLETO</div><h2>Indexar todos os pôsteres</h2><p className="page-lead">Selecione um ZIP com manifesto para conferir os vínculos sugeridos. Se o arquivo contiver apenas imagens, será possível catalogar as imagens únicas sem associá-las automaticamente a eventos. Cartazes já ligados a eventos não são sobrescritos.</p></div></div>
-    <div className="poster-reconcile-controls"><label className="poster-reconcile-file"><Upload size={18}/><span>{zip?zip.name:'Selecionar ZIP do índice completo'}</span><input type="file" accept=".zip,application/zip" onChange={e=>{setZip(e.target.files?.[0]||null);setRows([]);setFiles(null);setManifest(null);setNotice('');}}/></label><button type="button" className="button primary" disabled={!zip||busy} onClick={()=>void inspect()}><Search size={16}/>{busy?'Aguarde…':'Ler ZIP e conferir índice'}</button></div>
+    <div className="poster-reconcile-controls"><label className="poster-reconcile-file"><Upload size={18}/><span>{zip?zip.name:'Selecionar ZIP do índice completo'}</span><input type="file" accept=".zip,application/zip" onChange={e=>{setZip(e.target.files?.[0]||null);setRows([]);setFiles(null);setManifest(null);setSourceText('');setNotice('');}}/></label><button type="button" className="button primary" disabled={!zip||busy} onClick={()=>void inspect()}><Search size={16}/>{busy?'Aguarde…':'Ler ZIP e conferir índice'}</button></div>
     {progress&&<div className="poster-reconcile-progress"><RefreshCw size={15}/>{progress}</div>}
     {notice&&<div className="callout info"><Info size={18}/><span>{notice}</span></div>}
+    {sourceText&&<div className="poster-reconcile-preview poster-reference-text"><div className="poster-reconcile-preview-head"><strong>Referências de publicações encontradas no ZIP</strong><span>{sourceText.length.toLocaleString('pt-BR')} caracteres</span></div><p>Este texto foi extraído localmente do ZIP e não foi enviado ao catálogo. Copie o conteúdo e cole nesta conversa para cruzarmos as referências com os eventos, sem precisar anexar o ZIP de novo.</p><textarea aria-label="Texto extraído das referências de publicações" readOnly rows={12} value={sourceText} onFocus={e=>e.currentTarget.select()} /></div>}
     {manifest&&<div className="poster-reconcile-stats"><div><strong>{manifest.posters.length}</strong><span>imagens únicas</span></div><div><strong>{manifest.source_images||manifest.posters.length}</strong><span>arquivos de origem</span></div><div><strong>{rows.length}</strong><span>vínculos propostos</span></div><div><strong>{ready}</strong><span>eventos prontos</span></div></div>}
     {manifest&&<>{rows.length>0&&<div className="poster-reconcile-preview"><div className="poster-reconcile-preview-head"><strong>Prévia dos vínculos propostos</strong><button type="button" className="button ghost" onClick={()=>setAll(v=>!v)}>{all?'Ver amostra':'Ver todos'} ({rows.length})</button></div><div className="poster-reconcile-table-wrap"><table className="poster-reconcile-table"><thead><tr><th>Evento</th><th>Imagem do arquivo</th><th>Estado</th></tr></thead><tbody>{(all?rows:rows.slice(0,8)).map(r=><tr key={r.event_id}><td><strong>{r.title}</strong><small>{[r.date,r.city].filter(Boolean).join(' · ')}</small></td><td><span>{r.source_filename}</span><small>Imagem #{r.source_index}</small></td><td><span className={'poster-reconcile-status '+r.result}>{statusText(r)}</span>{r.detail&&<small>{r.detail}</small>}</td></tr>)}</tbody></table></div></div>}<div className="poster-reconcile-footer"><p>{manifest.catalog_only?'Este ZIP não contém manifesto de vínculos. A ação abaixo cadastrará apenas as imagens únicas no catálogo; nenhum pôster será associado automaticamente a eventos.':'O catálogo indexa cada imagem única, registra nomes e números de origem, hashes e duplicatas, e mantém a URL pública. Só os vínculos propostos são associados automaticamente; demais cartazes permanecem pesquisáveis no catálogo. Eventos com mídia existente são preservados.'}</p><button type="button" className="button primary" disabled={busy||!manifest} onClick={()=>void importAll()}><CheckCircle2 size={16}/>{busy?'Indexando…':manifest.catalog_only?'Indexar '+manifest.posters.length+' pôsteres no catálogo (sem vincular eventos)':'Indexar '+manifest?.posters.length+' pôsteres e aplicar vínculos'}</button></div></>}
   </section>;

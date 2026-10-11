@@ -88,16 +88,24 @@ export async function unzipPosterPackage(file, depth = 0) {
   if (!files.has('poster-import-manifest.json')) {
     const nested = Array.from(files.entries()).filter(([name]) => name.startsWith('__nested__/'));
     let nestedImages = null;
+    const preserveOuterTextReferences = (target) => {
+      // The images/manifest may live in an inner ZIP while the X/Twitter
+      // reference TXT sits next to that ZIP in the outer package.
+      for (const [name, blob] of files.entries()) {
+        if (name.startsWith('__text__/') && !target.has(name)) target.set(name, blob);
+      }
+      return target;
+    };
     for (const [name, blob] of nested) {
       try {
         const inner = await unzipPosterPackage(new File([blob], name.split('/').pop() || 'poster-index.zip'), depth + 1);
-        if (inner.has('poster-import-manifest.json')) return inner;
+        if (inner.has('poster-import-manifest.json')) return preserveOuterTextReferences(inner);
         if (Array.from(inner.keys()).some(key => key.startsWith('images/'))) nestedImages = inner;
       } catch (innerError) {
         if (depth >= 2) throw innerError;
       }
     }
-    if (nestedImages) return nestedImages;
+    if (nestedImages) return preserveOuterTextReferences(nestedImages);
     if (Array.from(files.keys()).some(name => name.startsWith('images/'))) return files;
     const detected = Array.from(files.keys()).filter(name => !name.startsWith('__nested__/')).slice(0, 8).join(', ') || 'nenhum manifesto ou arquivo de imagem reconhecido';
     const nestedHint = nested.length ? ' Foi encontrado um ZIP interno, mas ele também não apresentou um manifesto válido.' : '';

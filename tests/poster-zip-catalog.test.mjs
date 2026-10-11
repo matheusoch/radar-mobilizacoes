@@ -166,3 +166,17 @@ test('ZIP-extracted Blob gets an explicit MIME type accepted by poster storage',
   assert.equal(createPosterUploadBlob(source, 'images/poster.gif').type, 'image/gif');
   assert.throws(() => posterMimeType('images/poster.svg'), /Format|Formato/);
 });
+
+
+test('text reference files in the ZIP are retained for poster association recovery', async () => {
+  const referenceText = 'Post: Ato pela democracia em Recife\\nImagem: https://pbs.twimg.com/media/EXAMPLE.jpg';
+  const zip = makeStoredZip([
+    { name: 'images/poster.jpg', data: 'poster bytes' },
+    { name: 'Twitter X posts.txt', data: referenceText }
+  ]);
+  const archive = await unzipPosterPackage(asFile(zip));
+  assert.ok(archive.has('images/poster.jpg'));
+  assert.equal(await archive.get('__text__/Twitter X posts.txt').text(), referenceText);
+  const manifest = await createCatalogOnlyManifest(archive);
+  assert.equal(manifest.posters.length, 1, 'text references must not be counted as images');
+});

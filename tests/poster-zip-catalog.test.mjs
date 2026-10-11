@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { unzipPosterPackage, createCatalogOnlyManifest, posterIndexUpsertOptions } from '../src/lib/posterZip.js';
+import { unzipPosterPackage, createCatalogOnlyManifest, posterIndexUpsertOptions, posterMimeType, createPosterUploadBlob } from '../src/lib/posterZip.js';
 
 const crc32 = data => {
   let crc = 0xffffffff;
@@ -151,4 +151,18 @@ test('catalog-only index writes ignore existing SHA conflicts to preserve stored
     posterIndexUpsertOptions(false),
     { onConflict: 'sha256', ignoreDuplicates: false }
   );
+});
+
+
+test('ZIP-extracted Blob gets an explicit MIME type accepted by poster storage', () => {
+  const source = new Blob([Buffer.from('poster bytes')]);
+  assert.equal(source.type, '');
+
+  const jpeg = createPosterUploadBlob(source, 'images/poster.JPEG');
+  assert.equal(jpeg.type, 'image/jpeg');
+  assert.equal(posterMimeType('images/poster.jfif'), 'image/jpeg');
+  assert.equal(createPosterUploadBlob(source, 'images/poster.webp').type, 'image/webp');
+  assert.equal(createPosterUploadBlob(source, 'images/poster.png').type, 'image/png');
+  assert.equal(createPosterUploadBlob(source, 'images/poster.gif').type, 'image/gif');
+  assert.throws(() => posterMimeType('images/poster.svg'), /Format|Formato/);
 });

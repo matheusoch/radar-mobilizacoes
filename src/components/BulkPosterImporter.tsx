@@ -46,7 +46,7 @@ async function unzipPosterPackage(file:File,depth=0):Promise<Map<string,Blob>>{
     else if(method===8){
       if(typeof DecompressionStream==='undefined')throw new Error('Este navegador não oferece descompactação ZIP compatível. Abra o painel no Chrome/Edge atualizado e use o pacote completo sem compressão.');
       try{blob=await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw' as CompressionFormat))).blob();}
-      catch{throw new Error('Não foi possível descompactar '+name+'. Use o arquivo poster-index-complete.zip, preparado para evitar incompatibilidade de compactação.');}
+      catch{throw new Error('Não foi possível descompactar '+name+'. Use o arquivo posters-index-complete.zip, preparado para evitar incompatibilidade de compactação.');}
     }else throw new Error('Método de compactação ZIP não suportado ('+method+') em '+name);
     if(blob.size!==size)throw new Error('Tamanho incorreto para '+name);
     let storedName=name;
@@ -220,7 +220,7 @@ export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promis
 
   const statusText=(r:Row)=>r.result==='ready'?'Pronto para importar':r.result==='existing'?'Mídia preservada':r.result==='linked'?'Importado':r.result==='failed'?'Falha':r.result==='missing-event'?'Evento ausente':'Ignorado';
   return <section className="admin-section poster-reconcile-panel">
-    <div className="section-head compact"><div><div className="eyebrow">MÍDIA · ÍNDICE COMPLETO</div><h2>Indexar todos os pôsteres</h2><p className="page-lead">O pacote completo contém 271 arquivos de origem, 259 imagens únicas após remover duplicatas exatas e os 169 vínculos de alta confiança identificados. Todas as imagens entram no catálogo, mesmo sem evento associado. Cartazes já ligados a eventos não são sobrescritos.</p></div></div>
+    <div className="section-head compact"><div><div className="eyebrow">MÍDIA · ÍNDICE COMPLETO</div><h2>Indexar todos os pôsteres</h2><p className="page-lead">Selecione um ZIP com manifesto para conferir os vínculos sugeridos. Se o arquivo contiver apenas imagens, será possível catalogar as imagens únicas sem associá-las automaticamente a eventos. Cartazes já ligados a eventos não são sobrescritos.</p></div></div>
     <div className="poster-reconcile-controls"><label className="poster-reconcile-file"><Upload size={18}/><span>{zip?zip.name:'Selecionar ZIP do índice completo'}</span><input type="file" accept=".zip,application/zip" onChange={e=>{setZip(e.target.files?.[0]||null);setRows([]);setFiles(null);setManifest(null);setNotice('');}}/></label><button type="button" className="button primary" disabled={!zip||busy} onClick={()=>void inspect()}><Search size={16}/>{busy?'Aguarde…':'Ler ZIP e conferir índice'}</button></div>
     {progress&&<div className="poster-reconcile-progress"><RefreshCw size={15}/>{progress}</div>}
     {notice&&<div className="callout info"><Info size={18}/><span>{notice}</span></div>}

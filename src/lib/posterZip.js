@@ -40,14 +40,17 @@ export async function unzipPosterPackage(file, depth = 0) {
     const isManifest = basename === 'poster-import-manifest.json';
     const imageMarker = parts.map(part => part.toLowerCase()).lastIndexOf('images');
     const isImage = /\.(jpe?g|jfif|png|webp|gif|avif|bmp|svg)$/i.test(basename);
+    const isText = /\.(txt|csv|jsonl)$/i.test(basename);
     let name = '';
     if (isManifest) name = 'poster-import-manifest.json';
     else if (isImage) name = imageMarker >= 0 && imageMarker < parts.length - 1 ? 'images/' + parts.slice(imageMarker + 1).join('/') : 'images/' + parts[parts.length - 1];
+    else if (isText) name = '__text__/' + cleanName;
     else if (basename.endsWith('.zip')) name = '__nested__/' + cleanName;
     else continue;
 
     if (name.startsWith('images/') && size > 8 * 1024 * 1024) throw new Error('Imagem acima de 8 MB no pacote: ' + name);
     if (name === 'poster-import-manifest.json' && size > 8 * 1024 * 1024) throw new Error('Manifesto acima de 8 MB no pacote.');
+    if (name.startsWith('__text__/') && size > 5 * 1024 * 1024) throw new Error('Arquivo de texto de referência acima de 5 MB: ' + name);
     if (name.startsWith('__nested__/') && size > 256 * 1024 * 1024) throw new Error('O ZIP interno excede o limite de 256 MB. Selecione o pacote completo diretamente.');
     if (flags & 1) throw new Error('O ZIP está protegido por senha: ' + name);
     if (local + 30 > bytes.length || u32(local) !== 0x04034b50) throw new Error('Cabeçalho de arquivo inválido: ' + name);

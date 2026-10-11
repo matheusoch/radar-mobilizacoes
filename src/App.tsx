@@ -678,7 +678,7 @@ function AuthPage(){
         if(error)setMsg(error.message);
         else navigate(next);
       }else{
-        const{data,error}=await db.auth.signUp({email,password,options:{emailRedirectTo:window.location.origin+'/chat',data:{display_name:displayName||safeName(email)}}});
+        const{data,error}=await db.auth.signUp({email,password,options:{emailRedirectTo:window.location.origin+next,data:{display_name:displayName||safeName(email)}}});
         if(error)setMsg(error.message);
         else if(data.session)navigate(next);
         else setMsg('Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre no chat.');

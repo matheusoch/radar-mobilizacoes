@@ -8,7 +8,7 @@ type Row=Match&{title:string;date?:string;city?:string;imageUrl:string|null;resu
 const hex=(buffer:ArrayBuffer)=>Array.from(new Uint8Array(buffer)).map(v=>v.toString(16).padStart(2,'0')).join('');
 const mime=(path:string)=>{const ext=path.split('.').pop()?.toLowerCase();return ext==='jpg'||ext==='jpeg'||ext==='jfif'?'image/jpeg':ext==='webp'?'image/webp':ext==='png'?'image/png':ext==='gif'?'image/gif':'application/octet-stream'};
 
-async function unzipPosterPackage(file:File,depth=0){
+async function unzipPosterPackage(file:File,depth=0):Promise<Map<string,Blob>>{
   if(depth>2)throw new Error('O pacote contém mais de dois ZIPs aninhados. Extraia o ZIP interno e selecione-o diretamente.');
   const bytes=new Uint8Array(await file.arrayBuffer());
   const view=new DataView(bytes.buffer);
@@ -55,7 +55,7 @@ async function unzipPosterPackage(file:File,depth=0){
     const nested=Array.from(files.entries()).filter(([name])=>name.startsWith('__nested__/'));
     for(const [name,blob] of nested){
       try{
-        const inner=await unzipPosterPackage(new File([blob],name.split('/').pop()||'poster-index.zip'),depth+1);
+        const inner:Map<string,Blob>=await unzipPosterPackage(new File([blob],name.split('/').pop()||'poster-index.zip'),depth+1);
         if(inner.has('poster-import-manifest.json'))return inner;
       }catch(innerError){
         if(depth>=2)throw innerError;

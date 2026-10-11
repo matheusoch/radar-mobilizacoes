@@ -171,6 +171,201 @@ create table if not exists public.event_submissions(
   constraint event_submissions_message_len_chk check(message is null or char_length(message) <= 2500)
 );
 
+create table if not exists public.poster_index (
+  sha256 text primary key check (sha256 ~ '^[0-9a-f]{64}
+alter table public.event_submissions enable row level security;
+
+drop policy if exists "chat approved or own" on public.chat_messages;
+create policy "chat approved or own" on public.chat_messages
+for select to authenticated
+using(status='approved' or user_id=auth.uid() or exists(select 1 from public.admin_users a where a.user_id=auth.uid()));
+
+drop policy if exists "chat insert own" on public.chat_messages;
+create policy "chat insert own" on public.chat_messages
+for insert to authenticated with check(user_id=auth.uid());
+
+drop policy if exists "chat admin update" on public.chat_messages;
+create policy "chat admin update" on public.chat_messages
+for update to authenticated
+using(exists(select 1 from public.admin_users a where a.user_id=auth.uid()))
+with check(exists(select 1 from public.admin_users a where a.user_id=auth.uid()));
+
+drop policy if exists "submissions own or admin" on public.event_submissions;
+create policy "submissions own or admin" on public.event_submissions
+for select to authenticated
+using(user_id=auth.uid() or exists(select 1 from public.admin_users a where a.user_id=auth.uid()));
+
+drop policy if exists "submissions insert own" on public.event_submissions;
+create policy "submissions insert own" on public.event_submissions
+for insert to authenticated with check(user_id=auth.uid());
+
+drop policy if exists "submissions admin update" on public.event_submissions;
+create policy "submissions admin update" on public.event_submissions
+for update to authenticated
+using(exists(select 1 from public.admin_users a where a.user_id=auth.uid()))
+with check(exists(select 1 from public.admin_users a where a.user_id=auth.uid()));
+
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) values
+('event_posters','event_posters',true,8388608,array['image/jpeg','image/png','image/webp','image/gif','image/jfif']),
+('submission_posters','submission_posters',false,8388608,array['image/jpeg','image/png','image/webp','image/gif','image/jfif'])
+on conflict(id) do update set public=excluded.public,file_size_limit=excluded.file_size_limit,allowed_mime_types=excluded.allowed_mime_types;
+
+drop policy if exists "public read event posters" on storage.objects;
+create policy "public read event posters" on storage.objects
+for select to public using(bucket_id='event_posters');
+
+drop policy if exists "admins write event posters" on storage.objects;
+create policy "admins write event posters" on storage.objects
+for all to authenticated
+using(bucket_id='event_posters' and exists(select 1 from public.admin_users a where a.user_id=auth.uid()))
+with check(bucket_id='event_posters' and exists(select 1 from public.admin_users a where a.user_id=auth.uid()));
+
+drop policy if exists "users upload submission posters" on storage.objects;
+create policy "users upload submission posters" on storage.objects
+for insert to authenticated
+with check(bucket_id='submission_posters' and (storage.foldername(name))[1]=auth.uid()::text);
+
+drop policy if exists "users or admins read submission posters" on storage.objects;
+create policy "users or admins read submission posters" on storage.objects
+for select to authenticated
+using(bucket_id='submission_posters' and ((storage.foldername(name))[1]=auth.uid()::text or exists(select 1 from public.admin_users a where a.user_id=auth.uid())));
+
+drop policy if exists "users update own submission posters" on storage.objects;
+create policy "users update own submission posters" on storage.objects
+for update to authenticated
+using(bucket_id='submission_posters' and (storage.foldername(name))[1]=auth.uid()::text)
+with check(bucket_id='submission_posters' and (storage.foldername(name))[1]=auth.uid()::text);
+
+drop policy if exists "admins manage submission posters" on storage.objects;
+create policy "admins manage submission posters" on storage.objects
+for delete to authenticated
+using(bucket_id='submission_posters' and exists(select 1 from public.admin_users a where a.user_id=auth.uid()));
+
+create schema if not exists private;
+
+create or replace function private.enforce_chat_rate_limit()
+returns trigger
+language plpgsql
+set search_path=public,private
+as $$
+begin
+  if (select count(*) from public.chat_messages where user_id=new.user_id and created_at>now()-interval '15 minutes') >= 8 then
+    raise exception 'Limite de mensagens atingido. Aguarde alguns minutos antes de enviar outra.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists chat_rate_limit on public.chat_messages;
+create trigger chat_rate_limit before insert on public.chat_messages for each row execute function private.enforce_chat_rate_limit();
+
+create or replace function private.enforce_submission_rate_limit()
+returns trigger
+language plpgsql
+set search_path=public,private
+as $$
+begin
+  if (select count(*) from public.event_submissions where user_id=new.user_id and created_at>now()-interval '24 hours') >= 10 then
+    raise exception 'Limite diário de sugestões de eventos atingido. Tente novamente mais tarde.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists submission_rate_limit on public.event_submissions;
+create trigger submission_rate_limit before insert on public.event_submissions for each row execute function private.enforce_submission_rate_limit();
+
+
+-- Privacy-friendly page analytics
+create table if not exists public.page_views(
+  id uuid primary key default gen_random_uuid(),
+  visitor_id uuid not null,
+  path text not null,
+  event_id uuid references public.events(id) on delete set null,
+  created_at timestamptz not null default now(),
+  constraint page_views_path_len_chk check(char_length(trim(path)) between 1 and 300),
+  constraint page_views_path_prefix_chk check(left(trim(path),1)='/')
+);
+
+alter table public.page_views enable row level security;
+
+drop policy if exists "public insert page views" on public.page_views;
+create policy "public insert page views" on public.page_views
+for insert to anon,authenticated
+with check(
+  visitor_id is not null
+  and char_length(trim(path)) between 1 and 300
+  and left(trim(path),1)='/'
+  and (
+    event_id is null
+    or exists(select 1 from public.events e where e.id=event_id and e.is_public=true)
+  )
+);
+
+drop policy if exists "admin read page views" on public.page_views;
+create policy "admin read page views" on public.page_views
+for select to authenticated
+using(exists(select 1 from public.admin_users a where a.user_id=auth.uid()));
+
+create index if not exists page_views_created_at_idx on public.page_views(created_at desc);
+create index if not exists page_views_event_id_idx on public.page_views(event_id);
+create index if not exists page_views_visitor_id_idx on public.page_views(visitor_id);
+
+create schema if not exists private;
+
+create or replace function private.enforce_page_view_rate_limit()
+returns trigger
+language plpgsql
+set search_path=public,private
+as $$
+begin
+  if exists(
+    select 1 from public.page_views
+    where visitor_id=new.visitor_id
+      and path=trim(new.path)
+      and created_at>now()-interval '30 seconds'
+  ) then
+    return null;
+  end if;
+
+  if (
+    select count(*) from public.page_views
+    where visitor_id=new.visitor_id
+      and created_at>now()-interval '10 seconds'
+  ) >= 5 then
+    return null;
+  end if;
+
+  new.path=trim(new.path);
+  return new;
+end;
+$$;
+
+drop trigger if exists page_views_rate_limit on public.page_views;
+create trigger page_views_rate_limit
+before insert on public.page_views
+for each row execute function private.enforce_page_view_rate_limit();
+),
+  source_filename text not null,
+  source_filenames text[] not null default '{}',
+  source_indices integer[] not null default '{}',
+  storage_path text not null,
+  image_url text not null,
+  file_bytes bigint,
+  width integer,
+  height integer,
+  duplicate_count integer not null default 1,
+  matched_event_ids uuid[] not null default '{}',
+  indexed_at timestamptz not null default now()
+);
+create index if not exists poster_index_source_filename_idx on public.poster_index using gin (source_filenames);
+create index if not exists poster_index_matched_event_ids_idx on public.poster_index using gin (matched_event_ids);
+alter table public.poster_index enable row level security;
+create policy "admin manage poster index" on public.poster_index
+for all to authenticated
+using(exists(select 1 from public.admin_users a where a.user_id=auth.uid()))
+with check(exists(select 1 from public.admin_users a where a.user_id=auth.uid()));
+
 alter table public.chat_messages enable row level security;
 alter table public.event_submissions enable row level security;
 

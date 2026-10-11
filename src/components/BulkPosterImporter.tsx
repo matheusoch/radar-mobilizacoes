@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {createCatalogOnlyManifest,unzipPosterPackage} from '../lib/posterZip.js';
+import {createCatalogOnlyManifest,posterIndexUpsertOptions,unzipPosterPackage} from '../lib/posterZip.js';
 import {CheckCircle2,Info,RefreshCw,Search,Upload} from 'lucide-react';
 
 type Match={event_id:string;file:string;sha256:string;source_index:number;source_filename:string;reason:string;confidence:string};
@@ -97,7 +97,7 @@ export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promis
       });
       for(let i=0;i<catalogRows.length;i+=100){
         setProgress('Salvando índice pesquisável '+Math.min(i+100,catalogRows.length)+'/'+catalogRows.length+'…');
-        const{error}=await db.from('poster_index').upsert(catalogRows.slice(i,i+100),{onConflict:'sha256'});
+        const{error}=await db.from('poster_index').upsert(catalogRows.slice(i,i+100),posterIndexUpsertOptions(manifest.catalog_only===true));
         if(error)throw new Error('As imagens foram enviadas, mas falhou ao gravar o índice: '+error.message);
       }
       work=work.map(r=>r.result==='ready'&&badFiles.has(r.file)?{...r,result:'failed',detail:'Falha ao enviar imagem.'}:r);

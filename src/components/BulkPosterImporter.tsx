@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {createCatalogOnlyManifest,posterIndexUpsertOptions,unzipPosterPackage} from '../lib/posterZip.js';
+import {createCatalogOnlyManifest,createPosterUploadBlob,posterIndexUpsertOptions,posterMimeType,unzipPosterPackage} from '../lib/posterZip.js';
 import {CheckCircle2,Info,RefreshCw,Search,Upload} from 'lucide-react';
 
 type Match={event_id:string;file:string;sha256:string;source_index:number;source_filename:string;reason:string;confidence:string};
@@ -7,7 +7,6 @@ type Poster={sha256:string;file:string;source_index:number;source_filename:strin
 type Manifest={version:number;matches:Match[];posters:Poster[];source_images?:number;unique_files?:number;matched_events?:number;note?:string;catalog_only?:boolean};
 type Row=Match&{title:string;date?:string;city?:string;imageUrl:string|null;result:'ready'|'existing'|'missing-event'|'missing-file'|'linked'|'failed'|'skipped';detail?:string};
 const hex=(buffer:ArrayBuffer)=>Array.from(new Uint8Array(buffer)).map(v=>v.toString(16).padStart(2,'0')).join('');
-const mime=(path:string)=>{const ext=path.split('.').pop()?.toLowerCase();return ext==='jpg'||ext==='jpeg'||ext==='jfif'?'image/jpeg':ext==='webp'?'image/webp':ext==='png'?'image/png':ext==='gif'?'image/gif':'application/octet-stream'};
 
 export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promise<unknown>}){
   const[zip,setZip]=useState<File|null>(null),[files,setFiles]=useState<Map<string,Blob>|null>(null),[rows,setRows]=useState<Row[]>([]),[manifest,setManifest]=useState<Manifest|null>(null);
@@ -76,25 +75,31 @@ export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promis
     let work=[...rows];
     try{
       const posters=manifest.posters||[];
-      const filePaths=[...new Set(posters.map(r=>r.file))],urlByFile=new Map<string,string>(),badFiles=new Set<string>();
+      const filePaths=[...new Set(posters.map(r=>r.file))],urlByFile=new Map<string,string>(),badFiles=new Set<string>(),uploadErrors:string[]=[];
       for(let i=0;i<filePaths.length;i+=4){
         setProgress('Enviando catálogo completo de pôsteres '+Math.min(i+4,filePaths.length)+'/'+filePaths.length+'…');
         const res=await Promise.all(filePaths.slice(i,i+4).map(async path=>{
           try{
             const poster=posters.find(x=>x.file===path)!;const blob=files.get(path)!;const ext=(path.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
             const object='reconciled/'+poster.sha256+'.'+ext;
-            const{error}=await db.storage.from('event_posters').upload(object,blob,{upsert:true,contentType:mime(path)});
+            const contentType=posterMimeType(path);
+            const uploadBlob=createPosterUploadBlob(blob,path);
+            const{error}=await db.storage.from('event_posters').upload(object,uploadBlob,{upsert:true,contentType,cacheControl:'3600'});
             if(error)throw error;
             return {path,url:db.storage.from('event_posters').getPublicUrl(object).data.publicUrl,object};
           }catch(e){return {path,url:null,object:null,error:e instanceof Error?e.message:'Falha no upload'};}
         }));
-        for(const r of res){if(r.url)urlByFile.set(r.path,r.url);else badFiles.add(r.path);}
+        for(const r of res){if(r.url)urlByFile.set(r.path,r.url);else{badFiles.add(r.path);if(r.error)uploadErrors.push(r.path+': '+r.error);}}
       }
       const catalogRows=posters.filter(p=>urlByFile.has(p.file)).map(p=>{
         const matchingEventIds=[...new Set(manifest.matches.filter(m=>m.sha256===p.sha256).map(m=>m.event_id))];
         const object='reconciled/'+p.sha256+'.'+(p.file.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
         return {sha256:p.sha256,source_filename:p.source_filename,source_filenames:p.source_filenames?.length?p.source_filenames:[p.source_filename],source_indices:p.source_indices?.length?p.source_indices:[p.source_index],storage_path:object,image_url:urlByFile.get(p.file)!,file_bytes:p.bytes||null,width:p.width||null,height:p.height||null,duplicate_count:(p.source_indices?.length||p.duplicate_indices?.length||1),matched_event_ids:matchingEventIds,indexed_at:new Date().toISOString()};
       });
+      if(posters.length>0&&catalogRows.length===0){
+        const firstError=uploadErrors[0]?` Primeiro erro: ${uploadErrors[0]}`:'';
+        throw new Error('Nenhuma das '+posters.length+' imagens foi enviada ao armazenamento. O índice não foi alterado.'+firstError);
+      }
       for(let i=0;i<catalogRows.length;i+=100){
         setProgress('Salvando índice pesquisável '+Math.min(i+100,catalogRows.length)+'/'+catalogRows.length+'…');
         const{error}=await db.from('poster_index').upsert(catalogRows.slice(i,i+100),posterIndexUpsertOptions(manifest.catalog_only===true));
@@ -118,7 +123,8 @@ export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promis
       }
       setRows(work);
       const indexed=catalogRows.length;
-      setNotice('Indexação concluída: '+indexed+' imagens únicas no catálogo ('+(manifest.source_images||indexed)+' arquivos de origem); '+work.filter(r=>r.result==='linked').length+' eventos receberam pôster; '+work.filter(r=>r.result==='existing').length+' eventos foram preservados; '+(posters.length-indexed)+' imagens não foram indexadas por falha de envio; '+work.filter(r=>r.result==='failed').length+' falhas de vínculo.');
+      const uploadWarning=uploadErrors.length?' Primeiro erro de envio: '+uploadErrors[0]+(uploadErrors.length>1?' (e mais '+(uploadErrors.length-1)+' falhas)':''):'';
+      setNotice('Indexação concluída: '+indexed+' imagens únicas no catálogo ('+(manifest.source_images||indexed)+' arquivos de origem); '+work.filter(r=>r.result==='linked').length+' eventos receberam pôster; '+work.filter(r=>r.result==='existing').length+' eventos foram preservados; '+(posters.length-indexed)+' imagens não foram indexadas por falha de envio; '+work.filter(r=>r.result==='failed').length+' falhas de vínculo.'+uploadWarning);
       await onComplete();
     }catch(e){setNotice(e instanceof Error?e.message:'Falha na importação.');}
     finally{setBusy(false);setProgress('');}

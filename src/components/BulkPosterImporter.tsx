@@ -8,7 +8,8 @@ type Row=Match&{title:string;date?:string;city?:string;imageUrl:string|null;resu
 const hex=(buffer:ArrayBuffer)=>Array.from(new Uint8Array(buffer)).map(v=>v.toString(16).padStart(2,'0')).join('');
 const mime=(path:string)=>{const ext=path.split('.').pop()?.toLowerCase();return ext==='jpg'||ext==='jpeg'||ext==='jfif'?'image/jpeg':ext==='webp'?'image/webp':ext==='png'?'image/png':ext==='gif'?'image/gif':'application/octet-stream'};
 
-async function unzipPosterPackage(file:File){
+async function unzipPosterPackage(file:File,depth=0):Promise<Map<string,Blob>>{
+  if(depth>2)throw new Error('O pacote contém mais de dois ZIPs aninhados. Extraia o ZIP interno e selecione-o diretamente.');
   const bytes=new Uint8Array(await file.arrayBuffer());
   const view=new DataView(bytes.buffer);
   const u16=(i:number)=>view.getUint16(i,true),u32=(i:number)=>view.getUint32(i,true);
@@ -20,15 +21,23 @@ async function unzipPosterPackage(file:File){
   for(let n=0;n<total;n++){
     if(p+46>bytes.length||u32(p)!==0x02014b50)throw new Error('Diretório central do ZIP inválido ou arquivo incompleto.');
     const flags=u16(p+8),method=u16(p+10),packed=u32(p+20),size=u32(p+24),nl=u16(p+28),el=u16(p+30),cl=u16(p+32),local=u32(p+42);
-    const rawName=decoder.decode(bytes.subarray(p+46,p+46+nl));p+=46+nl+el+cl;
-    let name=rawName.replace(/\\/g,'/');
-    if(name.endsWith('/poster-import-manifest.json'))name='poster-import-manifest.json';
-    else{
-      const imageMarker=name.lastIndexOf('/images/');
-      if(imageMarker>=0)name=name.slice(imageMarker+1);
-    }
-    if(name.endsWith('/')||(name!=='poster-import-manifest.json'&&!name.startsWith('images/')))continue;
-    if(size>8*1024*1024)throw new Error('Arquivo acima de 8 MB no pacote: '+name);
+    const rawName=decoder.decode(bytes.subarray(p+46,p+46+nl)).replace(/\\/g,'/');
+    p+=46+nl+el+cl;
+    if(!rawName||rawName.endsWith('/'))continue;
+    const cleanName=rawName.replace(/^\.\//, '').replace(/^\/+/, '');
+    const parts=cleanName.split('/').filter(Boolean);
+    const basename=(parts[parts.length-1]||'').toLowerCase();
+    const isManifest=basename==='poster-import-manifest.json';
+    const imageMarker=parts.map(part=>part.toLowerCase()).lastIndexOf('images');
+    const isImage=/\.(jpe?g|jfif|png|webp|gif|avif|bmp|svg)$/i.test(basename);
+    let name='';
+    if(isManifest)name='poster-import-manifest.json';
+    else if(isImage)name=imageMarker>=0&&imageMarker<parts.length-1?'images/'+parts.slice(imageMarker+1).join('/'):'images/'+parts[parts.length-1];
+    else if(basename.endsWith('.zip'))name='__nested__/'+cleanName;
+    else continue;
+    if(name.startsWith('images/')&&size>8*1024*1024)throw new Error('Imagem acima de 8 MB no pacote: '+name);
+    if(name==='poster-import-manifest.json'&&size>8*1024*1024)throw new Error('Manifesto acima de 8 MB no pacote.');
+    if(name.startsWith('__nested__/')&&size>256*1024*1024)throw new Error('O ZIP interno excede o limite de 256 MB. Selecione o pacote completo diretamente.');
     if(flags&1)throw new Error('O ZIP está protegido por senha: '+name);
     if(local+30>bytes.length||u32(local)!==0x04034b50)throw new Error('Cabeçalho de arquivo inválido: '+name);
     const start=local+30+u16(local+26)+u16(local+28),raw=bytes.slice(start,start+packed);
@@ -43,8 +52,18 @@ async function unzipPosterPackage(file:File){
     files.set(name,blob);
   }
   if(!files.has('poster-import-manifest.json')){
-    const detected=Array.from(files.keys()).slice(0,8).join(', ')||'nenhum arquivo compatível';
-    throw new Error('Não consegui localizar o manifesto neste ZIP. Arquivos reconhecidos: '+detected+'. Use o pacote de índice completo; ele deve conter poster-import-manifest.json e as imagens em images/. Se o ZIP veio dentro de uma pasta, atualize o painel com Ctrl + F5 e tente novamente.');
+    const nested=Array.from(files.entries()).filter(([name])=>name.startsWith('__nested__/'));
+    for(const [name,blob] of nested){
+      try{
+        const inner:Map<string,Blob>=await unzipPosterPackage(new File([blob],name.split('/').pop()||'poster-index.zip'),depth+1);
+        if(inner.has('poster-import-manifest.json'))return inner;
+      }catch(innerError){
+        if(depth>=2)throw innerError;
+      }
+    }
+    const detected=Array.from(files.keys()).filter(name=>!name.startsWith('__nested__/')).slice(0,8).join(', ')||'nenhum manifesto ou arquivo de imagem reconhecido';
+    const nestedHint=nested.length?' Foi encontrado um ZIP interno, mas ele também não apresentou um manifesto válido.':'';
+    throw new Error('Não consegui localizar poster-import-manifest.json. Entradas reconhecidas: '+detected+'. O importador aceita manifesto em pastas aninhadas e imagens em diretórios diferentes. Confira se selecionou o pacote do índice completo.'+nestedHint);
   }
   return files;
 }
@@ -61,7 +80,13 @@ export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promis
     setBusy(true);setNotice('');setRows([]);setFiles(null);setManifest(null);setProgress('Lendo e verificando o ZIP completo…');
     try{
       const archive=await unzipPosterPackage(zip),parsed=JSON.parse(await archive.get('poster-import-manifest.json')!.text()) as Manifest;
-      const normalizeIndexedPath=(path:string)=>{const normalized=path.replace(/\\/g,'/');const marker=normalized.lastIndexOf('/images/');return (marker>=0?normalized.slice(marker+1):normalized).replace(/^\.\//,'');};
+      const normalizeIndexedPath=(path:string)=>{
+        const normalized=path.replace(/\\/g,'/').replace(/^\.\//,'').replace(/^\/+/, '');
+        const parts=normalized.split('/').filter(Boolean);
+        const marker=parts.map(part=>part.toLowerCase()).lastIndexOf('images');
+        if(marker>=0&&marker<parts.length-1)return 'images/'+parts.slice(marker+1).join('/');
+        return 'images/'+(parts[parts.length-1]||normalized);
+      };
       if(Array.isArray(parsed.matches))parsed.matches=parsed.matches.map(match=>({...match,file:normalizeIndexedPath(match.file)}));
       if(Array.isArray(parsed.posters))parsed.posters=parsed.posters.map(poster=>({...poster,file:normalizeIndexedPath(poster.file)}));
       if(![1,2].includes(parsed.version)||!Array.isArray(parsed.matches)||!parsed.matches.length)throw new Error('Manifesto vazio ou versão desconhecida.');

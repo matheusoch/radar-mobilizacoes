@@ -46,6 +46,19 @@ class AppErrorBoundary extends React.Component<{children:ReactNode},{error:Error
 }
 
 function slugify(value:string){return value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')}
+function detectSourcePlatform(rawUrl:string){
+  try{
+    const host=new URL(rawUrl.startsWith('http://')||rawUrl.startsWith('https://')?rawUrl:'https://'+rawUrl).hostname.toLowerCase().replace(/^www\./,'');
+    if(host==='instagram.com'||host.endsWith('.instagram.com'))return 'Instagram';
+    if(host==='x.com'||host.endsWith('.x.com')||host==='twitter.com'||host.endsWith('.twitter.com'))return 'X';
+    if(host==='tiktok.com'||host.endsWith('.tiktok.com'))return 'TikTok';
+    if(host==='youtube.com'||host.endsWith('.youtube.com')||host==='youtu.be')return 'YouTube';
+    if(host==='facebook.com'||host.endsWith('.facebook.com')||host==='fb.watch')return 'Facebook';
+    if(host==='threads.net'||host.endsWith('.threads.net'))return 'Threads';
+    if(host==='t.me'||host.endsWith('.t.me')||host==='telegram.me')return 'Telegram';
+    return 'Web';
+  }catch{return 'Web'}
+}
 async function sha256File(file:File){const digest=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());return Array.from(new Uint8Array(digest)).map(value=>value.toString(16).padStart(2,'0')).join('')}
 function fmtDate(date?:string|null){if(!date)return 'Data não informada';return new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'})}
 function fmtShortDate(date?:string|null){if(!date)return '—';return new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}
@@ -273,7 +286,7 @@ function Home({events}:{events:MobilizationEvent[]}){
       else alert(message);
     }
   };
-  return <><section className="hero"><div className="container hero-grid"><div><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> AGENDA DE MOBILIZAÇÕES</div><h1>Eventos e mobilizações pelo Brasil.</h1><p>Agenda de atos, manifestações, plenárias e encontros em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, organizados por data e cidade e acompanhados de fontes para conferência.</p><div className="hero-actions"><Link to="/calendario" className="button primary"><CalendarDays size={18}/>Ver calendário</Link><Link to="/divulgar" className="button ghost"><ImageIcon size={18}/>Criar divulgação</Link><Link to="/chat" className="button ghost"><MessageCircle size={18}/>Enviar atualização</Link></div></div><div className="hero-card"><div className="hero-stat"><strong>{events.length}</strong><span>eventos públicos</span></div><div className="hero-stat"><strong>{states.length}</strong><span>estados representados</span></div><div className="hero-stat"><strong>{events.filter(e=>e.status!=='warning').length}</strong><span>sem alerta de divergência</span></div></div></div></section><section className="container section"><Filters value={filters} onChange={setFilters} states={states} cities={cities} types={types} modalities={modalities}/><div className="section-head"><div><div className="eyebrow">AGENDA</div><h2>{filtered.length} evento{filtered.length===1?'':'s'}</h2></div><div className="section-tools"><div className="legend">Informação rastreável</div><div className="agenda-sort"><label htmlFor="agenda-sort">Ordenar por</label><select id="agenda-sort" aria-label="Ordenar eventos por" title="Ordem cronológica: data e horário crescentes." value={sortBy} onChange={event=>setSortBy(event.target.value as AgendaSort)}><option value="chronological">Ordem cronológica</option><option value="relevance">Mais relevantes</option><option value="city">Cidade (A–Z)</option><option value="state">Estado (A–Z)</option><option value="recent">Adicionados recentemente</option></select></div></div></div><div className="event-grid">{orderedEvents.map(e=><EventCard key={e.id} event={e} attendance={e.db_id?attendance[e.db_id]:undefined} onAttendance={()=>handleAttendance(e)}/>)}</div>{!filtered.length&&<div className="empty"><Info/><h3>Nenhum evento encontrado</h3><p>Tente outro termo ou remova alguns filtros.</p></div>}</section></>
+  return <><section className="hero"><div className="container hero-grid"><div><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> AGENDA DE MOBILIZAÇÕES</div><h1>Eventos e mobilizações pelo Brasil.</h1><p>Agenda de atos, manifestações, plenárias e encontros em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, organizados por data e cidade e acompanhados de fontes para conferência.</p><div className="hero-actions"><Link to="/chat?novo=1" className="button primary"><CalendarPlus size={18}/>Adicionar evento</Link><Link to="/calendario" className="button ghost"><CalendarDays size={18}/>Ver calendário</Link><Link to="/divulgar" className="button ghost"><ImageIcon size={18}/>Criar divulgação</Link><Link to="/chat" className="button ghost"><MessageCircle size={18}/>Enviar atualização</Link></div></div><div className="hero-card"><div className="hero-stat"><strong>{events.length}</strong><span>eventos públicos</span></div><div className="hero-stat"><strong>{states.length}</strong><span>estados representados</span></div><div className="hero-stat"><strong>{events.filter(e=>e.status!=='warning').length}</strong><span>sem alerta de divergência</span></div></div></div></section><section className="container section"><Filters value={filters} onChange={setFilters} states={states} cities={cities} types={types} modalities={modalities}/><div className="section-head"><div><div className="eyebrow">AGENDA</div><h2>{filtered.length} evento{filtered.length===1?'':'s'}</h2></div><div className="section-tools"><div className="legend">Informação rastreável</div><div className="agenda-sort"><label htmlFor="agenda-sort">Ordenar por</label><select id="agenda-sort" aria-label="Ordenar eventos por" title="Ordem cronológica: data e horário crescentes." value={sortBy} onChange={event=>setSortBy(event.target.value as AgendaSort)}><option value="chronological">Ordem cronológica</option><option value="relevance">Mais relevantes</option><option value="city">Cidade (A–Z)</option><option value="state">Estado (A–Z)</option><option value="recent">Adicionados recentemente</option></select></div></div></div><div className="event-grid">{orderedEvents.map(e=><EventCard key={e.id} event={e} attendance={e.db_id?attendance[e.db_id]:undefined} onAttendance={()=>handleAttendance(e)}/>)}</div>{!filtered.length&&<div className="empty"><Info/><h3>Nenhum evento encontrado</h3><p>Tente outro termo ou remova alguns filtros.</p></div>}</section></>
 }
 
 function escapeIcsText(value:string){
@@ -683,6 +696,8 @@ function AuthPage(){
 
 function ChatPage(){
   const[user,setUser]=useState<any>(null);const[loading,setLoading]=useState(true);const[messages,setMessages]=useState<ChatMessage[]>([]);const[text,setText]=useState('');const[displayName,setDisplayName]=useState('');const[isAdmin,setIsAdmin]=useState(false);const[roleChecked,setRoleChecked]=useState(false);const[busy,setBusy]=useState(false);const[notice,setNotice]=useState('');const[replyTo,setReplyTo]=useState<ChatMessage|null>(null);const[showSubmission,setShowSubmission]=useState(false);const[sub,setSub]=useState({title:'',date:'',time:'',time_label:'',city:'',state:'',venue:'',message:''});const[file,setFile]=useState<File|null>(null);const navigate=useNavigate();const location=useLocation();
+  const submissionRequested=new URLSearchParams(location.search).get('novo')==='1';
+  useEffect(()=>{if(submissionRequested)setShowSubmission(true)},[submissionRequested]);
   useEffect(()=>{if(!supabase){setLoading(false);setRoleChecked(true);return}supabase.auth.getUser().then(({data})=>{setUser(data.user);if(data.user)setDisplayName(data.user.user_metadata?.display_name||safeName(data.user.email));setLoading(false)});const{data}=supabase.auth.onAuthStateChange((_e,s)=>{setUser(s?.user??null);if(s?.user)setDisplayName(s.user.user_metadata?.display_name||safeName(s.user.email))});return()=>data.subscription.unsubscribe()},[]);
   useEffect(()=>{if(!user||!supabase){setIsAdmin(false);setRoleChecked(true);return}let active=true;setRoleChecked(false);supabase.from('admin_users').select('user_id').eq('user_id',user.id).maybeSingle().then(({data,error})=>{if(active){setIsAdmin(!error&&Boolean(data));setRoleChecked(true)}});return()=>{active=false}},[user]);
   const loadMessages=async()=>{
@@ -703,7 +718,7 @@ function ChatPage(){
   useEffect(()=>{if(!user)return;const id=window.setInterval(loadMessages,8000);return()=>window.clearInterval(id)},[user]);
   useEffect(()=>{const messageId=new URLSearchParams(location.search).get('mensagem');if(!messageId)return;const target=document.getElementById('chat-message-'+messageId);if(target){target.scrollIntoView({behavior:'smooth',block:'center'});target.classList.add('chat-message-focused')}},[messages,location.search]);
   if(loading)return <div className="loading"><div className="spinner"/>Carregando chat…</div>;
-  if(!user)return <div className="container page narrow"><div className="eyebrow">CHAT</div><h1>Converse e envie atualizações.</h1><p className="page-lead">Para participar, entre com uma conta. As mensagens ficam sob moderação antes de aparecerem para outras pessoas.</p><div className="chat-login-card"><ShieldCheck size={28}/><div><strong>Sem cadastro público aberto.</strong><p>Isso reduz spam e facilita a triagem de novos eventos.</p></div><Link className="button primary" to="/entrar?next=/chat">Entrar / criar conta</Link></div></div>;
+  if(!user)return <div className="container page narrow"><div className="eyebrow">CHAT</div><h1>{submissionRequested?'Adicionar um novo evento.':'Converse e envie atualizações.'}</h1><p className="page-lead">Para participar, entre com uma conta. Os novos eventos ficam em uma fila privada até a revisão.</p><div className="chat-login-card"><ShieldCheck size={28}/><div><strong>{submissionRequested?'Seu evento será enviado para revisão.':'Sem cadastro público aberto.'}</strong><p>{submissionRequested?'Depois de entrar ou criar sua conta, o formulário de envio será aberto automaticamente.':'Isso reduz spam e facilita a triagem de novos eventos.'}</p></div><Link className="button primary" to={'/entrar?next='+encodeURIComponent(submissionRequested?'/chat?novo=1':'/chat')}>Entrar / criar conta</Link></div></div>;
   const send=async(e:FormEvent)=>{
     e.preventDefault();
     if(!text.trim()||!supabase)return;
@@ -741,6 +756,7 @@ function ChatPage(){
 function AdminPage(){
   const db=supabase!;
   const[user,setUser]=useState<any>(null);const[loading,setLoading]=useState(true);const[authorized,setAuthorized]=useState(false);const[events,setEvents]=useState<MobilizationEvent[]>([]);const[sources,setSources]=useState<EventSource[]>([]);const[submissions,setSubmissions]=useState<Submission[]>([]);const[chatPending,setChatPending]=useState<ChatMessage[]>([]);const[chatApproved,setChatApproved]=useState<ChatMessage[]>([]);const[editing,setEditing]=useState<MobilizationEvent|null>(null);const[posterFile,setPosterFile]=useState<File|null>(null);const[posterPreview,setPosterPreview]=useState<string|null>(null);const[indexingPosters,setIndexingPosters]=useState(false);const[posterIndexProgress,setPosterIndexProgress]=useState('');const[message,setMessage]=useState('');const[saving,setSaving]=useState(false);const[submitting,setSubmitting]=useState<string|null>(null);const[subPosterUrls,setSubPosterUrls]=useState<Record<string,string>>({});const[adminQuery,setAdminQuery]=useState('');const[adminDate,setAdminDate]=useState('');const[adminStatus,setAdminStatus]=useState('');const[adminMedia,setAdminMedia]=useState<'all'|'missing'|'attached'>('all');const[adminSort,setAdminSort]=useState<'recent'|'city'|'state'>('recent');const[analyticsRows,setAnalyticsRows]=useState<PageViewRow[]>([]);const[geoBusy,setGeoBusy]=useState(false);const[geoOptions,setGeoOptions]=useState<any[]>([]);
+  const[showNewSource,setShowNewSource]=useState(false);const[savingSource,setSavingSource]=useState(false);const[newSource,setNewSource]=useState({url:'',platform:'',account_name:'',account_handle:'',note:''});
 const blank=():MobilizationEvent=>({
   id:'',
   title:'',
@@ -1024,6 +1040,51 @@ const blank=():MobilizationEvent=>({
     setGeoOptions([]);
     setMessage('Resultado geográfico selecionado manualmente. Confira o endereço e as coordenadas antes de salvar.');
   };
+  const addSource=async()=>{
+    if(!editing||savingSource)return;
+    const rawUrl=newSource.url.trim();
+    if(!rawUrl){setMessage('Informe o link da fonte.');return;}
+    if(!newSource.account_name.trim()){setMessage('Informe o nome da conta, perfil ou organização da fonte.');return;}
+    let parsedUrl:URL;
+    try{
+      parsedUrl=new URL(/^https?:\/\//i.test(rawUrl)?rawUrl:'https://'+rawUrl);
+    }catch{setMessage('O link informado não parece ser uma URL válida.');return;}
+    if(parsedUrl.protocol!=='http:'&&parsedUrl.protocol!=='https:'){setMessage('A fonte deve usar um link HTTP ou HTTPS.');return;}
+    parsedUrl.hash='';
+    const cleanUrl=parsedUrl.toString();
+    const normalizeUrl=(value:string)=>{
+      try{const parsed=new URL(value);parsed.hash='';return parsed.toString().replace(/\/+$/,'').toLowerCase()}
+      catch{return value.trim().replace(/\/+$/,'').toLowerCase()}
+    };
+    const existing=sources.find(source=>normalizeUrl(source.url)===normalizeUrl(cleanUrl));
+    if(existing){
+      setEditing(current=>current?{...current,source_ids:current.source_ids.includes(existing.id)?current.source_ids:[...current.source_ids,existing.id]}:current);
+      setShowNewSource(false);
+      setNewSource({url:'',platform:'',account_name:'',account_handle:'',note:''});
+      setMessage('Este link já estava cadastrado. A fonte existente foi selecionada; salve o evento para confirmar o vínculo.');
+      return;
+    }
+    setSavingSource(true);
+    try{
+      const platform=newSource.platform.trim()||detectSourcePlatform(cleanUrl);
+      const{data,error}=await db.from('sources').insert({
+        platform,
+        account_name:newSource.account_name.trim(),
+        account_handle:newSource.account_handle.trim()||null,
+        url:cleanUrl,
+        note:newSource.note.trim()||null
+      }).select('id,platform,account_name,account_handle,url,note').single();
+      if(error)throw error;
+      const created:EventSource={id:data.id,platform:data.platform,account_name:data.account_name,account_handle:data.account_handle??undefined,url:data.url,note:data.note??undefined};
+      setSources(previous=>[...previous,created]);
+      setEditing(current=>current?{...current,source_ids:current.source_ids.includes(created.id)?current.source_ids:[...current.source_ids,created.id]}:current);
+      setNewSource({url:'',platform:'',account_name:'',account_handle:'',note:''});
+      setShowNewSource(false);
+      setMessage('Nova fonte cadastrada e selecionada. Clique em “Salvar evento” para confirmar o vínculo com este evento.');
+    }catch(error){
+      setMessage(error instanceof Error?error.message:'Não foi possível cadastrar a fonte.');
+    }finally{setSavingSource(false)}
+  };
   const remove=async(e:MobilizationEvent)=>{if(!e.db_id||!confirm(`Excluir ${e.title}?`))return;const{error}=await db.from('events').delete().eq('id',e.db_id);if(error)setMessage(error.message);else{setMessage('Evento excluído.');await loadAdmin()}};
   const createFromSubmission=async(s:Submission)=>{setSubmitting(s.id);setMessage('');try{const slug=slugify(`${s.date||'sem-data'}-${s.city||'brasil'}-${s.title}`)||crypto.randomUUID();const{data:e,error}=await db.from('events').insert({slug,title:s.title,type:'Manifestação',date:s.date||new Date().toISOString().slice(0,10),time:s.time||null,time_label:s.time_label||null,city:s.city||'Brasil',state:s.state||'',venue:s.venue||'A conferir',status:'pending',is_public:false,lat:null,lng:null,image_url:null,notes:`Enviado por ${s.display_name}. ${s.message||''}`.trim()}).select().single();if(error)throw error;await db.from('event_sources').insert({event_id:e.id,source_id:ADMIN_SOURCE_FALLBACK});if(s.poster_path){const{data:blob,error:downErr}=await db.storage.from(SUBMISSION_STORAGE_BUCKET).download(s.poster_path);if(downErr)throw downErr;const ext=s.poster_path.split('.').pop()||'jpg';const path=`events/${e.id}-submission.${ext}`;const{error:upErr}=await db.storage.from(ADMIN_STORAGE_BUCKET).upload(path,blob,{upsert:true,contentType:blob.type||'image/jpeg'});if(upErr)throw upErr;const{data:pub}=db.storage.from(ADMIN_STORAGE_BUCKET).getPublicUrl(path);await db.from('events').update({image_url:pub.publicUrl}).eq('id',e.id)}await db.from('event_submissions').update({status:'approved',reviewed_at:new Date().toISOString(),reviewed_by:user.id}).eq('id',s.id);setMessage('Rascunho criado no painel. Revise e publique quando estiver pronto.');await loadAdmin();const fresh=await getAdminEvents();const created=fresh.find(x=>x.db_id===e.id);if(created)setEditing(created)}catch(error){setMessage(error instanceof Error?error.message:'Falha ao transformar o envio em evento.')}finally{setSubmitting(null)}}
   const reviewSubmission=async(s:Submission,status:'rejected'|'spam')=>{setSubmitting(s.id);const{error}=await db.from('event_submissions').update({status,reviewed_at:new Date().toISOString(),reviewed_by:user.id}).eq('id',s.id);if(error)setMessage(error.message);else setMessage(status==='spam'?'Envio marcado como spam.':'Envio rejeitado.');await loadAdmin();setSubmitting(null)};
@@ -1138,7 +1199,17 @@ const blank=():MobilizationEvent=>({
 <label className="full">Observação<textarea value={editing.notes??''} onChange={e=>setEditing({...editing,notes:e.target.value})}/></label>
 <PosterImporter currentImage={editing.image_url} existingEvents={events} getAuthToken={async()=>{const{data}=await db.auth.getSession();return data.session?.access_token||null}} onFileSelected={(file,previewUrl)=>{setPosterFile(file);setPosterPreview(previewUrl);setMessage('')}} onCandidatesFound={candidates=>applyOcrCandidates(candidates)} onUseCandidate={useOcrCandidate}/>
 <div className="source-picker full"><div className="poster-upload-label"><ExternalLink size={17}/><strong>Fontes do evento</strong></div>
-<div className="source-checks">{sources.map(s=><label key={s.id}><input type="checkbox" checked={editing.source_ids.includes(s.id)} onChange={e=>setEditing({...editing,source_ids:e.target.checked?[...editing.source_ids,s.id]:editing.source_ids.filter(id=>id!==s.id)})}/><span>{s.account_name}<small>{s.url}</small></span></label>)}</div></div>
+<div className="source-checks">{sources.map(s=><label key={s.id}><input type="checkbox" checked={editing.source_ids.includes(s.id)} onChange={e=>setEditing({...editing,source_ids:e.target.checked?[...editing.source_ids,s.id]:editing.source_ids.filter(id=>id!==s.id)})}/><span>{s.account_name}<small>{s.platform} · {s.url}</small></span></label>)}</div>
+<div className="source-add-toggle"><button type="button" className="button ghost" onClick={()=>setShowNewSource(value=>!value)}><ExternalLink size={16}/>{showNewSource?'Fechar cadastro':'＋ Adicionar fonte'}</button></div>
+{showNewSource&&<div className="source-add-form">
+<label className="full">Link da publicação ou página *<input type="url" placeholder="https://www.instagram.com/p/..." value={newSource.url} onChange={e=>setNewSource(previous=>({...previous,url:e.target.value,platform:detectSourcePlatform(e.target.value)}))}/></label>
+<label>Plataforma<input placeholder="Detectada pelo link" value={newSource.platform} onChange={e=>setNewSource(previous=>({...previous,platform:e.target.value}))}/></label>
+<label>Nome do perfil/organização *<input placeholder="Ex.: nome da conta no Instagram" value={newSource.account_name} onChange={e=>setNewSource(previous=>({...previous,account_name:e.target.value}))}/></label>
+<label className="full">Identificação do perfil (opcional)<input placeholder="Ex.: @usuario" value={newSource.account_handle} onChange={e=>setNewSource(previous=>({...previous,account_handle:e.target.value}))}/></label>
+<label className="full">Observação (opcional)<textarea rows={2} placeholder="Contexto útil para conferir a publicação" value={newSource.note} onChange={e=>setNewSource(previous=>({...previous,note:e.target.value}))}/></label>
+<div className="source-add-actions full"><button type="button" className="button primary" onClick={()=>void addSource()} disabled={savingSource}>{savingSource?'Salvando fonte…':'Salvar e selecionar fonte'}</button><button type="button" className="button ghost" onClick={()=>{setShowNewSource(false);setNewSource({url:'',platform:'',account_name:'',account_handle:'',note:''})}}>Cancelar</button></div>
+<small className="full">O cadastro da fonte é salvo imediatamente; para vinculá-la definitivamente ao evento, clique também em “Salvar evento”. Links repetidos reutilizam a fonte existente.</small>
+</div>}</div>
 <label className="check full"><input type="checkbox" checked={editing.public} onChange={e=>setEditing({...editing,public:e.target.checked})}/> Publicar no radar</label></div>
 <div className="edit-footer"><button className="button primary" disabled={saving} onClick={save}>{saving?'Salvando…':'Salvar evento'}</button><button className="button ghost" onClick={()=>setEditing(null)}>Cancelar</button></div></div>}
     <section className="admin-section admin-event-filter"><div className="section-head compact"><div><div className="eyebrow">EVENTOS</div><h2>Filtrar cadastro</h2></div><div className="admin-filter-summary"><span className="analytics-note">{filteredAdminEvents.length} de {events.length} registros</span><span className="analytics-note">{events.filter(e=>!e.image_url?.trim()).length} sem mídia no total</span></div></div><div className="admin-filter-row"><input value={adminQuery} onChange={e=>setAdminQuery(e.target.value)} placeholder="Buscar por título, cidade, UF ou local…"/><input type="date" value={adminDate} onChange={e=>setAdminDate(e.target.value)} aria-label="Filtrar por data"/><select value={adminStatus} onChange={e=>setAdminStatus(e.target.value)} aria-label="Filtrar por status"><option value="">Todos os status</option><option value="confirmed">Confirmado</option><option value="updated">Atualizado</option><option value="warning">Alerta</option><option value="pending">Pendente</option></select><select value={adminMedia} onChange={e=>setAdminMedia(e.target.value as 'all'|'missing'|'attached')} aria-label="Filtrar por mídia"><option value="all">Com e sem mídia</option><option value="missing">Sem foto/pôster</option><option value="attached">Com foto/pôster</option></select><select value={adminSort} onChange={e=>setAdminSort(e.target.value as 'recent'|'city'|'state')} aria-label="Ordenar cadastro por"><option value="recent">Adicionados recentemente</option><option value="city">Cidade (A–Z)</option><option value="state">Estado (A–Z)</option></select>{(adminQuery||adminDate||adminStatus||adminMedia!=='all')&&<button className="clear-btn" onClick={()=>{setAdminQuery('');setAdminDate('');setAdminStatus('');setAdminMedia('all')}}><X size={15}/> Limpar filtros</button>}</div></section>

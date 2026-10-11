@@ -132,3 +132,12 @@ export async function createCatalogOnlyManifest(archive) {
     note: 'ZIP sem manifesto: catalogação de imagens sem associações automáticas a eventos.'
   };
 }
+
+/**
+ * In catalog-only mode the ZIP has no trustworthy event associations.
+ * Ignore SHA conflicts so cataloging cannot clear an existing poster_index
+ * row's matched_event_ids or overwrite metadata attached to an already-linked poster.
+ */
+export function posterIndexUpsertOptions(catalogOnly = false) {
+  return { onConflict: 'sha256', ignoreDuplicates: catalogOnly === true };
+}

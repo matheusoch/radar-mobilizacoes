@@ -1,0 +1,28 @@
+export type PosterZipPoster = {
+  sha256: string;
+  file: string;
+  source_index: number;
+  source_filename: string;
+  source_indices: number[];
+  source_filenames: string[];
+  bytes: number;
+  width: number | null;
+  height: number | null;
+  duplicate_indices: number[];
+  is_duplicate: boolean;
+  event_count_matched: number;
+};
+
+export type PosterZipManifest = {
+  version: number;
+  matches: Array<Record<string, unknown>>;
+  posters: PosterZipPoster[];
+  source_images: number;
+  unique_files: number;
+  matched_events: number;
+  catalog_only: boolean;
+  note: string;
+};
+
+export function unzipPosterPackage(file: File, depth?: number): Promise<Map<string, Blob>>;
+export function createCatalogOnlyManifest(archive: Map<string, Blob>): Promise<PosterZipManifest>;

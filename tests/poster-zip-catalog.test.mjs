@@ -180,3 +180,20 @@ test('text reference files in the ZIP are retained for poster association recove
   const manifest = await createCatalogOnlyManifest(archive);
   assert.equal(manifest.posters.length, 1, 'text references must not be counted as images');
 });
+
+
+test('outer ZIP text references survive when poster images are inside a nested ZIP', async () => {
+  const inner = makeStoredZip([
+    { name: 'images/poster.jpg', data: 'nested poster bytes' }
+  ]);
+  const references = 'Evento: Ato pela democracia em Recife\\nImagem: exemplo.jpg';
+  const outer = makeStoredZip([
+    { name: 'poster-images.zip', data: inner },
+    { name: 'Twitter X posts.txt', data: references }
+  ]);
+  const archive = await unzipPosterPackage(asFile(outer, 'complete-package.zip'));
+  assert.ok(archive.has('images/poster.jpg'));
+  assert.equal(await archive.get('__text__/Twitter X posts.txt').text(), references);
+  const manifest = await createCatalogOnlyManifest(archive);
+  assert.equal(manifest.posters.length, 1);
+});

@@ -141,3 +141,37 @@ export async function createCatalogOnlyManifest(archive) {
 export function posterIndexUpsertOptions(catalogOnly = false) {
   return { onConflict: 'sha256', ignoreDuplicates: catalogOnly === true };
 }
+
+const POSTER_MIME_TYPES = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  jfif: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif'
+};
+
+/**
+ * Use a MIME type accepted by the event_posters Supabase Storage bucket.
+ * ZIP-extracted Blobs have an empty .type unless we explicitly set it.
+ */
+export function posterMimeType(path) {
+  const ext = String(path).split('.').pop()?.toLowerCase() || '';
+  const type = POSTER_MIME_TYPES[ext];
+  if (!type) {
+    throw new Error(
+      'Formato de imagem não aceito pelo armazenamento: .' + (ext || 'sem extensão') +
+      '. Formatos aceitos: JPG, JPEG, JFIF, PNG, WebP e GIF.'
+    );
+  }
+  return type;
+}
+
+/**
+ * Supabase Storage uses Blob.type for multipart Blob uploads. Setting only
+ * fileOptions.contentType is not enough when the body is a Blob, so create a
+ * typed Blob before uploading.
+ */
+export function createPosterUploadBlob(blob, path) {
+  return new Blob([blob], { type: posterMimeType(path) });
+}

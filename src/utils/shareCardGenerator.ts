@@ -1,127 +1,279 @@
-import { SITE_NAME, IMAGE_FORMATS, type CardFormatKey } from '../config/site';
-import type { MobilizationEvent } from '../types';
+/**
+ * src/utils/shareCardGenerator.ts
+ *
+ * Gerador de cards SVG para divulgação de mobilizações.
+ * Compatível com TypeScript e ES2020.
+ *
+ * Inclui:
+ * - Tipagem dos eventos e opções de geração.
+ * - Hierarquia tipográfica Transducer.
+ * - Sanitização de textos e proteção de siglas.
+ * - Layout de duas colunas com coordenadas dinâmicas.
+ * - Paginação automática para mais de 15 eventos.
+ * - Exportação de SVGs independentes, prontos para download.
+ */
 
-export const MAX_EVENTS_PER_CARD = 15;
-
-export interface CardImage {
-  href: string;
-  width: number;
-  height: number;
-}
-
-export type CardFontWeight = 500 | 700 | 900;
-
-export interface CardFontFace {
-  weight: CardFontWeight;
-  dataUrl: string;
-}
-
-export interface ShareCardAssets {
-  fonts: readonly CardFontFace[];
-  fontLabel: string;
-  title: CardImage;
-  intro: CardImage;
-  box: CardImage;
+export interface MobilizationEvent {
+  id?: string | number;
+  title?: string;
+  name?: string;
+  date?: string;
+  day?: string;
+  weekday?: string;
+  city?: string;
+  state?: string;
+  uf?: string;
+  time?: string;
+  hour?: string;
+  location?: string;
+  venue?: string;
+  address?: string;
+  modality?: string;
+  type?: string;
+  url?: string;
 }
 
 export interface ShareCardOptions {
-  format?: CardFormatKey;
-  assets: ShareCardAssets;
+  events: MobilizationEvent[];
+  title?: string;
+  subtitle?: string;
+  date?: string;
+  page?: number;
+  eventsPerPage?: number;
+  width?: number;
+  height?: number;
+  backgroundColor?: string;
+  textColor?: string;
+  accentColor?: string;
+  mutedColor?: string;
+  showPageNumber?: boolean;
+  showEventCount?: boolean;
+  outputPrefix?: string;
 }
 
-export interface ShareCardPage {
+interface GridConfig {
+  columnX: number[];
+  top: number;
+  columnWidth: number;
+  columnGap: number;
+  rowHeight: number;
+  rowGap: number;
+  paddingX: number;
+  paddingTop: number;
+  headerHeight: number;
+  footerHeight: number;
+}
+
+interface NormalizedEvent {
+  id: string;
+  title: string;
+  weekday: string;
+  city: string;
+  state: string;
+  time: string;
+  location: string;
+}
+
+interface CardPage {
+  page: number;
+  totalPages: number;
+  events: NormalizedEvent[];
   svg: string;
-  width: number;
-  height: number;
-  index: number;
-  total: number;
-  shownEvents: number;
 }
 
-export interface ShareCardResult {
-  svg: string;
-  width: number;
-  height: number;
-  pages: ShareCardPage[];
-  shownEvents: number;
-}
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
-type Weight = CardFontWeight;
-
-/** Vacina de Texto: Iniciais Maiúsculas, conectores minúsculos e remove travessões */
-export function sanitizeText(str: string): string {
-  if (!str) return '';
-  let clean = str.replaceAll('—', '-').trim();
-  
-  // Força Title Case nas palavras
-  clean = clean.toLowerCase().replace(/(?:^|\s)\S/g, (l) => l.toUpperCase());
-  
-  // Corrige os conectores gramaticais para o padrão estético do Photoshop
-  const conectores = [
-    ' Com ', ' De ', ' Do ', ' Da ', ' Em ', ' Na ', ' No ', ' Para ',
-    ' Dos ', ' Das ', ' Nos ', ' Nas ', ' Pelo ', ' Pela ', ' E '
-  ];
-  conectores.forEach((c) => {
-    clean = clean.replaceAll(c, c.toLowerCase());
-  });
-  
-  return clean;
-}
-
-const FIT_STEP = 0.5;
-const FIT_FLOOR = 7;
-const LINE_CAPS: readonly number[] = [2, 3, 4, Number.POSITIVE_INFINITY];
-
-const COLORS = {
-  background: '#D81B1F',
-  bar: '#FFC301',
-  yellow: '#FFC607',
-  white: '#FFFFFF',
-  red: '#D81B1F',
-} as const;
-
-const GRID = {
-  columnX: [57, 565] as const,
-  columnWidth: 459,
-  barHeight: 14,
-  titleY: 65,
-  introY: 209,
-  boxY: 277,
-  areaTop: 463,
-  leftX: 57,
-  dayHeight: 49,
-  dayToLine: 74,
-  cityHeight: 40,
-  cityAfterDay: 16,
-  cityAfterRow: 22,
-  rowAfterCity: 11,
-  rowAfterRow: 22,
-  dayAfterRow: 40,
-  rowMinHeight: 42,
-  timeBoxWidth: 70,
-  textInset: 82,
-  titleSize: 16,
-  titleMinSize: 10,
-  titleLineRatio: 1.25,
-  placeSize: 13.5,
-  placeMinSize: 9,
-  placeLineRatio: 1.2,
-  placeGap: 6,
-  citySize: 22,
-  cityMinSize: 12,
-  stateSize: 16,
-  daySize: 21,
-  timeSize: 17,
-} as const;
-
-const FORMAT_OFFSETS: Record<CardFormatKey, { shiftY: number; bottom: number }> = {
-  feed: { shiftY: 0, bottom: 1300 },
-  story: { shiftY: 185, bottom: 1670 },
+const GRID: GridConfig = {
+  columnX: [57, 565],
+  top: 300,
+  columnWidth: 458,
+  columnGap: 50,
+  rowHeight: 105,
+  rowGap: 14,
+  paddingX: 57,
+  paddingTop: 60,
+  headerHeight: 250,
+  footerHeight: 75,
 };
 
-export function escapeXml(value: string): string {
-  return value
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '')
+const DEFAULTS = {
+  width: 1080,
+  height: 1350,
+  backgroundColor: '#F7F3EC',
+  textColor: '#171717',
+  accentColor: '#D92B27',
+  mutedColor: '#77716B',
+  eventsPerPage: 15,
+  outputPrefix: 'mobilizacoes',
+};
+
+const CONNECTORS = new Set([
+  'a',
+  'as',
+  'ao',
+  'aos',
+  'com',
+  'como',
+  'da',
+  'das',
+  'de',
+  'dela',
+  'delas',
+  'dele',
+  'deles',
+  'do',
+  'dos',
+  'e',
+  'em',
+  'entre',
+  'essa',
+  'essas',
+  'esse',
+  'esses',
+  'esta',
+  'estas',
+  'este',
+  'estes',
+  'na',
+  'nas',
+  'no',
+  'nos',
+  'num',
+  'numa',
+  'nuns',
+  'numas',
+  'o',
+  'os',
+  'ou',
+  'pela',
+  'pelas',
+  'pelo',
+  'pelos',
+  'pra',
+  'pras',
+  'pro',
+  'pros',
+  'para',
+  'perante',
+  'por',
+  'sem',
+  'sob',
+  'sobre',
+  'um',
+  'uma',
+  'uns',
+  'umas',
+]);
+
+const PROTECTED_ACRONYMS = new Set([
+  'MST',
+  'UNE',
+  'CUT',
+  'PT',
+  'PSOL',
+]);
+
+const ACRONYM_PATTERN =
+  /\b(MST|UNE|CUT|PT|PSOL)\b/gi;
+
+/**
+ * Converte textos em Title Case, mantendo conectores em minúsculas
+ * e preservando as siglas políticas definidas em PROTECTED_ACRONYMS.
+ *
+ * Travessões tipográficos são normalizados para hífen ASCII.
+ *
+ * Exemplos:
+ * "ato do MST em São Paulo" -> "Ato do MST em São Paulo"
+ * "MARCHA DA UNE"           -> "Marcha da UNE"
+ * "LUTA - TRABALHO"         -> "Luta - Trabalho"
+ */
+export function sanitizeText(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  const original = String(value)
+    .replace(/[\u2014\u2013]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!original) {
+    return '';
+  }
+
+  const protectedTokens = new Map<string, string>();
+  let tokenIndex = 0;
+
+  const withProtectedAcronyms = original.replace(
+    ACRONYM_PATTERN,
+    (match: string) => {
+      const acronym = match.toUpperCase();
+
+      if (!PROTECTED_ACRONYMS.has(acronym)) {
+        return match;
+      }
+
+      const token = `ZXQPROTECTED${tokenIndex++}QXZ`;
+
+      protectedTokens.set(token, acronym);
+
+      return token;
+    },
+  );
+
+  const lower = withProtectedAcronyms.toLocaleLowerCase('pt-BR');
+
+  const words = lower.split(/(\s+|[-/])/);
+
+  let isFirstWord = true;
+
+  const titleCased = words
+    .map((part: string) => {
+      if (!part || /^\s+$/.test(part) || part === '-' || part === '/') {
+        return part;
+      }
+
+      const protectedMatch = part.match(
+        /^ZXQPROTECTED\d+QXZ$/,
+      );
+
+      if (protectedMatch) {
+        isFirstWord = false;
+        return part;
+      }
+
+      const normalized = part.normalize('NFC');
+
+      if (!isFirstWord && CONNECTORS.has(normalized)) {
+        return normalized;
+      }
+
+      isFirstWord = false;
+
+      const firstCharacter = normalized.charAt(0);
+      const remainingCharacters = normalized.slice(1);
+
+      return (
+        firstCharacter.toLocaleUpperCase('pt-BR') +
+        remainingCharacters
+      );
+    })
+    .join('');
+
+  let result = titleCased;
+
+  protectedTokens.forEach((acronym, token) => {
+    result = result.replace(token, acronym);
+  });
+
+  return result;
+}
+
+/**
+ * Escapa conteúdo dinâmico antes de inseri-lo em elementos SVG.
+ */
+function escapeXml(value: unknown): string {
+  return String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -129,285 +281,934 @@ export function escapeXml(value: string): string {
     .replace(/'/g, '&apos;');
 }
 
-function upper(value: string): string {
-  return value.toLocaleUpperCase('pt-BR');
+/**
+ * Normaliza valores textuais opcionais.
+ */
+function textOrEmpty(value: unknown): string {
+  return typeof value === 'string' || typeof value === 'number'
+    ? String(value).trim()
+    : '';
 }
 
-function round(value: number): number {
-  return Math.round(value * 10) / 10;
-}
+/**
+ * Normaliza um evento recebido da aplicação.
+ */
+function normalizeEvent(
+  event: MobilizationEvent,
+  index: number,
+): NormalizedEvent {
+  const rawTitle =
+    textOrEmpty(event.title) ||
+    textOrEmpty(event.name) ||
+    'Mobilização';
 
-function parseDate(date: string): Date | null {
-  const parsed = new Date(`${date}T12:00:00`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
+  const rawWeekday =
+    textOrEmpty(event.weekday) ||
+    textOrEmpty(event.day) ||
+    '';
 
-export function formatCardDateLabel(date: string): string {
-  const parsed = parseDate(date);
-  if (!parsed) return upper(date);
-  const weekday = parsed.toLocaleDateString('pt-BR', { weekday: 'long' }).replace('-feira', '');
-  const short = parsed.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-  return upper(`${weekday} - ${short}`);
-}
+  const rawCity = textOrEmpty(event.city);
 
-export function formatCardTime(event: MobilizationEvent): string {
-  const raw = (event.time_label || event.time || '').trim();
-  const match = raw.match(/(\d{1,2})\s*[:hH]\s*(\d{2})?/);
-  if (!match) return '--h';
-  const hours = String(Number(match[1]));
-  const minutes = match[2];
-  return minutes && minutes !== '00' ? `${hours}h${minutes}` : `${hours}h`;
-}
+  const rawState =
+    textOrEmpty(event.state) ||
+    textOrEmpty(event.uf);
 
-type Measure = (text: string, size: number, weight: Weight, family: string) => number;
+  const rawTime =
+    textOrEmpty(event.time) ||
+    textOrEmpty(event.hour);
 
-function createMeasure(): Measure {
-  const context = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
-  return (text, size, weight, family) => {
-    if (!context) return text.length * size * 0.9;
-    context.font = `${weight} ${size}px "${family}", sans-serif`;
-    return context.measureText(text).width;
+  const rawLocation =
+    textOrEmpty(event.location) ||
+    textOrEmpty(event.venue) ||
+    textOrEmpty(event.address);
+
+  return {
+    id: textOrEmpty(event.id) || `event-${index + 1}`,
+    title: sanitizeText(rawTitle),
+    weekday: sanitizeText(rawWeekday),
+    city: sanitizeText(rawCity),
+    state: sanitizeText(rawState).toLocaleUpperCase('pt-BR'),
+    time: sanitizeText(rawTime),
+    location: sanitizeText(rawLocation),
   };
 }
 
-interface FittedText {
-  lines: string[];
-  size: number;
-}
-
-function wrapWords(text: string, maxWidth: number, size: number, weight: Weight, family: string, measure: Measure): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let current = '';
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (!current || measure(next, size, weight, family) <= maxWidth) {
-      current = next;
-    } else {
-      lines.push(current);
-      current = word;
-    }
-  }
-  if (current) lines.push(current);
-  return lines.length ? lines : [''];
-}
-
-function fitText(
+/**
+ * Divide texto em linhas respeitando um limite aproximado de caracteres.
+ * Evita quebrar palavras sempre que possível.
+ */
+function wrapText(
   text: string,
-  maxWidth: number,
-  baseSize: number,
-  minSize: number,
-  preferredLines: number,
-  weight: Weight,
-  family: string,
-  measure: Measure,
-): FittedText {
-  const sanitized = sanitizeText(text);
-  const fits = (lines: readonly string[], size: number) => lines.every(line => measure(line, size, weight, family) <= maxWidth);
-  const caps = [preferredLines, ...LINE_CAPS.filter(cap => cap > preferredLines)];
-  for (const cap of caps) {
-    const lowest = Number.isFinite(cap) ? minSize : FIT_FLOOR;
-    for (let size = baseSize; size >= lowest; size -= FIT_STEP) {
-      const lines = wrapWords(sanitized, maxWidth, size, weight, family, measure);
-      if (lines.length <= cap && fits(lines, size)) return { lines, size: round(size) };
+  maxCharacters: number,
+  maxLines: number,
+): string[] {
+  const normalized = text.trim();
+
+  if (!normalized) {
+    return [];
+  }
+
+  const words = normalized.split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    const candidate = currentLine
+      ? `${currentLine} ${word}`
+      : word;
+
+    if (candidate.length <= maxCharacters || !currentLine) {
+      currentLine = candidate;
+      continue;
+    }
+
+    lines.push(currentLine);
+    currentLine = word;
+
+    if (lines.length === maxLines - 1) {
+      break;
     }
   }
-  return { lines: wrapWords(sanitized, maxWidth, FIT_FLOOR, family, weight, measure), size: FIT_FLOOR };
-}
 
-interface CityGroup {
-  city: string;
-  state: string;
-  events: MobilizationEvent[];
-}
-
-interface DayGroup {
-  date: string;
-  cities: CityGroup[];
-}
-
-function sortKey(event: MobilizationEvent): string {
-  return `${event.date}|${(event.time || event.time_label || '').padStart(5, '0')}`;
-}
-
-function groupEvents(events: readonly MobilizationEvent[]): DayGroup[] {
-  const ordered = events.slice().sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
-  const days: DayGroup[] = [];
-  for (const event of ordered) {
-    let day = days.find(item => item.date === event.date);
-    if (!day) {
-      day = { date: event.date, cities: [] };
-      days.push(day);
-    }
-    const cityKey = `${event.city}|${event.state}`.toLocaleLowerCase('pt-BR');
-    let city = day.cities.find(item => `${item.city}|${item.state}`.toLocaleLowerCase('pt-BR') === cityKey);
-    if (!city) {
-      city = { city: event.city, state: event.state, events: [] };
-      day.cities.push(city);
-    }
-    city.events.push(event);
+  if (currentLine && lines.length < maxLines) {
+    lines.push(currentLine);
   }
-  return days;
+
+  const consumedText = lines.join(' ');
+
+  if (
+    consumedText.length < normalized.length &&
+    lines.length > 0
+  ) {
+    const lastIndex = lines.length - 1;
+    const lastLine = lines[lastIndex];
+
+    lines[lastIndex] =
+      lastLine.length >= 3
+        ? `${lastLine.replace(/[.,;:!?-]*$/, '')}…`
+        : `${lastLine}…`;
+  }
+
+  return lines;
 }
 
-type Item =
-  | { kind: 'day'; x: number; y: number; label: string }
-  | { kind: 'city'; x: number; y: number; city: string; state: string }
-  | {
-      kind: 'row';
-      x: number;
-      y: number;
-      height: number;
-      time: string;
-      title: FittedText;
-      place: FittedText | null;
-    };
-
-interface PageDraft {
-  items: Item[];
-  events: number;
-}
-
-function titleBaseline(title: FittedText, index: number): number {
-  return title.size + title.size * GRID.titleLineRatio * index;
-}
-
-function placeBaseline(title: FittedText, place: FittedText, index: number): number {
-  const lastTitle = titleBaseline(title, title.lines.length - 1);
-  return lastTitle + GRID.placeGap + place.size + place.size * GRID.placeLineRatio * index;
-}
-
-function rowHeight(title: FittedText, place: FittedText | null): number {
-  const textHeight = place 
-    ? placeBaseline(title, place, place.lines.length - 1)
-    : titleBaseline(title, title.lines.length - 1);
-  return Math.max(GRID.rowMinHeight, textHeight);
-}
-
-export function generateShareCard(events: readonly MobilizationEvent[], options: ShareCardOptions): ShareCardResult {
-  const format = options.format || 'feed';
-  const dimensions = IMAGE_FORMATS[format];
-  const offset = FORMAT_OFFSETS[format];
-  const measure = createMeasure();
-
-  const dayGroups = groupEvents(events);
-  const drafts: PageDraft[] = [];
-  let currentDraft: PageDraft = { items: [], events: 0 };
-
-  let currentColumn = 0;
-  let currentY = GRID.areaTop + offset.shiftY;
-
-  const checkHeightAndAdvance = (neededHeight: number) => {
-    if (currentY + neededHeight > offset.bottom) {
-      if (currentColumn === 0) {
-        currentColumn = 1;
-        currentY = GRID.areaTop + offset.shiftY;
-      } else {
-        drafts.push(currentDraft);
-        currentDraft = { items: [], events: 0 };
-        currentColumn = 0;
-        currentY = GRID.areaTop + offset.shiftY;
-      }
+/**
+ * Gera os estilos tipográficos incorporados ao SVG.
+ *
+ * Os caminhos apontam para os assets do projeto.
+ * Ajuste os nomes dos arquivos caso a nomenclatura local seja diferente.
+ */
+function getFontStyles(): string {
+  return `
+    @font-face {
+      font-family: "Transducer";
+      src: url("/src/assets/share/Transducer-Black.woff2")
+        format("woff2");
+      font-weight: 900;
+      font-style: normal;
     }
+
+    @font-face {
+      font-family: "Transducer";
+      src: url("/src/assets/share/Transducer-Medium.woff2")
+        format("woff2");
+      font-weight: 500;
+      font-style: normal;
+    }
+
+    @font-face {
+      font-family: "Transducer Extended";
+      src: url("/src/assets/share/Transducer-Extended-Black.woff2")
+        format("woff2");
+      font-weight: 900;
+      font-style: normal;
+    }
+
+    @font-face {
+      font-family: "Transducer Extended";
+      src: url("/src/assets/share/Transducer-Extended-Bold.woff2")
+        format("woff2");
+      font-weight: 700;
+      font-style: normal;
+    }
+
+    text {
+      font-kerning: normal;
+      text-rendering: geometricPrecision;
+    }
+
+    .card-title {
+      font-family: "Transducer Extended", sans-serif;
+      font-weight: 900;
+    }
+
+    .event-weekday {
+      font-family: "Transducer Extended", sans-serif;
+      font-weight: 900;
+    }
+
+    .event-city,
+    .event-time,
+    .event-name {
+      font-family: "Transducer", sans-serif;
+      font-weight: 900;
+    }
+
+    .event-state {
+      font-family: "Transducer Extended", sans-serif;
+      font-weight: 700;
+    }
+
+    .event-location {
+      font-family: "Transducer", sans-serif;
+      font-weight: 500;
+    }
+
+    .metadata {
+      font-family: "Transducer", sans-serif;
+      font-weight: 500;
+    }
+  `;
+}
+
+/**
+ * Calcula a posição e as dimensões da grade em função do tamanho do SVG.
+ */
+function calculateGrid(
+  width: number,
+  height: number,
+  eventsPerPage: number,
+): GridConfig {
+  const columns = 2;
+
+  const paddingX = Math.min(
+    GRID.paddingX,
+    Math.max(24, width * 0.055),
+  );
+
+  const columnGap = Math.max(24, width * 0.046);
+
+  const columnWidth =
+    (width - paddingX * 2 - columnGap) / columns;
+
+  const columnX = [
+    paddingX,
+    paddingX + columnWidth + columnGap,
+  ];
+
+  const headerHeight = Math.min(
+    GRID.headerHeight,
+    height * 0.21,
+  );
+
+  const footerHeight = GRID.footerHeight;
+
+  const top = headerHeight + 30;
+
+  const availableHeight =
+    height - top - footerHeight - 30;
+
+  const rows = Math.ceil(eventsPerPage / columns);
+
+  const rowGap = rows > 1 ? 12 : 0;
+
+  const rowHeight = Math.max(
+    58,
+    (availableHeight - rowGap * (rows - 1)) / rows,
+  );
+
+  return {
+    columnX,
+    top,
+    columnWidth,
+    columnGap,
+    rowHeight,
+    rowGap,
+    paddingX,
+    paddingTop: GRID.paddingTop,
+    headerHeight,
+    footerHeight,
   };
+}
 
-  for (const day of dayGroups) {
-    const dayLabel = formatCardDateLabel(day.date);
-    checkHeightAndAdvance(GRID.dayHeight);
-    
-    currentDraft.items.push({
-      kind: 'day',
-      x: GRID.columnX[currentColumn],
-      y: currentY,
-      label: dayLabel
+/**
+ * Produz um elemento SVG de texto.
+ */
+function svgText(
+  x: number,
+  y: number,
+  text: string,
+  className: string,
+  options: {
+    fontSize?: number;
+    fill?: string;
+    letterSpacing?: number;
+    textAnchor?: 'start' | 'middle' | 'end';
+    opacity?: number;
+  } = {},
+): string {
+  const {
+    fontSize = 20,
+    fill = '#171717',
+    letterSpacing = 0,
+    textAnchor = 'start',
+    opacity = 1,
+  } = options;
+
+  return `
+    <text
+      x="${x}"
+      y="${y}"
+      class="${className}"
+      font-size="${fontSize}"
+      fill="${escapeXml(fill)}"
+      letter-spacing="${letterSpacing}"
+      text-anchor="${textAnchor}"
+      opacity="${opacity}"
+    >${escapeXml(text)}</text>
+  `;
+}
+
+/**
+ * Gera o conteúdo SVG de um evento individual.
+ */
+function renderEvent(
+  event: NormalizedEvent,
+  index: number,
+  grid: GridConfig,
+  options: Required<
+    Pick<
+      ShareCardOptions,
+      | 'width'
+      | 'height'
+      | 'backgroundColor'
+      | 'textColor'
+      | 'accentColor'
+      | 'mutedColor'
+    >
+  >,
+): string {
+  const columnIndex = index % 2;
+  const rowIndex = Math.floor(index / 2);
+
+  const x = grid.columnX[columnIndex];
+  const y =
+    grid.top + rowIndex * (grid.rowHeight + grid.rowGap);
+
+  const width = grid.columnWidth;
+  const height = grid.rowHeight;
+
+  const textColor = options.textColor;
+  const accentColor = options.accentColor;
+  const mutedColor = options.mutedColor;
+
+  const innerPadding = 15;
+
+  const contentX = x + innerPadding;
+  const contentWidth = width - innerPadding * 2;
+
+  const titleLines = wrapText(
+    event.title,
+    Math.max(15, Math.floor(contentWidth / 10.5)),
+    2,
+  );
+
+  const cityText = event.city;
+  const stateText = event.state;
+  const weekdayText = event.weekday;
+  const timeText = event.time;
+  const locationText = event.location;
+
+  const pieces: string[] = [];
+
+  pieces.push(`
+    <g class="event" data-event-id="${escapeXml(event.id)}">
+      <rect
+        x="${x}"
+        y="${y}"
+        width="${width}"
+        height="${height}"
+        rx="4"
+        fill="#FFFFFF"
+        fill-opacity="0.78"
+      />
+      <rect
+        x="${x}"
+        y="${y}"
+        width="5"
+        height="${height}"
+        rx="2"
+        fill="${escapeXml(accentColor)}"
+      />
+  `);
+
+  let currentY = y + 24;
+
+  if (weekdayText) {
+    const weekdayLines = wrapText(
+      weekdayText,
+      Math.max(16, Math.floor(contentWidth / 10)),
+      1,
+    );
+
+    pieces.push(
+      svgText(
+        contentX,
+        currentY,
+        weekdayLines[0] || '',
+        'event-weekday',
+        {
+          fontSize: 15,
+          fill: accentColor,
+          letterSpacing: 0.5,
+        },
+      ),
+    );
+
+    currentY += 20;
+  }
+
+  if (cityText || stateText) {
+    const cityMaxCharacters = Math.max(
+      10,
+      Math.floor(contentWidth / 11),
+    );
+
+    const cityLines = wrapText(
+      cityText,
+      cityMaxCharacters,
+      1,
+    );
+
+    if (cityLines.length > 0) {
+      pieces.push(
+        svgText(
+          contentX,
+          currentY,
+          cityLines[0],
+          'event-city',
+          {
+            fontSize: 19,
+            fill: textColor,
+          },
+        ),
+      );
+    }
+
+    if (stateText) {
+      pieces.push(
+        svgText(
+          x + width - innerPadding,
+          currentY,
+          stateText,
+          'event-state',
+          {
+            fontSize: 16,
+            fill: textColor,
+            textAnchor: 'end',
+          },
+        ),
+      );
+    }
+
+    currentY += 22;
+  }
+
+  if (titleLines.length > 0) {
+    const availableTitleLines = titleLines.slice(0, 2);
+
+    availableTitleLines.forEach((line, lineIndex) => {
+      pieces.push(
+        svgText(
+          contentX,
+          currentY + lineIndex * 18,
+          line,
+          'event-name',
+          {
+            fontSize: 15,
+            fill: textColor,
+          },
+        ),
+      );
     });
-    currentY += GRID.dayToLine;
 
-    for (const cityGroup of day.cities) {
-      checkHeightAndAdvance(GRID.cityHeight);
-      
-      currentDraft.items.push({
-        kind: 'city',
-        x: GRID.columnX[currentColumn],
-        y: currentY,
-        city: cityGroup.city,
-        state: cityGroup.state
-      });
-      currentY += GRID.cityAfterRow;
+    currentY += availableTitleLines.length * 18;
+  }
 
-      for (const event of cityGroup.events) {
-        const timeLabel = formatCardTime(event);
-        const titleFit = fitText(event.title, GRID.columnWidth - GRID.textInset, GRID.titleSize, GRID.titleMinSize, 2, 900, 'Transducer', measure);
-        const placeFit = event.location 
-          ? fitText(event.location, GRID.columnWidth - GRID.textInset, GRID.placeSize, GRID.placeMinSize, 2, 500, 'Transducer', measure)
-          : null;
+  const metadata: string[] = [];
 
-        const h = rowHeight(titleFit, placeFit);
+  if (timeText) {
+    metadata.push(timeText);
+  }
 
-checkHeightAndAdvance(h + GRID.rowAfterRow);
-currentDraft.items.push({
-kind: 'row',
-x: GRID.columnX[currentColumn],
-y: currentY,
-height: h,
-time: timeLabel,
-title: titleFit,
-place: placeFit
-});
-currentDraft.events++;
-currentY += h + GRID.rowAfterRow;
+  if (locationText) {
+    metadata.push(locationText);
+  }
+
+  const remainingHeight = y + height - currentY - 8;
+
+  if (metadata.length > 0 && remainingHeight >= 13) {
+    const metadataText = metadata.join(' · ');
+
+    const maxCharacters = Math.max(
+      16,
+      Math.floor(contentWidth / 8),
+    );
+
+    const metadataLines = wrapText(
+      metadataText,
+      maxCharacters,
+      remainingHeight >= 30 ? 2 : 1,
+    );
+
+    metadataLines.forEach((line, lineIndex) => {
+      const metadataY =
+        Math.min(
+          y + height - 8,
+          currentY + 15 + lineIndex * 14,
+        );
+
+      pieces.push(
+        svgText(
+          contentX,
+          metadataY,
+          line,
+          'event-location',
+          {
+            fontSize: 11,
+            fill: mutedColor,
+          },
+        ),
+      );
+    });
+  }
+
+  pieces.push('</g>');
+
+  return pieces.join('\n');
 }
+
+/**
+ * Gera o cabeçalho do card.
+ */
+function renderHeader(
+  options: ShareCardOptions,
+  grid: GridConfig,
+  page: number,
+  totalPages: number,
+): string {
+  const width = options.width ?? DEFAULTS.width;
+  const accentColor =
+    options.accentColor ?? DEFAULTS.accentColor;
+  const textColor = options.textColor ?? DEFAULTS.textColor;
+
+  const title = sanitizeText(
+    options.title || 'Agenda de Mobilizações',
+  );
+
+  const subtitle = sanitizeText(options.subtitle || '');
+
+  const date = sanitizeText(options.date || '');
+
+  const parts: string[] = [];
+
+  parts.push(`
+    <g class="header">
+      <rect
+        x="0"
+        y="0"
+        width="${width}"
+        height="${grid.headerHeight}"
+        fill="${escapeXml(options.backgroundColor ?? DEFAULTS.backgroundColor)}"
+      />
+      <rect
+        x="${grid.paddingX}"
+        y="48"
+        width="72"
+        height="7"
+        rx="3"
+        fill="${escapeXml(accentColor)}"
+      />
+  `);
+
+  parts.push(
+    svgText(
+      grid.paddingX,
+      92,
+      title,
+      'card-title',
+      {
+        fontSize: title.length > 27 ? 37 : 46,
+        fill: textColor,
+      },
+    ),
+  );
+
+  if (subtitle) {
+    parts.push(
+      svgText(
+        grid.paddingX,
+        132,
+        subtitle,
+        'metadata',
+        {
+          fontSize: 19,
+          fill: textColor,
+        },
+      ),
+    );
+  }
+
+  if (date) {
+    parts.push(
+      svgText(
+        grid.paddingX,
+        170,
+        date,
+        'metadata',
+        {
+          fontSize: 17,
+          fill: accentColor,
+        },
+      ),
+    );
+  }
+
+  parts.push(`
+      <line
+        x1="${grid.paddingX}"
+        y1="${grid.headerHeight - 1}"
+        x2="${width - grid.paddingX}"
+        y2="${grid.headerHeight - 1}"
+        stroke="${escapeXml(textColor)}"
+        stroke-opacity="0.14"
+        stroke-width="1"
+      />
+    </g>
+  `);
+
+  if (totalPages > 1) {
+    parts.push(
+      svgText(
+        width - grid.paddingX,
+        170,
+        `${page + 1}/${totalPages}`,
+        'metadata',
+        {
+          fontSize: 16,
+          fill: accentColor,
+          textAnchor: 'end',
+        },
+      ),
+    );
+  }
+
+  return parts.join('\n');
 }
+
+/**
+ * Gera o rodapé do card.
+ */
+function renderFooter(
+  options: ShareCardOptions,
+  grid: GridConfig,
+  page: number,
+  totalPages: number,
+  totalEvents: number,
+): string {
+  const width = options.width ?? DEFAULTS.width;
+  const height = options.height ?? DEFAULTS.height;
+  const textColor = options.textColor ?? DEFAULTS.textColor;
+  const mutedColor = options.mutedColor ?? DEFAULTS.mutedColor;
+  const accentColor =
+    options.accentColor ?? DEFAULTS.accentColor;
+
+  const footerY = height - grid.footerHeight;
+
+  const parts: string[] = [];
+
+  parts.push(`
+    <g class="footer">
+      <line
+        x1="${grid.paddingX}"
+        y1="${footerY}"
+        x2="${width - grid.paddingX}"
+        y2="${footerY}"
+        stroke="${escapeXml(textColor)}"
+        stroke-opacity="0.18"
+        stroke-width="1"
+      />
+  `);
+
+  if (options.showEventCount !== false) {
+    parts.push(
+      svgText(
+        grid.paddingX,
+        footerY + 30,
+        `${totalEvents} ${totalEvents === 1 ? 'mobilização' : 'mobilizações'}`,
+        'metadata',
+        {
+          fontSize: 14,
+          fill: mutedColor,
+        },
+      ),
+    );
+  }
+
+  if (options.showPageNumber !== false && totalPages > 1) {
+    parts.push(
+      svgText(
+        width - grid.paddingX,
+        footerY + 30,
+        `Página ${page + 1} de ${totalPages}`,
+        'metadata',
+        {
+          fontSize: 14,
+          fill: accentColor,
+          textAnchor: 'end',
+        },
+      ),
+    );
+  }
+
+  parts.push('</g>');
+
+  return parts.join('\n');
 }
-if (currentDraft.items.length > 0) {
-drafts.push(currentDraft);
+
+/**
+ * Gera um SVG completo para uma página.
+ */
+function renderPage(
+  events: NormalizedEvent[],
+  options: ShareCardOptions,
+  page: number,
+  totalPages: number,
+  totalEvents: number,
+): string {
+  const width = options.width ?? DEFAULTS.width;
+  const height = options.height ?? DEFAULTS.height;
+
+  const backgroundColor =
+    options.backgroundColor ?? DEFAULTS.backgroundColor;
+
+  const textColor = options.textColor ?? DEFAULTS.textColor;
+  const accentColor =
+    options.accentColor ?? DEFAULTS.accentColor;
+  const mutedColor =
+    options.mutedColor ?? DEFAULTS.mutedColor;
+
+  const eventsPerPage =
+    options.eventsPerPage ?? DEFAULTS.eventsPerPage;
+
+  const grid = calculateGrid(
+    width,
+    height,
+    eventsPerPage,
+  );
+
+  const header = renderHeader(
+    options,
+    grid,
+    page,
+    totalPages,
+  );
+
+  const footer = renderFooter(
+    options,
+    grid,
+    page,
+    totalPages,
+    totalEvents,
+  );
+
+  const eventMarkup = events
+    .map((event, index) =>
+      renderEvent(event, index, grid, {
+        width,
+        height,
+        backgroundColor,
+        textColor,
+        accentColor,
+        mutedColor,
+      }),
+    )
+    .join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  xmlns="${SVG_NS}"
+  width="${width}"
+  height="${height}"
+  viewBox="0 0 ${width} ${height}"
+  role="img"
+  aria-label="${escapeXml(options.title || 'Agenda de Mobilizações')}"
+>
+  <title>${escapeXml(options.title || 'Agenda de Mobilizações')}</title>
+  <defs>
+    <style>
+      ${getFontStyles()}
+    </style>
+    <clipPath id="card-clip-${page}">
+      <rect width="${width}" height="${height}" />
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#card-clip-${page})">
+    <rect
+      width="${width}"
+      height="${height}"
+      fill="${escapeXml(backgroundColor)}"
+    />
+
+    ${header}
+
+    <g class="events">
+      ${eventMarkup}
+    </g>
+
+    ${footer}
+  </g>
+</svg>`;
 }
-if (drafts.length === 0) {
-drafts.push({ items: [], events: 0 });
+
+/**
+ * Função principal.
+ *
+ * Retorna um único SVG quando os eventos cabem em uma página.
+ * Quando há mais eventos, retorna um conjunto de cards de continuação.
+ *
+ * A paginação padrão é de 15 eventos por card.
+ */
+export function generateShareCard(
+  options: ShareCardOptions,
+): string | string[] {
+  const events = Array.isArray(options.events)
+    ? options.events
+    : [];
+
+  const eventsPerPage = Math.max(
+    1,
+    Math.floor(
+      options.eventsPerPage ?? DEFAULTS.eventsPerPage,
+    ),
+  );
+
+  const normalizedEvents = events.map((event, index) =>
+    normalizeEvent(event, index),
+  );
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(normalizedEvents.length / eventsPerPage),
+  );
+
+  const pages: CardPage[] = [];
+
+  for (let page = 0; page < totalPages; page += 1) {
+    const start = page * eventsPerPage;
+    const end = start + eventsPerPage;
+
+    const pageEvents = normalizedEvents.slice(start, end);
+
+    pages.push({
+      page,
+      totalPages,
+      events: pageEvents,
+      svg: renderPage(
+        pageEvents,
+        options,
+        page,
+        totalPages,
+        normalizedEvents.length,
+      ),
+    });
+  }
+
+  if (pages.length === 1) {
+    return pages[0].svg;
+  }
+
+  return pages.map((page) => page.svg);
 }
-const pages: ShareCardPage[] = drafts.map((draft, idx) => {
-let svg = <svg xmlns="http://w3.org" viewBox="0 0 ${dimensions.width} ${dimensions.height}" width="100%" height="100%"> <style> @font-face { font-family: 'Transducer'; src: url('/src/assets/share/Transducer-Black.otf') format('opentype'); font-weight: 900; } @font-face { font-family: 'Transducer'; src: url('/src/assets/share/Transducer-Medium.otf') format('opentype'); font-weight: 500; } @font-face { font-family: 'Transducer Extended'; src: url('/src/assets/share/TransducerExtended-Black.otf') format('opentype'); font-weight: 900; } @font-face { font-family: 'Transducer Extended'; src: url('/src/assets/share/TransducerExtended-Bold.otf') format('opentype'); font-weight: 700; } .bg { fill: ${COLORS.background}; } .bar { fill: ${COLORS.bar}; } .text-day { font-family: 'Transducer Extended', sans-serif; font-weight: 900; fill: ${COLORS.yellow}; } .text-city { font-family: 'Transducer', sans-serif; font-weight: 900; fill: ${COLORS.white}; } .text-state { font-family: 'Transducer Extended', sans-serif; font-weight: 700; fill: ${COLORS.white}; } .text-time { font-family: 'Transducer', sans-serif; font-weight: 900; fill: ${COLORS.red}; text-anchor: middle; } .text-title { font-family: 'Transducer', sans-serif; font-weight: 900; fill: ${COLORS.white}; } .text-place { font-family: 'Transducer', sans-serif; font-weight: 500; fill: ${COLORS.yellow}; } .text-footer { font-family: 'Transducer Extended', sans-serif; font-weight: 900; fill: ${COLORS.white}; text-anchor: middle; letter-spacing: 2px; } </style> <rect width="${dimensions.width}" height="${dimensions.height}" class="bg" /> <rect width="${dimensions.width}" height="${GRID.barHeight}" class="bar" /> ;
-if (options.assets.title?.href) {
-svg += <image href="${options.assets.title.href}" x="${(dimensions.width - options.assets.title.width) / 2}" y="${GRID.titleY + offset.shiftY}" width="${options.assets.title.width}" height="${options.assets.title.height}" />;
+
+/**
+ * Versão estruturada para quem precisa dos SVGs e dos metadados
+ * de paginação no mesmo resultado.
+ */
+export function generateShareCardPages(
+  options: ShareCardOptions,
+): CardPage[] {
+  const events = Array.isArray(options.events)
+    ? options.events
+    : [];
+
+  const eventsPerPage = Math.max(
+    1,
+    Math.floor(
+      options.eventsPerPage ?? DEFAULTS.eventsPerPage,
+    ),
+  );
+
+  const normalizedEvents = events.map((event, index) =>
+    normalizeEvent(event, index),
+  );
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(normalizedEvents.length / eventsPerPage),
+  );
+
+  return Array.from({ length: totalPages }, (_, page) => {
+    const pageEvents = normalizedEvents.slice(
+      page * eventsPerPage,
+      (page + 1) * eventsPerPage,
+    );
+
+    return {
+      page,
+      totalPages,
+      events: pageEvents,
+      svg: renderPage(
+        pageEvents,
+        options,
+        page,
+        totalPages,
+        normalizedEvents.length,
+      ),
+    };
+  });
 }
-draft.items.forEach(item => {
-if (item.kind === 'day') {
-svg += <rect x="${item.x}" y="${item.y}" width="210" height="34" rx="17" fill="${COLORS.yellow}" />;
-svg += <text x="${item.x + 105}" y="${item.y + 24}" class="text-day" font-size="${GRID.daySize}px" text-anchor="middle">${escapeXml(item.label)}</text>;
-} else if (item.kind === 'city') {
-const cleanCity = escapeXml(sanitizeText(item.city).toUpperCase());
-const cleanState = escapeXml(item.state.toUpperCase());
-svg += <text x="${item.x}" y="${item.y + 25}"><tspan class="text-city" font-size="${GRID.citySize}px">${cleanCity}</tspan> <tspan class="text-state" font-size="${GRID.stateSize}px">${cleanState}</tspan></text>;
-svg += <line x1="${item.x}" y1="${item.y + 35}" x2="${item.x + GRID.columnWidth}" y2="${item.y + 35}" stroke="${COLORS.white}" stroke-width="1.5" opacity="0.6" />;
-} else if (item.kind === 'row') {
-svg += <rect x="${item.x}" y="${item.y}" width="${GRID.timeBoxWidth}" height="32" rx="16" fill="${COLORS.white}" />;
-svg += <text x="${item.x + GRID.timeBoxWidth / 2}" y="${item.y + 22}" class="text-time" font-size="${GRID.timeSize}px">${escapeXml(item.time)}</text>;
-item.title.lines.forEach((line, lIdx) => {
-svg += <text x="${item.x + GRID.textInset}" y="${item.y + titleBaseline(item.title, lIdx)}" class="text-title" font-size="${item.title.size}px">${escapeXml(line)}</text>;
-});
-if (item.place) {
-item.place.lines.forEach((line, lIdx) => {
-svg += <text x="${item.x + GRID.textInset}" y="${item.y + placeBaseline(item.title, item.place!, lIdx)}" class="text-place" font-size="${item.place!.size}px">${escapeXml(line)}</text>;
-});
+
+/**
+ * Converte um SVG em Blob para download ou processamento posterior.
+ * Disponível em navegadores.
+ */
+export function shareCardToBlob(svg: string): Blob {
+  return new Blob([svg], {
+    type: 'image/svg+xml;charset=utf-8',
+  });
 }
-}
-});
-svg += <text x="${dimensions.width / 2}" y="${dimensions.height - 50}" class="text-footer" font-size="28px">AGENDA-MOBILIZACOES.PARTICIPA.WORKERS.DEV</text></svg>;
-return {
-svg,
-width: dimensions.width,
-height: dimensions.height,
-index: idx + 1,
-total: drafts.length,
-shownEvents: draft.events
-};
-});
-const totalShown = pages.reduce((acc, p) => acc + p.shownEvents, 0);
-return {
-svg: pages[0].svg,
-width: dimensions.width,
-height: dimensions.height,
-pages,
-shownEvents: totalShown
-};
+
+/**
+ * Gera um nome de arquivo consistente para cada página.
+ */
+export function getShareCardFilename(
+  options: ShareCardOptions,
+  page = 0,
+  totalPages = 1,
+): string {
+  const prefix = (
+    options.outputPrefix || DEFAULTS.outputPrefix
+  )
+    .trim()
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || DEFAULTS.outputPrefix;
+
+  if (totalPages <= 1) {
+    return `${prefix}.svg`;
+  }
+
+  return `${prefix}-pagina-${page + 1}.svg`;
 }

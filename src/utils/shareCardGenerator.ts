@@ -592,12 +592,12 @@ function renderItem(item: Item, top: number, measure: Measure): string {
     );
 
   // Mobilization name: Transducer Black 900, white.
-  item.title.toUpperCase().lines.forEach((line, index) => {
+  item.title.lines.forEach((line, index) => {
     markup += textNode(
       sanitizeText(line),
       textX,
-      y + titleBaseline(item.title.toUpperCase(), index),
-      item.title.toUpperCase().size,
+      y + titleBaseline(item.title, index),
+      item.title.size,
       COLORS.white,
       {
         weight: 900,
@@ -614,7 +614,7 @@ function renderItem(item: Item, top: number, measure: Measure): string {
       markup += textNode(
         sanitizeText(line),
         textX,
-        y + placeBaseline(item.title.toUpperCase(), place, index),
+        y + placeBaseline(item.title, place, index),
         place.size,
         COLORS.white,
         {

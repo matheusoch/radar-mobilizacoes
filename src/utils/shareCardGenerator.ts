@@ -9,8 +9,11 @@ export interface CardImage {
   height: number;
 }
 
+/** Medium, Bold e Black da família Transducer Extended. */
+export type CardFontWeight = 500 | 700 | 900;
+
 export interface CardFontFace {
-  weight: 400 | 700;
+  weight: CardFontWeight;
   dataUrl: string;
 }
 
@@ -46,8 +49,23 @@ export interface ShareCardResult {
   shownEvents: number;
 }
 
-type Weight = 400 | 700;
+type Weight = CardFontWeight;
 type Anchor = 'start' | 'middle';
+
+/** Hierarquia tipográfica do modelo do Photoshop (Transducer Extended). */
+const WEIGHTS = {
+  city: 900,
+  state: 700,
+  time: 700,
+  title: 900,
+  place: 500,
+  day: 700,
+  ui: 500,
+} as const satisfies Record<string, Weight>;
+
+const FIT_STEP = 0.5;
+const FIT_FLOOR = 7;
+const LINE_CAPS: readonly number[] = [2, 3, 4, Number.POSITIVE_INFINITY];
 
 const FONT_FAMILY = 'CardFont';
 const FONT_DATA_URL_PATTERN = /^data:(?:font|application)\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/i;
@@ -82,9 +100,14 @@ const GRID = {
   timeBoxWidth: 70,
   textInset: 82,
   titleSize: 16,
-  titleLine: 20,
+  titleMinSize: 10,
+  titleLineRatio: 1.25,
   placeSize: 13.5,
+  placeMinSize: 9,
+  placeLineRatio: 1.2,
+  placeGap: 6,
   citySize: 22,
+  cityMinSize: 12,
   stateSize: 16,
   daySize: 21,
   timeSize: 17,
@@ -147,21 +170,12 @@ function createMeasure(): Measure {
   };
 }
 
-function ellipsize(text: string, maxWidth: number, size: number, weight: Weight, measure: Measure): string {
-  if (measure(text, size, weight) <= maxWidth) return text;
-  let end = text.length;
-  while (end > 1 && measure(`${text.slice(0, end).trimEnd()}…`, size, weight) > maxWidth) end -= 1;
-  return `${text.slice(0, end).trimEnd()}…`;
+interface FittedText {
+  lines: string[];
+  size: number;
 }
 
-function wrapLines(
-  text: string,
-  maxWidth: number,
-  maxLines: number,
-  size: number,
-  weight: Weight,
-  measure: Measure,
-): string[] {
+function wrapWords(text: string, maxWidth: number, size: number, weight: Weight, measure: Measure): string[] {
   const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let current = '';
@@ -175,14 +189,40 @@ function wrapLines(
     }
   }
   if (current) lines.push(current);
-  if (!lines.length) return [''];
-  if (lines.length > maxLines) {
-    const kept = lines.slice(0, maxLines);
-    kept[maxLines - 1] = `${kept[maxLines - 1]} ${lines.slice(maxLines).join(' ')}`;
-    lines.length = 0;
-    lines.push(...kept);
+  return lines.length ? lines : [''];
+}
+
+/**
+ * Reduz a fonte aos poucos até o texto caber na largura, sem cortar nem usar reticências.
+ * Prefere o tamanho original em até `preferredLines` linhas; só então permite mais linhas.
+ */
+function fitText(
+  text: string,
+  maxWidth: number,
+  baseSize: number,
+  minSize: number,
+  preferredLines: number,
+  weight: Weight,
+  measure: Measure,
+): FittedText {
+  const fits = (lines: readonly string[], size: number) => lines.every(line => measure(line, size, weight) <= maxWidth);
+  const caps = [preferredLines, ...LINE_CAPS.filter(cap => cap > preferredLines)];
+  for (const cap of caps) {
+    const lowest = Number.isFinite(cap) ? minSize : FIT_FLOOR;
+    for (let size = baseSize; size >= lowest; size -= FIT_STEP) {
+      const lines = wrapWords(text, maxWidth, size, weight, measure);
+      if (lines.length <= cap && fits(lines, size)) return {lines, size: round(size)};
+    }
   }
-  return lines.map(line => ellipsize(line, maxWidth, size, weight, measure));
+  return {lines: wrapWords(text, maxWidth, FIT_FLOOR, weight, measure), size: FIT_FLOOR};
+}
+
+function fitSingleLine(text: string, maxWidth: number, baseSize: number, minSize: number, weight: Weight, measure: Measure): number {
+  for (let size = baseSize; size >= minSize; size -= FIT_STEP) {
+    if (measure(text, size, weight) <= maxWidth) return round(size);
+  }
+  const width = measure(text, minSize, weight);
+  return width > maxWidth ? round(Math.max(FIT_FLOOR, (minSize * maxWidth) / width)) : minSize;
 }
 
 interface CityGroup {
@@ -223,11 +263,34 @@ function groupEvents(events: readonly MobilizationEvent[]): DayGroup[] {
 type Item =
   | {kind: 'day'; x: number; y: number; label: string}
   | {kind: 'city'; x: number; y: number; city: string; state: string}
-  | {kind: 'row'; x: number; y: number; height: number; time: string; titleLines: string[]; place: string};
+  | {
+      kind: 'row';
+      x: number;
+      y: number;
+      height: number;
+      time: string;
+      title: FittedText;
+      place: FittedText | null;
+    };
 
 interface PageDraft {
   items: Item[];
   events: number;
+}
+
+function titleBaseline(title: FittedText, index: number): number {
+  return title.size + title.size * GRID.titleLineRatio * index;
+}
+
+function placeBaseline(title: FittedText, place: FittedText, index: number): number {
+  const lastTitle = titleBaseline(title, title.lines.length - 1);
+  const lineHeight = place.size * GRID.placeLineRatio;
+  return lastTitle + GRID.placeGap + lineHeight * (index + 1);
+}
+
+function rowContentHeight(title: FittedText, place: FittedText | null): number {
+  if (!place) return titleBaseline(title, title.lines.length - 1) + 10;
+  return placeBaseline(title, place, place.lines.length - 1) + 4;
 }
 
 function planPages(events: readonly MobilizationEvent[], columnHeight: number, measure: Measure): PageDraft[] {
@@ -255,18 +318,20 @@ function planPages(events: readonly MobilizationEvent[], columnHeight: number, m
     for (const group of day.cities) {
       let cityShown = false;
       for (const event of group.events) {
-        const titleLines = wrapLines(
+        const title = fitText(
           upper(event.title.trim() || 'Mobilização'),
           textWidth,
-          2,
           GRID.titleSize,
-          700,
+          GRID.titleMinSize,
+          2,
+          WEIGHTS.title,
           measure,
         );
         const placeSource = (event.venue || event.address || '').trim();
-        const place = placeSource ? ellipsize(upper(placeSource), textWidth, GRID.placeSize, 400, measure) : '';
-        const lastTitleBaseline = 16 + GRID.titleLine * (titleLines.length - 1);
-        const rowHeight = Math.max(GRID.rowMinHeight, place ? lastTitleBaseline + 26 : lastTitleBaseline + 10);
+        const place = placeSource
+          ? fitText(upper(placeSource), textWidth, GRID.placeSize, GRID.placeMinSize, 2, WEIGHTS.place, measure)
+          : null;
+        const rowHeight = Math.max(GRID.rowMinHeight, rowContentHeight(title, place));
 
         const needed = (): number => {
           const atTop = last === null;
@@ -307,7 +372,7 @@ function planPages(events: readonly MobilizationEvent[], columnHeight: number, m
           y,
           height: rowHeight,
           time: formatCardTime(event),
-          titleLines,
+          title,
           place,
         });
         y += rowHeight;
@@ -328,7 +393,7 @@ function textNode(
   fill: string,
   options: {anchor?: Anchor; weight?: Weight; letterSpacing?: number} = {},
 ): string {
-  const {anchor = 'start', weight = 700, letterSpacing = 0} = options;
+  const {anchor = 'start', weight = WEIGHTS.state, letterSpacing = 0} = options;
   const spacing = letterSpacing ? ` letter-spacing="${letterSpacing}"` : '';
   return `<text x="${round(x)}" y="${round(y)}" font-size="${round(size)}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}"${spacing}>${escapeXml(content)}</text>`;
 }
@@ -362,36 +427,58 @@ function fontStyle(fonts: readonly CardFontFace[]): string {
 function renderItem(item: Item, top: number, measure: Measure): string {
   const y = top + item.y;
   if (item.kind === 'day') {
-    const textWidth = measure(item.label, GRID.daySize, 700) + item.label.length * 1.5;
+    const textWidth = measure(item.label, GRID.daySize, WEIGHTS.day) + item.label.length * 1.5;
     const width = Math.min(GRID.columnWidth, textWidth + 44);
     const baseline = y + GRID.dayHeight / 2 + GRID.daySize * 0.36;
     return (
       rect(item.x, y, width, GRID.dayHeight, COLORS.yellow) +
-      textNode(item.label, item.x + width / 2, baseline, GRID.daySize, COLORS.red, {anchor: 'middle', letterSpacing: 1.5}) +
+      textNode(item.label, item.x + width / 2, baseline, GRID.daySize, COLORS.red, {
+        anchor: 'middle',
+        weight: WEIGHTS.day,
+        letterSpacing: 1.5,
+      }) +
       `<line x1="${item.x}" y1="${round(y + GRID.dayToLine)}" x2="${item.x + GRID.columnWidth}" y2="${round(y + GRID.dayToLine)}" stroke="${COLORS.white}" stroke-opacity="0.85" stroke-width="1.5"/>`
     );
   }
   if (item.kind === 'city') {
     const baseline = y + 30;
-    const stateWidth = item.state ? measure(item.state, GRID.stateSize, 700) + 14 : 0;
-    const city = ellipsize(item.city, GRID.columnWidth - stateWidth, GRID.citySize, 700, measure);
-    const cityWidth = measure(city, GRID.citySize, 700);
+    const stateWidth = item.state ? measure(item.state, GRID.stateSize, WEIGHTS.state) + 14 : 0;
+    const citySize = fitSingleLine(
+      item.city,
+      GRID.columnWidth - stateWidth,
+      GRID.citySize,
+      GRID.cityMinSize,
+      WEIGHTS.city,
+      measure,
+    );
+    const cityWidth = measure(item.city, citySize, WEIGHTS.city);
     return (
-      textNode(city, item.x, baseline, GRID.citySize, COLORS.yellow) +
-      (item.state ? textNode(item.state, item.x + cityWidth + 14, baseline, GRID.stateSize, COLORS.white) : '')
+      textNode(item.city, item.x, baseline, citySize, COLORS.yellow, {weight: WEIGHTS.city}) +
+      (item.state
+        ? textNode(item.state, item.x + cityWidth + 14, baseline, GRID.stateSize, COLORS.white, {weight: WEIGHTS.state})
+        : '')
     );
   }
-  const fitted = Math.min(GRID.timeSize, (GRID.timeSize * (GRID.timeBoxWidth - 14)) / Math.max(1, measure(item.time, GRID.timeSize, 700)));
+  const timeSize = fitSingleLine(item.time, GRID.timeBoxWidth - 14, GRID.timeSize, FIT_FLOOR, WEIGHTS.time, measure);
   const textX = item.x + GRID.textInset;
   let markup =
     rect(item.x, y, GRID.timeBoxWidth, GRID.rowMinHeight, COLORS.white) +
-    textNode(item.time, item.x + GRID.timeBoxWidth / 2, y + GRID.rowMinHeight / 2 + fitted * 0.36, fitted, COLORS.red, {anchor: 'middle'});
-  item.titleLines.forEach((line, index) => {
-    markup += textNode(line, textX, y + 16 + GRID.titleLine * index, GRID.titleSize, COLORS.white);
+    textNode(item.time, item.x + GRID.timeBoxWidth / 2, y + GRID.rowMinHeight / 2 + timeSize * 0.36, timeSize, COLORS.red, {
+      anchor: 'middle',
+      weight: WEIGHTS.time,
+    });
+  item.title.lines.forEach((line, index) => {
+    markup += textNode(line, textX, y + titleBaseline(item.title, index), item.title.size, COLORS.white, {
+      weight: WEIGHTS.title,
+    });
   });
   if (item.place) {
-    const baseline = y + 16 + GRID.titleLine * (item.titleLines.length - 1) + 22;
-    markup += textNode(item.place, textX, baseline, GRID.placeSize, COLORS.white, {weight: 400});
+    const place = item.place;
+    place.lines.forEach((line, index) => {
+      markup += textNode(line, textX, y + placeBaseline(item.title, place, index), place.size, COLORS.white, {
+        weight: WEIGHTS.place,
+      });
+    });
   }
   return markup;
 }
@@ -411,12 +498,16 @@ export function generateShareCard(events: readonly MobilizationEvent[], options:
   const pages = drafts.map<ShareCardPage>((draft, index) => {
     const body = draft.items.length
       ? draft.items.map(item => renderItem(item, areaTop, measure)).join('')
-      : textNode('NENHUM EVENTO SELECIONADO', width / 2, areaTop + 60, 22, COLORS.white, {anchor: 'middle', letterSpacing: 1});
+      : textNode('NENHUM EVENTO SELECIONADO', width / 2, areaTop + 60, 22, COLORS.white, {
+          anchor: 'middle',
+          weight: WEIGHTS.title,
+          letterSpacing: 1,
+        });
     const counter =
       total > 1
         ? textNode(`CARD ${index + 1} DE ${total}`, width / 2, bottom + 40, 15, COLORS.white, {
             anchor: 'middle',
-            weight: 400,
+            weight: WEIGHTS.ui,
             letterSpacing: 2,
           })
         : '';
@@ -473,28 +564,43 @@ const customFontFiles = import.meta.glob<string>('../assets/fonts/*.{woff2,woff,
   import: 'default',
 });
 
+const WEIGHT_FILE_PATTERNS: Record<CardFontWeight, RegExp> = {
+  900: /black|heavy/i,
+  700: /(?<!semi|demi|extra|ultra)bold/i,
+  500: /medium/i,
+};
+
+/** Ordem de substituição quando uma variante da Transducer Extended ainda não foi adicionada. */
+const WEIGHT_FALLBACK_ORDER: Record<CardFontWeight, readonly CardFontWeight[]> = {
+  900: [900, 700, 500],
+  700: [700, 900, 500],
+  500: [500, 700, 900],
+};
+
 async function loadFonts(): Promise<{fonts: CardFontFace[]; fontLabel: string}> {
   const entries = Object.entries(customFontFiles);
+  const weights: readonly CardFontWeight[] = [500, 700, 900];
+
   if (entries.length) {
-    const loaded = await Promise.all(entries.map(async ([path, loader]) => ({path, dataUrl: await loader()})));
-    const bold = loaded.find(file => /bold|black|heavy/i.test(file.path)) ?? loaded[0];
-    const regular = loaded.find(file => !/bold|black|heavy/i.test(file.path)) ?? bold;
-    if (bold && regular) {
-      return {
-        fonts: [
-          {weight: 700, dataUrl: bold.dataUrl},
-          {weight: 400, dataUrl: regular.dataUrl},
-        ],
-        fontLabel: 'Transducer',
-      };
+    const found = new Map<CardFontWeight, string>();
+    await Promise.all(
+      weights.map(async weight => {
+        const match = entries.find(([path]) => WEIGHT_FILE_PATTERNS[weight].test(path.split('/').pop() ?? path));
+        if (match) found.set(weight, await match[1]());
+      }),
+    );
+    if (found.size) {
+      const fonts = weights.flatMap<CardFontFace>(weight => {
+        const source = WEIGHT_FALLBACK_ORDER[weight].map(candidate => found.get(candidate)).find(Boolean);
+        return source ? [{weight, dataUrl: source}] : [];
+      });
+      return {fonts, fontLabel: 'Transducer Extended'};
     }
   }
+
   const module = await import('@fontsource/krona-one/files/krona-one-latin-400-normal.woff2?inline');
   return {
-    fonts: [
-      {weight: 700, dataUrl: module.default},
-      {weight: 400, dataUrl: module.default},
-    ],
+    fonts: weights.map(weight => ({weight, dataUrl: module.default})),
     fontLabel: 'Krona One',
   };
 }

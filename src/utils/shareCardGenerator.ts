@@ -9,7 +9,6 @@ export interface CardImage {
   height: number;
 }
 
-/** Medium, Bold e Black da família Transducer / Transducer Extended. */
 export type CardFontWeight = 500 | 700 | 900;
 
 export interface CardFontFace {
@@ -19,7 +18,6 @@ export interface CardFontFace {
 
 export interface ShareCardAssets {
   fonts: readonly CardFontFace[];
-  /** Nome da família efetivamente embutida. */
   fontLabel: string;
   title: CardImage;
   intro: CardImage;
@@ -49,17 +47,16 @@ export interface ShareCardResult {
 }
 
 type Weight = CardFontWeight;
-type Anchor = 'start' | 'middle';
 
-/** Vacina de Texto: Força iniciais maiúsculas, conectores minúsculos e limpa travessões */
+/** Vacina de Texto: Iniciais Maiúsculas, conectores minúsculos e remove travessões */
 export function sanitizeText(str: string): string {
   if (!str) return '';
   let clean = str.replaceAll('—', '-').trim();
   
-  // Converte para Title Case
+  // Força Title Case nas palavras
   clean = clean.toLowerCase().replace(/(?:^|\s)\S/g, (l) => l.toUpperCase());
   
-  // Corrige os conectores gramaticais para manter a estética do Photoshop
+  // Corrige os conectores gramaticais para o padrão estético do Photoshop
   const conectores = [
     ' Com ', ' De ', ' Do ', ' Da ', ' Em ', ' Na ', ' No ', ' Para ',
     ' Dos ', ' Das ', ' Nos ', ' Nas ', ' Pelo ', ' Pela ', ' E '
@@ -74,9 +71,6 @@ export function sanitizeText(str: string): string {
 const FIT_STEP = 0.5;
 const FIT_FLOOR = 7;
 const LINE_CAPS: readonly number[] = [2, 3, 4, Number.POSITIVE_INFINITY];
-
-const FONT_DATA_URL_PATTERN = /^data:(?:font|application)\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/i;
-const IMAGE_DATA_URL_PATTERN = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/i;
 
 const COLORS = {
   background: '#D81B1F',
@@ -221,15 +215,6 @@ function fitText(
   return { lines: wrapWords(sanitized, maxWidth, FIT_FLOOR, family, weight, measure), size: FIT_FLOOR };
 }
 
-function fitSingleLine(text: string, maxWidth: number, baseSize: number, minSize: number, weight: Weight, family: string, measure: Measure): number {
-  const sanitized = sanitizeText(text);
-  for (let size = baseSize; size >= minSize; size -= FIT_STEP) {
-    if (measure(sanitized, size, weight, family) <= maxWidth) return round(size);
-  }
-  const width = measure(sanitized, minSize, weight, family);
-  return width > maxWidth ? round(Math.max(FIT_FLOOR, (minSize * maxWidth) / width)) : minSize;
-}
-
 interface CityGroup {
   city: string;
   state: string;
@@ -251,186 +236,13 @@ function groupEvents(events: readonly MobilizationEvent[]): DayGroup[] {
   for (const event of ordered) {
     let day = days.find(item => item.date === event.date);
     if (!day) {
-      day = {date: event.date, cities: []};
+      day = { date: event.date, cities: [] };
       days.push(day);
     }
     const cityKey = `${event.city}|${event.state}`.toLocaleLowerCase('pt-BR');
     let city = day.cities.find(item => `${item.city}|${item.state}`.toLocaleLowerCase('pt-BR') === cityKey);
     if (!city) {
-      city = {city: event.city, state: event.state, events: []};
-      day.cities.push(city);
-    }
-    city.events.push(event);
-  }
-  return days;
-}
-
-type Item =
-  | { kind: 'day'; x: number; y: number; label: string }
-  | { kind: 'city'; x: number; y: number; city: string; state: string }
-  | {
-      kind: 'row';
-      x: number;
-      y: number;
-      height: number;
-      time: string;
-      title: FittedText;
-      place: FittedText | null;
-    };
-
-interface PageDraft {
-  items: Item[];
-  events: number;
-}
-
-function titleBaseline(title: FittedText, index: number): number {
-  return title.size + title.size * GRID.titleLineRatio * index;
-}
-
-function placeBaseline(title: FittedText, place: FittedText, index: number): number {
-  const lastTitle = titleBaseline(title, title.lines.length - 1);
-  return lastTitle + GRID.placeGap + place.size + place.size * GRID.placeLineRatio * index;
-}
-
-function rowHeight(title: FittedText, place: FittedText | null): number {
-  const textHeight = place 
-    ? placeBaseline(title, place, place.lines.length - 1)
-    : titleBaseline(title, title.lines.length - 1);
-  return Math.max(GRID.rowMinHeight, textHeight);
-}
-
-export function generateShareCard(events: readonly MobilizationEvent[], options: ShareCardOptions): ShareCardResult {
-  const format = options.format || 'feed';
-  const dimensions = IMAGE_FORMATS[format];
-  const offset = FORMAT_OFFSETS[format];
-  const measure = createMeasure();
-
-  const dayGroups = groupEvents(events);
-  const drafts: PageDraft[] = [];
-  let currentDraft: PageDraft = { items: [], events: 0 };
-
-  let currentColumn = 0;
-  let currentY = GRID.areaTop + offset.shiftY;
-
-  const checkHeightAndAdvance = (neededHeight: number) => {
-    if (currentY + neededHeight > offset.bottom) {
-      if (currentColumn === 0) {
-        currentColumn = 1;
-        currentY = GRID.areaTop + offset.shiftY;
-      } else {
-        drafts.push(currentDraft);
-        currentDraft = { items: [], events: 0 };
-        currentColumn = 0;
-        currentY = GRID.areaTop + offset.shiftY;
-      }
-    }
-  };
-
-  for (const day of dayGroups) {
-    const dayLabel = formatCardDateLabel(day.date);
-    checkHeightAndAdvance(GRID.dayHeight);
-    
-    currentDraft.items.push({
-      kind: 'day',
-      x: GRID.columnX[currentColumn],
-      y: currentY,
-      label: dayLabel
-    });
-    currentY += GRID.dayToLine;
-
-type Measure = (text: string, size: number, weight: Weight, family: string) => number;
-
-function createMeasure(): Measure {
-  const context = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
-  return (text, size, weight, family) => {
-    if (!context) return text.length * size * 0.9;
-    context.font = `${weight} ${size}px "${family}", sans-serif`;
-    return context.measureText(text).width;
-  };
-}
-
-interface FittedText {
-  lines: string[];
-  size: number;
-}
-
-function wrapWords(text: string, maxWidth: number, size: number, weight: Weight, family: string, measure: Measure): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let current = '';
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (!current || measure(next, size, weight, family) <= maxWidth) {
-      current = next;
-    } else {
-      lines.push(current);
-      current = word;
-    }
-  }
-  if (current) lines.push(current);
-  return lines.length ? lines : [''];
-}
-
-function fitText(
-  text: string,
-  maxWidth: number,
-  baseSize: number,
-  minSize: number,
-  preferredLines: number,
-  weight: Weight,
-  family: string,
-  measure: Measure,
-): FittedText {
-  const sanitized = sanitizeText(text);
-  const fits = (lines: readonly string[], size: number) => lines.every(line => measure(line, size, weight, family) <= maxWidth);
-  const caps = [preferredLines, ...LINE_CAPS.filter(cap => cap > preferredLines)];
-  for (const cap of caps) {
-    const lowest = Number.isFinite(cap) ? minSize : FIT_FLOOR;
-    for (let size = baseSize; size >= lowest; size -= FIT_STEP) {
-      const lines = wrapWords(sanitized, maxWidth, size, weight, family, measure);
-      if (lines.length <= cap && fits(lines, size)) return { lines, size: round(size) };
-    }
-  }
-  return { lines: wrapWords(sanitized, maxWidth, FIT_FLOOR, family, weight, measure), size: FIT_FLOOR };
-}
-
-function fitSingleLine(text: string, maxWidth: number, baseSize: number, minSize: number, weight: Weight, family: string, measure: Measure): number {
-  const sanitized = sanitizeText(text);
-  for (let size = baseSize; size >= minSize; size -= FIT_STEP) {
-    if (measure(sanitized, size, weight, family) <= maxWidth) return round(size);
-  }
-  const width = measure(sanitized, minSize, weight, family);
-  return width > maxWidth ? round(Math.max(FIT_FLOOR, (minSize * maxWidth) / width)) : minSize;
-}
-
-interface CityGroup {
-  city: string;
-  state: string;
-  events: MobilizationEvent[];
-}
-
-interface DayGroup {
-  date: string;
-  cities: CityGroup[];
-}
-
-function sortKey(event: MobilizationEvent): string {
-  return `${event.date}|${(event.time || event.time_label || '').padStart(5, '0')}`;
-}
-
-function groupEvents(events: readonly MobilizationEvent[]): DayGroup[] {
-  const ordered = events.slice().sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
-  const days: DayGroup[] = [];
-  for (const event of ordered) {
-    let day = days.find(item => item.date === event.date);
-    if (!day) {
-      day = {date: event.date, cities: []};
-      days.push(day);
-    }
-    const cityKey = `${event.city}|${event.state}`.toLocaleLowerCase('pt-BR');
-    let city = day.cities.find(item => `${item.city}|${item.state}`.toLocaleLowerCase('pt-BR') === cityKey);
-    if (!city) {
-      city = {city: event.city, state: event.state, events: []};
+      city = { city: event.city, state: event.state, events: [] };
       day.cities.push(city);
     }
     city.events.push(event);
@@ -531,79 +343,40 @@ export function generateShareCard(events: readonly MobilizationEvent[], options:
           : null;
 
         const h = rowHeight(titleFit, placeFit);
-        checkHeightAndAdvance(h + GRID.rowAfterRow);
 
-        currentDraft.items.push({
-          kind: 'row',
-          x: GRID.columnX[currentColumn],
-          y: currentY,
-          height: h,
-          time: timeLabel,
-          title: titleFit,
-          place: placeFit
-        });
-        currentDraft.events++;
-        currentY += h + GRID.rowAfterRow;
-      }
-    }
-  }
-  if (currentDraft.items.length > 0) {
-    drafts.push(currentDraft);
-  }
-
-  if (drafts.length === 0) {
-    drafts.push({ items: [], events: 0 });
-  }
-
-  const pages: ShareCardPage[] = drafts.map((draft, idx) => {
-    let svg = `<svg xmlns="http://w3.org" viewBox="0 0 ${dimensions.width} ${dimensions.height}" width="100%" height="100%">
-      <style>
-        @font-face {
-          font-family: 'Transducer';
-          src: url('/src/assets/share/Transducer-Black.otf') format('opentype');
-          font-weight: 900;
-        }
-        @font-face {
-          font-family: 'Transducer';
-          src: url('/src/assets/share/Transducer-Medium.otf') format('opentype');
-          font-weight: 500;
-        }
-        @font-face {
-          font-family: 'Transducer Extended';
-          src: url('/src/assets/share/TransducerExtended-Black.otf') format('opentype');
-          font-weight: 900;
-        }
-        @font-face {
-          font-family: 'Transducer Extended';
-          src: url('/src/assets/share/TransducerExtended-Bold.otf') format('opentype');
-          font-weight: 700;
-        }
-        .bg { fill: ${COLORS.background}; }
-        .bar { fill: ${COLORS.bar}; }
-        .text-day { font-family: 'Transducer Extended', sans-serif; font-weight: 900; fill: ${COLORS.yellow}; }
-        .text-city { font-family: 'Transducer', sans-serif; font-weight: 900; fill: ${COLORS.white}; }
-        .text-state { font-family: 'Transducer Extended', sans-serif; font-weight: 700; fill: ${COLORS.white}; }
-        .text-time { font-family: 'Transducer', sans-serif; font-weight: 900; fill: ${COLORS.red}; text-anchor: middle; }
-        .text-title { font-family: 'Transducer', sans-serif; font-weight: 900; fill: ${COLORS.white}; }
-        .text-place { font-family: 'Transducer', sans-serif; font-weight: 500; fill: ${COLORS.yellow}; }
-        .text-footer { font-family: 'Transducer Extended', sans-serif; font-weight: 900; fill: ${COLORS.white}; text-anchor: middle; letter-spacing: 2px; }
-      </style>
-      <rect width="${dimensions.width}" height="${dimensions.height}" class="bg" />
-      <rect width="${dimensions.width}" height="${GRID.barHeight}" class="bar" />
-    `;
-
-    if (options.assets.title?.href) {
-      svg += `<image href="${options.assets.title.href}" x="${(dimensions.width - options.assets.title.width) / 2}" y="${GRID.titleY + offset.shiftY}" width="${options.assets.title.width}" height="${options.assets.title.height}" />`;
-    }
-
-    draft.items.forEach(item => {
-      if (item.kind === 'day') {
-        svg += `<rect x="${item.x}" y="${item.y}" width="210" height="34" rx="17" fill="${COLORS.yellow}" />`;
-        svg += `<text x="${item.x + 105}" y="${item.y + 24}" class="text-day" font-size="${GRID.daySize}px" text-anchor="middle">${escapeXml(item.label)}</text>`;
-      } else if (item.kind === 'city') {
-        const cleanCity = escapeXml(sanitizeText(item.city).toUpperCase());
-        const cleanState = escapeXml(item.state.toUpperCase());
-
+checkHeightAndAdvance(h + GRID.rowAfterRow);
+currentDraft.items.push({
+kind: 'row',
+x: GRID.columnX[currentColumn],
+y: currentY,
+height: h,
+time: timeLabel,
+title: titleFit,
+place: placeFit
+});
+currentDraft.events++;
+currentY += h + GRID.rowAfterRow;
+}
+}
+}
+if (currentDraft.items.length > 0) {
+drafts.push(currentDraft);
+}
+if (drafts.length === 0) {
+drafts.push({ items: [], events: 0 });
+}
+const pages: ShareCardPage[] = drafts.map((draft, idx) => {
+let svg = <svg xmlns="http://w3.org" viewBox="0 0 ${dimensions.width} ${dimensions.height}" width="100%" height="100%"> <style> @font-face { font-family: 'Transducer'; src: url('/src/assets/share/Transducer-Black.otf') format('opentype'); font-weight: 900; } @font-face { font-family: 'Transducer'; src: url('/src/assets/share/Transducer-Medium.otf') format('opentype'); font-weight: 500; } @font-face { font-family: 'Transducer Extended'; src: url('/src/assets/share/TransducerExtended-Black.otf') format('opentype'); font-weight: 900; } @font-face { font-family: 'Transducer Extended'; src: url('/src/assets/share/TransducerExtended-Bold.otf') format('opentype'); font-weight: 700; } .bg { fill: ${COLORS.background}; } .bar { fill: ${COLORS.bar}; } .text-day { font-family: 'Transducer Extended', sans-serif; font-weight: 900; fill: ${COLORS.yellow}; } .text-city { font-family: 'Transducer', sans-serif; font-weight: 900; fill: ${COLORS.white}; } .text-state { font-family: 'Transducer Extended', sans-serif; font-weight: 700; fill: ${COLORS.white}; } .text-time { font-family: 'Transducer', sans-serif; font-weight: 900; fill: ${COLORS.red}; text-anchor: middle; } .text-title { font-family: 'Transducer', sans-serif; font-weight: 900; fill: ${COLORS.white}; } .text-place { font-family: 'Transducer', sans-serif; font-weight: 500; fill: ${COLORS.yellow}; } .text-footer { font-family: 'Transducer Extended', sans-serif; font-weight: 900; fill: ${COLORS.white}; text-anchor: middle; letter-spacing: 2px; } </style> <rect width="${dimensions.width}" height="${dimensions.height}" class="bg" /> <rect width="${dimensions.width}" height="${GRID.barHeight}" class="bar" /> ;
+if (options.assets.title?.href) {
+svg += <image href="${options.assets.title.href}" x="${(dimensions.width - options.assets.title.width) / 2}" y="${GRID.titleY + offset.shiftY}" width="${options.assets.title.width}" height="${options.assets.title.height}" />;
+}
+draft.items.forEach(item => {
+if (item.kind === 'day') {
+svg += <rect x="${item.x}" y="${item.y}" width="210" height="34" rx="17" fill="${COLORS.yellow}" />;
+svg += <text x="${item.x + 105}" y="${item.y + 24}" class="text-day" font-size="${GRID.daySize}px" text-anchor="middle">${escapeXml(item.label)}</text>;
+} else if (item.kind === 'city') {
+const cleanCity = escapeXml(sanitizeText(item.city).toUpperCase());
+const cleanState = escapeXml(item.state.toUpperCase());
 svg += <text x="${item.x}" y="${item.y + 25}"><tspan class="text-city" font-size="${GRID.citySize}px">${cleanCity}</tspan> <tspan class="text-state" font-size="${GRID.stateSize}px">${cleanState}</tspan></text>;
 svg += <line x1="${item.x}" y1="${item.y + 35}" x2="${item.x + GRID.columnWidth}" y2="${item.y + 35}" stroke="${COLORS.white}" stroke-width="1.5" opacity="0.6" />;
 } else if (item.kind === 'row') {

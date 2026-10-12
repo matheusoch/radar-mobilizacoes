@@ -305,7 +305,7 @@ function groupEvents(events: readonly MobilizationEvent[]): DayGroup[] {
     const normalizedCity = sanitizeText(event.city);
     const normalizedState = sanitizeText(event.state);
     const cityKey = `${normalizedCity}|${normalizedState}`.toLocaleLowerCase('pt-BR');
-    let city = day.cities.find(item => `${item.city}|${item.state}`.toLocaleLowerCase('pt-BR') === cityKey);
+    let city = day.cities.find(item => `${item.city.toUpperCase()}|${item.state}`.toLocaleLowerCase('pt-BR') === cityKey);
     if (!city) {
       city = {city: normalizedCity, state: normalizedState, events: []};
       day.cities.push(city);
@@ -510,7 +510,7 @@ function renderItem(item: Item, top: number, measure: Measure): string {
       : 0;
 
     const citySize = fitSingleLine(
-      sanitizeText(item.city),
+      sanitizeText(item.city.toUpperCase()),
       GRID.columnWidth - stateWidth,
       GRID.citySize,
       GRID.cityMinSize,
@@ -519,14 +519,14 @@ function renderItem(item: Item, top: number, measure: Measure): string {
     );
 
     const cityWidth = measure(
-      sanitizeText(item.city),
+      sanitizeText(item.city.toUpperCase()),
       citySize,
       900,
       FONT_FAMILY,
     );
 
     const cityMarkup = textNode(
-      sanitizeText(item.city),
+      sanitizeText(item.city.toUpperCase()),
       item.x,
       baseline,
       citySize,
@@ -572,7 +572,7 @@ function renderItem(item: Item, top: number, measure: Measure): string {
 
   // Hours use a white rounded pill with red Transducer Black text.
   let markup =
-    `<rect x="${round(item.x)}" y="${round(y)}" width="${round(GRID.timeBoxWidth)}" height="${round(GRID.rowMinHeight)}" rx="16" ry="16" fill="${COLORS.white}"/>` +
+    `<rect x="${round(item.x)}" y="${round(y)}" width="${round(GRID.timeBoxWidth)}" height="${round(GRID.rowMinHeight)}" rx="0" ry="0" fill="${COLORS.white}"/>` +
     textNode(
       sanitizeText(item.time),
       item.x + GRID.timeBoxWidth / 2,
@@ -587,12 +587,12 @@ function renderItem(item: Item, top: number, measure: Measure): string {
     );
 
   // Mobilization name: Transducer Black 900, white.
-  item.title.lines.forEach((line, index) => {
+  item.title.toUpperCase().lines.forEach((line, index) => {
     markup += textNode(
       sanitizeText(line),
       textX,
-      y + titleBaseline(item.title, index),
-      item.title.size,
+      y + titleBaseline(item.title.toUpperCase(), index),
+      item.title.toUpperCase().size,
       COLORS.white,
       {
         weight: 900,
@@ -609,7 +609,7 @@ function renderItem(item: Item, top: number, measure: Measure): string {
       markup += textNode(
         sanitizeText(line),
         textX,
-        y + placeBaseline(item.title, place, index),
+        y + placeBaseline(item.title.toUpperCase(), place, index),
         place.size,
         COLORS.white,
         {

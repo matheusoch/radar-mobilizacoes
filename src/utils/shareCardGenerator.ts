@@ -342,8 +342,7 @@ export function generateShareCard(events: readonly MobilizationEvent[], options:
           ? fitText(event.location, GRID.columnWidth - GRID.textInset, GRID.placeSize, GRID.placeMinSize, 2, 500, 'Transducer', measure)
           : null;
 
-        const h = rowHeight(titleFit, placeFit);
-
+const h = rowHeight(titleFit, placeFit);
 checkHeightAndAdvance(h + GRID.rowAfterRow);
 currentDraft.items.push({
 kind: 'row',

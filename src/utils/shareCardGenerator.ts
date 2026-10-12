@@ -302,7 +302,7 @@ function groupEvents(events: readonly MobilizationEvent[]): DayGroup[] {
       day = {date: event.date, cities: []};
       days.push(day);
     }
-    const normalizedCity = sanitizeText(event.city);
+    const normalizedCity = sanitizeText(event.city.toUpperCase());
     const normalizedState = sanitizeText(event.state);
     const cityKey = `${normalizedCity}|${normalizedState}`.toLocaleLowerCase('pt-BR');
     let city = day.cities.find(item => `${item.city.toUpperCase()}|${item.state}`.toLocaleLowerCase('pt-BR') === cityKey);
@@ -374,7 +374,7 @@ function planPages(events: readonly MobilizationEvent[], columnHeight: number, m
       let cityShown = false;
       for (const event of group.events) {
         const title = fitText(
-          sanitizeText(event.title.trim() || 'Mobilização'),
+          sanitizeText(event.title.toUpperCase().trim() || 'Mobilização'),
           textWidth,
           GRID.titleSize,
           GRID.titleMinSize,

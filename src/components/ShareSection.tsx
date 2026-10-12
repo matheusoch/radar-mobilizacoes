@@ -1,117 +1,178 @@
-import {useEffect, useMemo, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import {Link} from 'react-router-dom';
-import {Image as ImageIcon, Megaphone} from 'lucide-react';
-import {IMAGE_FORMATS, IMAGE_FORMAT_KEYS, resolveSiteUrl, type ImageFormatKey} from '../config/site';
+import {Check, Copy, Download, Image as ImageIcon, Megaphone, Share2, X} from 'lucide-react';
+import {BANNER_PATH, resolveSiteUrl} from '../config/site';
 import type {MobilizationEvent} from '../types';
-import {generateShareCard, loadBebasNeueDataUrl, svgToDataUrl} from '../utils/shareCardGenerator';
-import {buildEventsShareText, type ShareContent} from '../utils/socialShare';
-import ShareCardActions from './ShareCardActions';
+import {downloadBlob} from '../utils/shareCardGenerator';
+import {SOCIAL_NETWORKS, buildShareLink, type ShareContent} from '../utils/socialShare';
 
-const PREVIEW_EVENT_LIMIT = 5;
+const SHARE_TITLE = 'Agenda de Mobilizações pelo Lula';
+const BANNER_FILE_NAME = 'agenda-mobilizacoes.png';
 const HASHTAGS = ['AgendaDeMobilizacoes'] as const;
 
-function todayKey(): string {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${now.getFullYear()}-${month}-${day}`;
+async function fetchBanner(): Promise<Blob> {
+  const response = await fetch(BANNER_PATH);
+  if (!response.ok) throw new Error('Banner indisponível.');
+  return response.blob();
+}
+
+async function copyToClipboard(value: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const area = document.createElement('textarea');
+  area.value = value;
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  document.execCommand('copy');
+  area.remove();
 }
 
 export default function ShareSection({events}: {events: MobilizationEvent[]}) {
-  const [format, setFormat] = useState<ImageFormatKey>('feed');
-  const [fontDataUrl, setFontDataUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    loadBebasNeueDataUrl().then(url => {
-      if (active) setFontDataUrl(url);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const upcoming = useMemo(() => {
-    const today = todayKey();
-    return events
-      .filter(event => event.public && event.date >= today)
-      .sort((a, b) => `${a.date}${a.time || ''}`.localeCompare(`${b.date}${b.time || ''}`))
-      .slice(0, PREVIEW_EVENT_LIMIT);
-  }, [events]);
-
-  const card = useMemo(
-    () => (upcoming.length ? generateShareCard(upcoming, {format, fontDataUrl}) : null),
-    [upcoming, format, fontDataUrl],
-  );
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState('');
 
   const content = useMemo<ShareContent>(() => {
-    const base = resolveSiteUrl();
-    const ids = upcoming.map(event => encodeURIComponent(event.id)).join(',');
-    return {
-      text: buildEventsShareText(upcoming),
-      url: ids ? `${base}/divulgar?eventos=${ids}` : `${base}/divulgar`,
-      hashtags: HASHTAGS,
-    };
-  }, [upcoming]);
+    const url = resolveSiteUrl();
+    const total = events.filter(event => event.public).length;
+    const text = total
+      ? `Agenda de Mobilizações pelo Lula: ${total} ${total === 1 ? 'ato' : 'atos'} organizados pelo Brasil. Acesse a agenda e ajude a ocupar as ruas.`
+      : 'Agenda de Mobilizações pelo Lula: acesse a agenda e ajude a ocupar as ruas.';
+    return {text, url, hashtags: HASHTAGS};
+  }, [events]);
 
-  if (!upcoming.length) return null;
+  const caption = useMemo(
+    () => `${content.text}\n\n${content.url}\n\n${HASHTAGS.map(tag => `#${tag}`).join(' ')}`,
+    [content],
+  );
 
-  const current = IMAGE_FORMATS[format];
+  useEffect(() => {
+    if (!feedback) return undefined;
+    const timer = window.setTimeout(() => setFeedback(''), 3200);
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
+
+  const openFallback = () => dialogRef.current?.showModal();
+  const closeFallback = () => dialogRef.current?.close();
+
+  const share = async () => {
+    if (typeof navigator.share !== 'function') {
+      openFallback();
+      return;
+    }
+    setBusy(true);
+    try {
+      const blob = await fetchBanner();
+      const file = new File([blob], BANNER_FILE_NAME, {type: blob.type || 'image/png'});
+      if (navigator.canShare?.({files: [file]})) {
+        await navigator.share({title: SHARE_TITLE, text: `${content.text}\n\n${content.url}`, files: [file]});
+      } else {
+        await navigator.share({title: SHARE_TITLE, text: content.text, url: content.url});
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      openFallback();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const downloadBanner = async () => {
+    try {
+      downloadBlob(await fetchBanner(), BANNER_FILE_NAME);
+      setFeedback('Banner baixado. Agora é só postar no Instagram.');
+    } catch {
+      setFeedback('Não foi possível baixar o banner.');
+    }
+  };
+
+  const copyCaption = async () => {
+    try {
+      await copyToClipboard(caption);
+      setFeedback('Legenda copiada. Cole na publicação do Instagram.');
+    } catch {
+      setFeedback('Não foi possível copiar a legenda.');
+    }
+  };
 
   return (
     <section className="share-section" aria-labelledby="share-section-title">
-      <div className="container share-section-grid">
-        <div className="share-section-copy">
-          <div className="eyebrow">
-            <Megaphone size={14} aria-hidden="true" /> DIVULGAR
-          </div>
-          <h2 id="share-section-title">Leve a agenda para as suas redes.</h2>
-          <p>
-            Um card pronto com os próximos eventos, em vetor, nos formatos de feed, story e pré-visualização de link.
-            Baixe a imagem ou publique direto no WhatsApp, Telegram, X, Threads, Bluesky e Facebook.
-          </p>
-
-          <div className="share-format-tabs" role="radiogroup" aria-label="Formato da imagem">
-            {IMAGE_FORMAT_KEYS.map(key => (
-              <button
-                key={key}
-                type="button"
-                role="radio"
-                aria-checked={format === key}
-                className={format === key ? 'share-format-tab active' : 'share-format-tab'}
-                onClick={() => setFormat(key)}
-              >
-                <strong>{IMAGE_FORMATS[key].label}</strong>
-                <small>
-                  {IMAGE_FORMATS[key].width}×{IMAGE_FORMATS[key].height}
-                </small>
-              </button>
-            ))}
-          </div>
-
-          <ShareCardActions
-            card={card}
-            fileBase={`agenda-mobilizacoes-${format}`}
-            content={content}
-            shareTitle="Agenda de Mobilizações"
-          />
-
+      <div className="container share-cta">
+        <div className="eyebrow">
+          <Megaphone size={14} aria-hidden="true" /> DIVULGAR
+        </div>
+        <h2 id="share-section-title">Ocupe as redes. Ocupe as ruas.</h2>
+        <p>
+          Cada compartilhamento coloca mais gente na rua. Envie a agenda para seus grupos e convoque quem está perto de
+          você.
+        </p>
+        <div className="share-cta-actions">
+          <button type="button" className="button primary share-cta-main" onClick={share} disabled={busy}>
+            <Share2 size={18} aria-hidden="true" />
+            {busy ? 'Preparando…' : 'Compartilhar'}
+          </button>
           <Link to="/divulgar" className="share-section-link">
-            <ImageIcon size={16} /> Montar meu próprio painel com eventos escolhidos
+            <ImageIcon size={16} aria-hidden="true" /> Montar painel com eventos escolhidos
           </Link>
         </div>
-
-        <figure className={`share-section-preview share-section-preview-${format}`}>
-          {card && (
-            <img
-              src={svgToDataUrl(card.svg)}
-              width={current.width}
-              height={current.height}
-              alt={`Prévia do card de divulgação com ${card.shownEvents} ${card.shownEvents === 1 ? 'evento' : 'eventos'} (${current.label})`}
-            />
+        <p className="share-cta-feedback" aria-live="polite">
+          {feedback && (
+            <>
+              <Check size={14} aria-hidden="true" /> {feedback}
+            </>
           )}
-        </figure>
+        </p>
       </div>
+
+      <dialog ref={dialogRef} className="share-dialog" aria-labelledby="share-dialog-title">
+        <div className="share-dialog-head">
+          <h3 id="share-dialog-title">Compartilhar a agenda</h3>
+          <button type="button" className="share-dialog-close" onClick={closeFallback} aria-label="Fechar">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="share-dialog-body">
+          <div className="share-social share-social-grid" role="group" aria-label="Compartilhar nas redes">
+            {SOCIAL_NETWORKS.map(network => (
+              <a
+                key={network.id}
+                className={`share-social-link share-social-${network.id}`}
+                href={buildShareLink(network.id, content)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {network.label}
+              </a>
+            ))}
+          </div>
+          <div className="share-instagram">
+            <strong>Instagram</strong>
+            <p>
+              O Instagram não aceita link direto no computador: baixe o banner, copie a legenda e publique pelo
+              aplicativo ou pelo site.
+            </p>
+            <div className="share-card-buttons">
+              <button type="button" className="button primary" onClick={downloadBanner}>
+                <Download size={17} aria-hidden="true" /> Baixar banner
+              </button>
+              <button type="button" className="button ghost" onClick={copyCaption}>
+                <Copy size={17} aria-hidden="true" /> Copiar legenda
+              </button>
+            </div>
+          </div>
+          <p className="share-cta-feedback" aria-live="polite">
+            {feedback && (
+              <>
+                <Check size={14} aria-hidden="true" /> {feedback}
+              </>
+            )}
+          </p>
+        </div>
+      </dialog>
     </section>
   );
 }

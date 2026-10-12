@@ -1,12 +1,13 @@
 import {useEffect,useMemo,useState} from 'react';
 import {CalendarDays,Check,Image as ImageIcon,Star,X} from 'lucide-react';
-import {IMAGE_FORMATS,IMAGE_FORMAT_KEYS,resolveSiteUrl,type ImageFormatKey} from '../config/site';
+import {CARD_FORMAT_KEYS,IMAGE_FORMATS,resolveSiteUrl,type CardFormatKey} from '../config/site';
 import type {MobilizationEvent} from '../types';
-import {generateShareCard,loadBebasNeueDataUrl,svgToDataUrl} from '../utils/shareCardGenerator';
+import {MAX_EVENTS_PER_CARD,generateShareCard,svgToDataUrl} from '../utils/shareCardGenerator';
+import {useShareCardAssets} from '../utils/useShareCardAssets';
 import {buildEventsShareText,type ShareContent} from '../utils/socialShare';
 import ShareCardActions from './ShareCardActions';
 
-const MAX_EVENTS=5;
+const MAX_EVENTS=MAX_EVENTS_PER_CARD*2;
 const HASHTAGS=['AgendaDeMobilizacoes'] as const;
 
 function getTimeInfo(event:MobilizationEvent){
@@ -40,8 +41,8 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   const[query,setQuery]=useState('');
   const[dateFilter,setDateFilter]=useState('');
   const[selected,setSelected]=useState<string[]>(initialIds.slice(0,MAX_EVENTS));
-  const[format,setFormat]=useState<ImageFormatKey>('feed');
-  const[fontDataUrl,setFontDataUrl]=useState<string|null>(null);
+  const[format,setFormat]=useState<CardFormatKey>('feed');
+  const assets=useShareCardAssets();
 
   const candidates=useMemo(()=>{
     const today=new Date().toISOString().slice(0,10);
@@ -64,15 +65,9 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
       .filter((event):event is MobilizationEvent=>Boolean(event))
   ),[events,selected]);
 
-  useEffect(()=>{
-    let active=true;
-    loadBebasNeueDataUrl().then(url=>{if(active)setFontDataUrl(url);});
-    return()=>{active=false;};
-  },[]);
-
   const card=useMemo(
-    ()=>chosen.length?generateShareCard(chosen,{format,fontDataUrl}):null,
-    [chosen,format,fontDataUrl]
+    ()=>chosen.length&&assets?generateShareCard(chosen,{format,assets}):null,
+    [chosen,format,assets]
   );
 
   useEffect(()=>{
@@ -209,7 +204,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
         </div>
 
         <div className='share-format-tabs' role='radiogroup' aria-label='Formato da imagem'>
-          {IMAGE_FORMAT_KEYS.map(key=>
+          {CARD_FORMAT_KEYS.map(key=>
             <button
               key={key}
               type='button'
@@ -226,13 +221,18 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
 
         <div className='share-canvas-wrap'>
           {card
-            ? <img
-                className='share-canvas'
-                src={svgToDataUrl(card.svg)}
-                width={card.width}
-                height={card.height}
-                alt={'Prévia do painel com '+card.shownEvents+(card.shownEvents===1?' evento':' eventos')}
-              />
+            ? <div className='share-canvas-pages'>
+                {card.pages.map(page=>
+                  <img
+                    key={page.index}
+                    className='share-canvas'
+                    src={svgToDataUrl(page.svg)}
+                    width={page.width}
+                    height={page.height}
+                    alt={'Prévia do card '+(page.index+1)+' de '+page.total+' com '+page.shownEvents+(page.shownEvents===1?' evento':' eventos')}
+                  />
+                )}
+              </div>
             : <div className='share-canvas-placeholder'>
                 <CalendarDays size={30}/>
                 <strong>Seu painel aparecerá aqui</strong>
@@ -240,9 +240,9 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
               </div>}
         </div>
 
-        {card&&card.hiddenEvents>0&&
+        {card&&card.pages.length>1&&
           <div className='share-feedback' aria-live='polite'>
-            {card.hiddenEvents} evento(s) não couberam neste formato; escolha menos eventos ou outro formato.
+            Os eventos foram divididos em {card.pages.length} cards de continuação (até {MAX_EVENTS_PER_CARD} eventos cada).
           </div>}
 
         <ShareCardActions

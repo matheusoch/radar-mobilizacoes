@@ -1,123 +1,121 @@
-import {BRAND_COLORS, IMAGE_FORMATS, SITE_NAME, resolveSiteUrl, type ImageFormatKey} from '../config/site';
+import {SITE_NAME, IMAGE_FORMATS, type CardFormatKey} from '../config/site';
 import type {MobilizationEvent} from '../types';
 
-export interface ShareCardOptions {
-  format?: ImageFormatKey;
-  /** Data URL base64 da fonte Bebas Neue, embutida no SVG para que o PNG exportado use a fonte correta. */
-  fontDataUrl?: string | null;
-  siteUrl?: string;
+export const MAX_EVENTS_PER_CARD = 15;
+
+export interface CardImage {
+  href: string;
+  width: number;
+  height: number;
 }
 
-export interface ShareCardResult {
+/** Medium, Bold e Black da família Transducer Extended. */
+export type CardFontWeight = 500 | 700 | 900;
+
+export interface CardFontFace {
+  weight: CardFontWeight;
+  dataUrl: string;
+}
+
+export interface ShareCardAssets {
+  fonts: readonly CardFontFace[];
+  /** Nome da família efetivamente embutida (Transducer quando os arquivos existem em src/assets/fonts). */
+  fontLabel: string;
+  title: CardImage;
+  intro: CardImage;
+  box: CardImage;
+}
+
+export interface ShareCardOptions {
+  format?: CardFormatKey;
+  assets: ShareCardAssets;
+}
+
+export interface ShareCardPage {
   svg: string;
   width: number;
   height: number;
+  index: number;
+  total: number;
   shownEvents: number;
-  hiddenEvents: number;
 }
 
+export interface ShareCardResult {
+  /** SVG da primeira página, mantido para quem só precisa de uma imagem. */
+  svg: string;
+  width: number;
+  height: number;
+  pages: ShareCardPage[];
+  shownEvents: number;
+}
+
+type Weight = CardFontWeight;
 type Anchor = 'start' | 'middle';
 
-interface RowMetrics {
-  titleSize: number;
-  metaSize: number;
-  typeSize: number;
-  padding: number;
-  pillWidth: number;
-  pillHeight: number;
-  pillFont: number;
-  dateHeight: number;
-  dateFont: number;
-  dateGap: number;
-  groupGap: number;
-  titleLines: number;
-}
+/** Hierarquia tipográfica do modelo do Photoshop (Transducer Extended). */
+const WEIGHTS = {
+  city: 900,
+  state: 700,
+  time: 700,
+  title: 900,
+  place: 500,
+  day: 700,
+  ui: 500,
+} as const satisfies Record<string, Weight>;
 
-interface FormatLayout {
-  maxEvents: number;
-  titleLines: readonly [string, string];
-  title: {x: number; baselines: readonly [number, number]; size: number; anchor: Anchor};
-  subtitle: {x: number; y: number; size: number; anchor: Anchor};
-  panel: {x: number; y: number; width: number; height: number; radius: number};
-  footer: {x: number; y: number; size: number; anchor: Anchor};
-  metrics: RowMetrics;
-}
+const FIT_STEP = 0.5;
+const FIT_FLOOR = 7;
+const LINE_CAPS: readonly number[] = [2, 3, 4, Number.POSITIVE_INFINITY];
 
-const FONT_STACK = "'Bebas Neue', 'Arial Narrow', Impact, sans-serif";
-const FONT_DATA_URL_PATTERN = /^data:font\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/i;
-// Largura média de um caractere em caixa alta da Bebas Neue, em fração do corpo da fonte.
-const CHAR_WIDTH = 0.42;
-const MIN_SCALE = 0.6;
-const SCALE_STEP = 0.05;
-const ROW_LINE_HEIGHT = 1.02;
+const FONT_FAMILY = 'CardFont';
+const FONT_DATA_URL_PATTERN = /^data:(?:font|application)\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/i;
+const IMAGE_DATA_URL_PATTERN = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/i;
 
-const LAYOUTS: Record<ImageFormatKey, FormatLayout> = {
-  feed: {
-    maxEvents: 5,
-    titleLines: ['AGENDA DE', 'MOBILIZAÇÕES'],
-    title: {x: 540, baselines: [150, 262], size: 124, anchor: 'middle'},
-    subtitle: {x: 540, y: 318, size: 38, anchor: 'middle'},
-    panel: {x: 64, y: 352, width: 952, height: 868, radius: 36},
-    footer: {x: 540, y: 1288, size: 54, anchor: 'middle'},
-    metrics: {
-      titleSize: 42,
-      metaSize: 30,
-      typeSize: 27,
-      padding: 24,
-      pillWidth: 156,
-      pillHeight: 58,
-      pillFont: 38,
-      dateHeight: 48,
-      dateFont: 32,
-      dateGap: 14,
-      groupGap: 14,
-      titleLines: 2,
-    },
-  },
-  story: {
-    maxEvents: 7,
-    titleLines: ['AGENDA DE', 'MOBILIZAÇÕES'],
-    title: {x: 540, baselines: [350, 470], size: 134, anchor: 'middle'},
-    subtitle: {x: 540, y: 532, size: 40, anchor: 'middle'},
-    panel: {x: 64, y: 580, width: 952, height: 1060, radius: 36},
-    footer: {x: 540, y: 1730, size: 58, anchor: 'middle'},
-    metrics: {
-      titleSize: 44,
-      metaSize: 32,
-      typeSize: 28,
-      padding: 26,
-      pillWidth: 160,
-      pillHeight: 60,
-      pillFont: 40,
-      dateHeight: 50,
-      dateFont: 34,
-      dateGap: 14,
-      groupGap: 16,
-      titleLines: 2,
-    },
-  },
-  og: {
-    maxEvents: 3,
-    titleLines: ['AGENDA DE', 'MOBILIZAÇÕES'],
-    title: {x: 60, baselines: [178, 262], size: 92, anchor: 'start'},
-    subtitle: {x: 62, y: 316, size: 28, anchor: 'start'},
-    panel: {x: 588, y: 36, width: 576, height: 558, radius: 26},
-    footer: {x: 62, y: 568, size: 38, anchor: 'start'},
-    metrics: {
-      titleSize: 32,
-      metaSize: 23,
-      typeSize: 21,
-      padding: 16,
-      pillWidth: 108,
-      pillHeight: 42,
-      pillFont: 28,
-      dateHeight: 36,
-      dateFont: 24,
-      dateGap: 10,
-      groupGap: 10,
-      titleLines: 1,
-    },
-  },
+const COLORS = {
+  background: '#D81B1F',
+  bar: '#FFC301',
+  yellow: '#FFC607',
+  white: '#FFFFFF',
+  red: '#D81B1F',
+} as const;
+
+const GRID = {
+  columnX: [57, 565] as const,
+  columnWidth: 459,
+  barHeight: 14,
+  titleY: 65,
+  introY: 209,
+  boxY: 277,
+  areaTop: 463,
+  leftX: 57,
+  dayHeight: 49,
+  dayToLine: 74,
+  cityHeight: 40,
+  cityAfterDay: 16,
+  cityAfterRow: 22,
+  rowAfterCity: 11,
+  rowAfterRow: 22,
+  dayAfterRow: 40,
+  rowMinHeight: 42,
+  timeBoxWidth: 70,
+  textInset: 82,
+  titleSize: 16,
+  titleMinSize: 10,
+  titleLineRatio: 1.25,
+  placeSize: 13.5,
+  placeMinSize: 9,
+  placeLineRatio: 1.2,
+  placeGap: 6,
+  citySize: 22,
+  cityMinSize: 12,
+  stateSize: 16,
+  daySize: 21,
+  timeSize: 17,
+} as const;
+
+const FORMAT_OFFSETS: Record<CardFormatKey, {shiftY: number; bottom: number}> = {
+  feed: {shiftY: 0, bottom: 1300},
+  story: {shiftY: 185, bottom: 1670},
 };
 
 export function escapeXml(value: string): string {
@@ -134,33 +132,8 @@ function upper(value: string): string {
   return value.toLocaleUpperCase('pt-BR');
 }
 
-function estimateWidth(text: string, size: number, letterSpacing = 0): number {
-  return text.length * (size * CHAR_WIDTH + letterSpacing);
-}
-
-function truncate(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text;
-  return `${text.slice(0, Math.max(1, maxChars - 1)).trimEnd()}…`;
-}
-
-function wrapText(text: string, maxChars: number, maxLines: number): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let current = '';
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length <= maxChars || !current) {
-      current = next;
-    } else {
-      lines.push(current);
-      current = word;
-    }
-  }
-  if (current) lines.push(current);
-  if (lines.length <= maxLines) return lines.map(line => truncate(line, maxChars));
-  const kept = lines.slice(0, maxLines);
-  kept[maxLines - 1] = truncate(`${kept[maxLines - 1]} ${lines.slice(maxLines).join(' ')}`, maxChars);
-  return kept;
+function round(value: number): number {
+  return Math.round(value * 10) / 10;
 }
 
 function parseDate(date: string): Date | null {
@@ -176,265 +149,492 @@ export function formatCardDateLabel(date: string): string {
   return upper(`${weekday} - ${short}`);
 }
 
+/** Horário no formato do card: 8h, 16h, 16h30. */
 export function formatCardTime(event: MobilizationEvent): string {
   const raw = (event.time_label || event.time || '').trim();
-  const first = raw.match(/\d{1,2}[:h]\d{2}/);
-  if (first) return first[0].replace('h', ':').padStart(5, '0');
-  const hourOnly = raw.match(/\b(\d{1,2})\s*h\b/i);
-  if (hourOnly) return `${hourOnly[1].padStart(2, '0')}:00`;
-  return '--:--';
+  const match = raw.match(/(\d{1,2})\s*[:hH]\s*(\d{2})?/);
+  if (!match) return '--h';
+  const hours = String(Number(match[1]));
+  const minutes = match[2];
+  return minutes && minutes !== '00' ? `${hours}h${minutes}` : `${hours}h`;
 }
 
-function sortEvents(events: readonly MobilizationEvent[]): MobilizationEvent[] {
-  return events
-    .slice()
-    .sort((a, b) => `${a.date}${a.time || ''}`.localeCompare(`${b.date}${b.time || ''}`));
+type Measure = (text: string, size: number, weight: Weight) => number;
+
+function createMeasure(): Measure {
+  const context = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
+  return (text, size, weight) => {
+    if (!context) return text.length * size * 0.9;
+    context.font = `${weight} ${size}px ${FONT_FAMILY}, sans-serif`;
+    return context.measureText(text).width;
+  };
 }
 
-interface PlannedRow {
-  event: MobilizationEvent;
-  titleLines: string[];
-  meta: string;
-  type: string;
-  height: number;
+interface FittedText {
+  lines: string[];
+  size: number;
 }
 
-interface PlannedGroup {
+function wrapWords(text: string, maxWidth: number, size: number, weight: Weight, measure: Measure): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (!current || measure(next, size, weight) <= maxWidth) {
+      current = next;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : [''];
+}
+
+/**
+ * Reduz a fonte aos poucos até o texto caber na largura, sem cortar nem usar reticências.
+ * Prefere o tamanho original em até `preferredLines` linhas; só então permite mais linhas.
+ */
+function fitText(
+  text: string,
+  maxWidth: number,
+  baseSize: number,
+  minSize: number,
+  preferredLines: number,
+  weight: Weight,
+  measure: Measure,
+): FittedText {
+  const fits = (lines: readonly string[], size: number) => lines.every(line => measure(line, size, weight) <= maxWidth);
+  const caps = [preferredLines, ...LINE_CAPS.filter(cap => cap > preferredLines)];
+  for (const cap of caps) {
+    const lowest = Number.isFinite(cap) ? minSize : FIT_FLOOR;
+    for (let size = baseSize; size >= lowest; size -= FIT_STEP) {
+      const lines = wrapWords(text, maxWidth, size, weight, measure);
+      if (lines.length <= cap && fits(lines, size)) return {lines, size: round(size)};
+    }
+  }
+  return {lines: wrapWords(text, maxWidth, FIT_FLOOR, weight, measure), size: FIT_FLOOR};
+}
+
+function fitSingleLine(text: string, maxWidth: number, baseSize: number, minSize: number, weight: Weight, measure: Measure): number {
+  for (let size = baseSize; size >= minSize; size -= FIT_STEP) {
+    if (measure(text, size, weight) <= maxWidth) return round(size);
+  }
+  const width = measure(text, minSize, weight);
+  return width > maxWidth ? round(Math.max(FIT_FLOOR, (minSize * maxWidth) / width)) : minSize;
+}
+
+interface CityGroup {
+  city: string;
+  state: string;
+  events: MobilizationEvent[];
+}
+
+interface DayGroup {
   date: string;
-  rows: PlannedRow[];
+  cities: CityGroup[];
 }
 
-interface Plan {
-  groups: PlannedGroup[];
-  scale: number;
-  shown: number;
-  hidden: number;
-  contentHeight: number;
+function sortKey(event: MobilizationEvent): string {
+  return `${event.date}|${(event.time || event.time_label || '').padStart(5, '0')}`;
 }
 
-function planRow(event: MobilizationEvent, metrics: RowMetrics, textWidth: number, scale: number): PlannedRow {
-  const titleSize = metrics.titleSize * scale;
-  const metaSize = metrics.metaSize * scale;
-  const typeSize = metrics.typeSize * scale;
-  const titleLines = wrapText(
-    upper(event.title.trim() || 'Mobilização'),
-    Math.floor(textWidth / (titleSize * CHAR_WIDTH)),
-    metrics.titleLines,
-  );
-  const place = [event.city, event.state].filter(Boolean).join(' ');
-  const meta = truncate(
-    upper([place, event.venue].filter(Boolean).join(' · ') || 'Local a confirmar'),
-    Math.floor(textWidth / (metaSize * CHAR_WIDTH)),
-  );
-  const type = truncate(upper(event.type || 'Mobilização'), Math.floor(textWidth / (typeSize * CHAR_WIDTH)));
-  const stack = titleLines.length * titleSize * ROW_LINE_HEIGHT + metaSize * 1.2 + typeSize * 1.2;
-  const height = Math.max(stack + metrics.padding * scale, metrics.pillHeight * scale + 8 * scale);
-  return {event, titleLines, meta, type, height};
-}
-
-function planAt(events: readonly MobilizationEvent[], metrics: RowMetrics, textWidth: number, scale: number): Plan {
-  const groups: PlannedGroup[] = [];
-  let contentHeight = 0;
-  for (const event of events) {
-    let group = groups[groups.length - 1];
-    if (!group || group.date !== event.date) {
-      group = {date: event.date, rows: []};
-      groups.push(group);
-      contentHeight += (groups.length > 1 ? metrics.groupGap * scale : 0) + (metrics.dateHeight + metrics.dateGap) * scale;
+function groupEvents(events: readonly MobilizationEvent[]): DayGroup[] {
+  const ordered = events.slice().sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+  const days: DayGroup[] = [];
+  for (const event of ordered) {
+    let day = days.find(item => item.date === event.date);
+    if (!day) {
+      day = {date: event.date, cities: []};
+      days.push(day);
     }
-    const row = planRow(event, metrics, textWidth, scale);
-    group.rows.push(row);
-    contentHeight += row.height;
+    const cityKey = `${event.city}|${event.state}`.toLocaleLowerCase('pt-BR');
+    let city = day.cities.find(item => `${item.city}|${item.state}`.toLocaleLowerCase('pt-BR') === cityKey);
+    if (!city) {
+      city = {city: event.city, state: event.state, events: []};
+      day.cities.push(city);
+    }
+    city.events.push(event);
   }
-  return {groups, scale, shown: events.length, hidden: 0, contentHeight};
+  return days;
 }
 
-function planContent(
-  events: readonly MobilizationEvent[],
-  layout: FormatLayout,
-  textWidth: number,
-  availableHeight: number,
-): Plan {
-  const limit = Math.min(events.length, layout.maxEvents);
-  for (let count = limit; count >= 1; count -= 1) {
-    const subset = events.slice(0, count);
-    const hidden = events.length - count;
-    const reserved = hidden > 0 ? layout.metrics.metaSize * 1.8 : 0;
-    for (let scale = 1; scale >= MIN_SCALE - 1e-6; scale -= SCALE_STEP) {
-      const plan = planAt(subset, layout.metrics, textWidth, scale);
-      if (plan.contentHeight <= availableHeight - reserved) return {...plan, hidden};
+type Item =
+  | {kind: 'day'; x: number; y: number; label: string}
+  | {kind: 'city'; x: number; y: number; city: string; state: string}
+  | {
+      kind: 'row';
+      x: number;
+      y: number;
+      height: number;
+      time: string;
+      title: FittedText;
+      place: FittedText | null;
+    };
+
+interface PageDraft {
+  items: Item[];
+  events: number;
+}
+
+function titleBaseline(title: FittedText, index: number): number {
+  return title.size + title.size * GRID.titleLineRatio * index;
+}
+
+function placeBaseline(title: FittedText, place: FittedText, index: number): number {
+  const lastTitle = titleBaseline(title, title.lines.length - 1);
+  const lineHeight = place.size * GRID.placeLineRatio;
+  return lastTitle + GRID.placeGap + lineHeight * (index + 1);
+}
+
+function rowContentHeight(title: FittedText, place: FittedText | null): number {
+  if (!place) return titleBaseline(title, title.lines.length - 1) + 10;
+  return placeBaseline(title, place, place.lines.length - 1) + 4;
+}
+
+function planPages(events: readonly MobilizationEvent[], columnHeight: number, measure: Measure): PageDraft[] {
+  const pages: PageDraft[] = [];
+  let page: PageDraft = {items: [], events: 0};
+  let column = 0;
+  let y = 0;
+  let last: 'day' | 'city' | 'row' | null = null;
+  const textWidth = GRID.columnWidth - GRID.textInset;
+
+  const startNextColumn = (forcePage: boolean) => {
+    if (column === 0 && !forcePage) {
+      column = 1;
+    } else {
+      pages.push(page);
+      page = {items: [], events: 0};
+      column = 0;
+    }
+    y = 0;
+    last = null;
+  };
+
+  for (const day of groupEvents(events)) {
+    let dayShown = false;
+    for (const group of day.cities) {
+      let cityShown = false;
+      for (const event of group.events) {
+        const title = fitText(
+          upper(event.title.trim() || 'Mobilização'),
+          textWidth,
+          GRID.titleSize,
+          GRID.titleMinSize,
+          2,
+          WEIGHTS.title,
+          measure,
+        );
+        const placeSource = (event.venue || event.address || '').trim();
+        const place = placeSource
+          ? fitText(upper(placeSource), textWidth, GRID.placeSize, GRID.placeMinSize, 2, WEIGHTS.place, measure)
+          : null;
+        const rowHeight = Math.max(GRID.rowMinHeight, rowContentHeight(title, place));
+
+        const needed = (): number => {
+          const atTop = last === null;
+          let total = 0;
+          if (!dayShown) total += (atTop ? 0 : GRID.dayAfterRow) + GRID.dayToLine;
+          if (!cityShown) total += (!dayShown ? GRID.cityAfterDay : GRID.cityAfterRow) + GRID.cityHeight;
+          total += (cityShown ? GRID.rowAfterRow : GRID.rowAfterCity) + rowHeight;
+          return total;
+        };
+
+        const pageFull = page.events >= MAX_EVENTS_PER_CARD;
+        if (pageFull || (last !== null && y + needed() > columnHeight)) {
+          startNextColumn(pageFull);
+          dayShown = false;
+          cityShown = false;
+        }
+
+        const x = GRID.columnX[column] ?? GRID.columnX[0];
+
+        if (!dayShown) {
+          y += last === null ? 0 : GRID.dayAfterRow;
+          page.items.push({kind: 'day', x, y, label: formatCardDateLabel(day.date)});
+          y += GRID.dayToLine;
+          last = 'day';
+          dayShown = true;
+        }
+        if (!cityShown) {
+          y += last === 'day' ? GRID.cityAfterDay : GRID.cityAfterRow;
+          page.items.push({kind: 'city', x, y, city: upper(group.city), state: upper(group.state)});
+          y += GRID.cityHeight;
+          last = 'city';
+          cityShown = true;
+        }
+        y += last === 'city' ? GRID.rowAfterCity : GRID.rowAfterRow;
+        page.items.push({
+          kind: 'row',
+          x,
+          y,
+          height: rowHeight,
+          time: formatCardTime(event),
+          title,
+          place,
+        });
+        y += rowHeight;
+        last = 'row';
+        page.events += 1;
+      }
     }
   }
-  const fallback = planAt(events.slice(0, 1), layout.metrics, textWidth, MIN_SCALE);
-  return {...fallback, hidden: events.length - 1};
+  if (page.items.length || !pages.length) pages.push(page);
+  return pages;
 }
 
-function text(
+function textNode(
   content: string,
   x: number,
   y: number,
   size: number,
   fill: string,
-  anchor: Anchor = 'start',
-  extra = '',
+  options: {anchor?: Anchor; weight?: Weight; letterSpacing?: number} = {},
 ): string {
-  return `<text x="${round(x)}" y="${round(y)}" font-size="${round(size)}" fill="${fill}" text-anchor="${anchor}"${extra}>${escapeXml(content)}</text>`;
+  const {anchor = 'start', weight = WEIGHTS.state, letterSpacing = 0} = options;
+  const spacing = letterSpacing ? ` letter-spacing="${letterSpacing}"` : '';
+  return `<text x="${round(x)}" y="${round(y)}" font-size="${round(size)}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}"${spacing}>${escapeXml(content)}</text>`;
 }
 
-function round(value: number): number {
-  return Math.round(value * 10) / 10;
+function rect(x: number, y: number, width: number, height: number, fill: string): string {
+  return `<rect x="${round(x)}" y="${round(y)}" width="${round(width)}" height="${round(height)}" fill="${fill}"/>`;
 }
 
-function pill(label: string, x: number, y: number, width: number, height: number, fontSize: number, fill: string): string {
-  const baseline = y + height / 2 + fontSize * 0.34;
-  return (
-    `<rect x="${round(x)}" y="${round(y)}" width="${round(width)}" height="${round(height)}" rx="${round(height / 2)}" fill="${fill}"/>` +
-    text(label, x + width / 2, baseline, fontSize, BRAND_COLORS.panel, 'middle', ' letter-spacing="1"')
-  );
+function imageNode(image: CardImage, x: number, y: number): string {
+  if (!IMAGE_DATA_URL_PATTERN.test(image.href)) return '';
+  return `<image x="${round(x)}" y="${round(y)}" width="${image.width}" height="${image.height}" xlink:href="${image.href}"/>`;
 }
 
-function renderGroups(plan: Plan, layout: FormatLayout, panelX: number, panelY: number, padX: number, textX: number): string {
-  const {metrics, panel} = layout;
-  const s = plan.scale;
-  const parts: string[] = [];
-  let y = panelY;
-  plan.groups.forEach((group, groupIndex) => {
-    if (groupIndex > 0) y += metrics.groupGap * s;
-    const label = formatCardDateLabel(group.date);
-    const dateFont = metrics.dateFont * s;
-    const dateWidth = Math.min(panel.width - padX * 2, estimateWidth(label, dateFont, 1) + 56 * s);
-    const dateHeight = metrics.dateHeight * s;
-    parts.push(pill(label, panelX + (panel.width - dateWidth) / 2, y, dateWidth, dateHeight, dateFont, BRAND_COLORS.yellow));
-    y += dateHeight + metrics.dateGap * s;
+function fontStyle(fonts: readonly CardFontFace[]): string {
+  const faces = fonts
+    .filter(font => FONT_DATA_URL_PATTERN.test(font.dataUrl))
+    .map(font => {
+      const format = /woff2/i.test(font.dataUrl)
+        ? 'woff2'
+        : /woff/i.test(font.dataUrl)
+          ? 'woff'
+          : /otf/i.test(font.dataUrl)
+            ? 'opentype'
+            : 'truetype';
+      return `@font-face{font-family:'${FONT_FAMILY}';font-weight:${font.weight};font-style:normal;src:url(${font.dataUrl}) format('${format}');}`;
+    })
+    .join('');
+  return faces ? `<style>${faces}</style>` : '';
+}
 
-    group.rows.forEach((row, rowIndex) => {
-      const titleSize = metrics.titleSize * s;
-      const metaSize = metrics.metaSize * s;
-      const typeSize = metrics.typeSize * s;
-      const pillHeight = metrics.pillHeight * s;
-      const pillWidth = metrics.pillWidth * s;
-      const centerY = y + row.height / 2;
-
-      parts.push(
-        pill(
-          formatCardTime(row.event),
-          panelX + padX,
-          centerY - pillHeight / 2,
-          pillWidth,
-          pillHeight,
-          metrics.pillFont * s,
-          BRAND_COLORS.white,
-        ),
-      );
-
-      const stack = row.titleLines.length * titleSize * ROW_LINE_HEIGHT + metaSize * 1.2 + typeSize * 1.2;
-      let cursor = y + (row.height - stack) / 2;
-      row.titleLines.forEach(line => {
-        parts.push(text(line, textX, cursor + titleSize * 0.82, titleSize, BRAND_COLORS.white, 'start', ' letter-spacing="0.5"'));
-        cursor += titleSize * ROW_LINE_HEIGHT;
-      });
-      parts.push(
-        text(row.meta, textX, cursor + metaSize * 0.9, metaSize, BRAND_COLORS.white, 'start', ' fill-opacity="0.92" letter-spacing="0.5"'),
-      );
-      cursor += metaSize * 1.2;
-      parts.push(text(row.type, textX, cursor + typeSize * 0.9, typeSize, BRAND_COLORS.yellow, 'start', ' letter-spacing="1"'));
-
-      y += row.height;
-      if (rowIndex < group.rows.length - 1) {
-        parts.push(
-          `<line x1="${round(panelX + padX)}" y1="${round(y)}" x2="${round(panelX + panel.width - padX)}" y2="${round(y)}" stroke="${BRAND_COLORS.white}" stroke-opacity="0.16" stroke-width="2"/>`,
-        );
-      }
+function renderItem(item: Item, top: number, measure: Measure): string {
+  const y = top + item.y;
+  if (item.kind === 'day') {
+    const textWidth = measure(item.label, GRID.daySize, WEIGHTS.day) + item.label.length * 1.5;
+    const width = Math.min(GRID.columnWidth, textWidth + 44);
+    const baseline = y + GRID.dayHeight / 2 + GRID.daySize * 0.36;
+    return (
+      rect(item.x, y, width, GRID.dayHeight, COLORS.yellow) +
+      textNode(item.label, item.x + width / 2, baseline, GRID.daySize, COLORS.red, {
+        anchor: 'middle',
+        weight: WEIGHTS.day,
+        letterSpacing: 1.5,
+      }) +
+      `<line x1="${item.x}" y1="${round(y + GRID.dayToLine)}" x2="${item.x + GRID.columnWidth}" y2="${round(y + GRID.dayToLine)}" stroke="${COLORS.white}" stroke-opacity="0.85" stroke-width="1.5"/>`
+    );
+  }
+  if (item.kind === 'city') {
+    const baseline = y + 30;
+    const stateWidth = item.state ? measure(item.state, GRID.stateSize, WEIGHTS.state) + 14 : 0;
+    const citySize = fitSingleLine(
+      item.city,
+      GRID.columnWidth - stateWidth,
+      GRID.citySize,
+      GRID.cityMinSize,
+      WEIGHTS.city,
+      measure,
+    );
+    const cityWidth = measure(item.city, citySize, WEIGHTS.city);
+    return (
+      textNode(item.city, item.x, baseline, citySize, COLORS.yellow, {weight: WEIGHTS.city}) +
+      (item.state
+        ? textNode(item.state, item.x + cityWidth + 14, baseline, GRID.stateSize, COLORS.white, {weight: WEIGHTS.state})
+        : '')
+    );
+  }
+  const timeSize = fitSingleLine(item.time, GRID.timeBoxWidth - 14, GRID.timeSize, FIT_FLOOR, WEIGHTS.time, measure);
+  const textX = item.x + GRID.textInset;
+  let markup =
+    rect(item.x, y, GRID.timeBoxWidth, GRID.rowMinHeight, COLORS.white) +
+    textNode(item.time, item.x + GRID.timeBoxWidth / 2, y + GRID.rowMinHeight / 2 + timeSize * 0.36, timeSize, COLORS.red, {
+      anchor: 'middle',
+      weight: WEIGHTS.time,
+    });
+  item.title.lines.forEach((line, index) => {
+    markup += textNode(line, textX, y + titleBaseline(item.title, index), item.title.size, COLORS.white, {
+      weight: WEIGHTS.title,
     });
   });
-  return parts.join('');
-}
-
-function safeFontStyle(fontDataUrl: string | null | undefined): string {
-  if (!fontDataUrl || !FONT_DATA_URL_PATTERN.test(fontDataUrl)) return '';
-  const format = /woff2/i.test(fontDataUrl) ? 'woff2' : /woff/i.test(fontDataUrl) ? 'woff' : 'truetype';
-  return `<style>@font-face{font-family:'Bebas Neue';font-weight:400;font-style:normal;src:url(${fontDataUrl}) format('${format}');}</style>`;
-}
-
-export function generateShareCard(events: readonly MobilizationEvent[], options: ShareCardOptions = {}): ShareCardResult {
-  const formatKey = options.format ?? 'feed';
-  const format = IMAGE_FORMATS[formatKey];
-  const layout = LAYOUTS[formatKey];
-  const {width, height} = format;
-  const {panel, metrics} = layout;
-
-  const ordered = sortEvents(events);
-  const padX = Math.round(panel.width * 0.03);
-  const padY = Math.round(metrics.padding * 0.8);
-  const textX = panel.x + padX + metrics.pillWidth + 22;
-  const textWidth = panel.x + panel.width - padX - textX;
-  const innerTop = panel.y + padY;
-  const innerHeight = panel.height - padY * 2;
-
-  const siteLabel = upper(resolveSiteUrl(options.siteUrl).replace(/^https?:\/\//i, ''));
-  const subtitle = 'EVENTOS E MOBILIZAÇÕES PELO BRASIL';
-
-  let body = '';
-  let shown = 0;
-  let hidden = 0;
-
-  if (ordered.length) {
-    const plan = planContent(ordered, layout, textWidth, innerHeight);
-    shown = plan.shown;
-    hidden = plan.hidden;
-    const offset = Math.max(0, (innerHeight - (plan.contentHeight + (hidden > 0 ? metrics.metaSize * 1.8 : 0))) / 2);
-    const startY = innerTop + Math.min(offset, innerHeight * 0.06);
-    body = renderGroups(plan, layout, panel.x, startY, padX, textX);
-    if (hidden > 0) {
-      const more = `+ ${hidden} ${hidden === 1 ? 'EVENTO' : 'EVENTOS'} NA AGENDA`;
-      body += text(more, panel.x + panel.width / 2, panel.y + panel.height - padY - 4, metrics.metaSize, BRAND_COLORS.yellow, 'middle', ' letter-spacing="1"');
-    }
-  } else {
-    body = text('NENHUM EVENTO SELECIONADO', panel.x + panel.width / 2, panel.y + panel.height / 2, metrics.titleSize, BRAND_COLORS.white, 'middle', ' letter-spacing="1"');
+  if (item.place) {
+    const place = item.place;
+    place.lines.forEach((line, index) => {
+      markup += textNode(line, textX, y + placeBaseline(item.title, place, index), place.size, COLORS.white, {
+        weight: WEIGHTS.place,
+      });
+    });
   }
-
-  const accessibleTitle = `${SITE_NAME}: ${shown} ${shown === 1 ? 'evento' : 'eventos'}`;
-  const heading = layout.titleLines
-    .map((line, index) =>
-      text(line, layout.title.x, layout.title.baselines[index], layout.title.size, BRAND_COLORS.white, layout.title.anchor, ' letter-spacing="2"'),
-    )
-    .join('');
-
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="card-title">` +
-    `<title id="card-title">${escapeXml(accessibleTitle)}</title>` +
-    safeFontStyle(options.fontDataUrl) +
-    `<defs><clipPath id="panel-clip"><rect x="${panel.x}" y="${panel.y}" width="${panel.width}" height="${panel.height}" rx="${panel.radius}"/></clipPath></defs>` +
-    `<g font-family="${FONT_STACK}">` +
-    `<rect width="${width}" height="${height}" fill="${BRAND_COLORS.background}"/>` +
-    (formatKey === 'og' ? '' : `<rect x="0" y="0" width="${width}" height="14" fill="${BRAND_COLORS.yellow}"/>`) +
-    heading +
-    text(subtitle, layout.subtitle.x, layout.subtitle.y, layout.subtitle.size, BRAND_COLORS.yellow, layout.subtitle.anchor, ' letter-spacing="3"') +
-    `<rect x="${panel.x}" y="${panel.y}" width="${panel.width}" height="${panel.height}" rx="${panel.radius}" fill="${BRAND_COLORS.panel}"/>` +
-    `<g clip-path="url(#panel-clip)">${body}</g>` +
-    text(siteLabel, layout.footer.x, layout.footer.y, layout.footer.size, BRAND_COLORS.white, layout.footer.anchor, ' letter-spacing="3"') +
-    `</g></svg>`;
-
-  return {svg, width, height, shownEvents: shown, hiddenEvents: hidden};
+  return markup;
 }
 
-export function generateShareCardSvg(events: readonly MobilizationEvent[], options: ShareCardOptions = {}): string {
-  return generateShareCard(events, options).svg;
+export function generateShareCard(events: readonly MobilizationEvent[], options: ShareCardOptions): ShareCardResult {
+  const formatKey = options.format ?? 'feed';
+  const {width, height} = IMAGE_FORMATS[formatKey];
+  const {shiftY, bottom} = FORMAT_OFFSETS[formatKey];
+  const {assets} = options;
+  const measure = createMeasure();
+
+  const areaTop = GRID.areaTop + shiftY;
+  const drafts = planPages(events, bottom - areaTop, measure);
+  const style = fontStyle(assets.fonts);
+  const total = drafts.length;
+
+  const pages = drafts.map<ShareCardPage>((draft, index) => {
+    const body = draft.items.length
+      ? draft.items.map(item => renderItem(item, areaTop, measure)).join('')
+      : textNode('NENHUM EVENTO SELECIONADO', width / 2, areaTop + 60, 22, COLORS.white, {
+          anchor: 'middle',
+          weight: WEIGHTS.title,
+          letterSpacing: 1,
+        });
+    const counter =
+      total > 1
+        ? textNode(`CARD ${index + 1} DE ${total}`, width / 2, bottom + 40, 15, COLORS.white, {
+            anchor: 'middle',
+            weight: WEIGHTS.ui,
+            letterSpacing: 2,
+          })
+        : '';
+    const label = `${SITE_NAME}: ${draft.events} ${draft.events === 1 ? 'evento' : 'eventos'}${total > 1 ? `, card ${index + 1} de ${total}` : ''}`;
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="card-title">` +
+      `<title id="card-title">${escapeXml(label)}</title>` +
+      style +
+      `<g font-family="'${FONT_FAMILY}', 'Arial Black', sans-serif">` +
+      rect(0, 0, width, height, COLORS.background) +
+      rect(0, 0, width, GRID.barHeight, COLORS.bar) +
+      imageNode(assets.title, GRID.leftX, GRID.titleY + shiftY) +
+      imageNode(assets.intro, GRID.leftX, GRID.introY + shiftY) +
+      imageNode(assets.box, GRID.leftX, GRID.boxY + shiftY) +
+      body +
+      counter +
+      `</g></svg>`;
+    return {svg, width, height, index, total, shownEvents: draft.events};
+  });
+
+  const first = pages[0];
+  if (!first) throw new Error('Nenhuma página gerada.');
+  return {
+    svg: first.svg,
+    width,
+    height,
+    pages,
+    shownEvents: pages.reduce((sum, page) => sum + page.shownEvents, 0),
+  };
 }
 
 export function svgToDataUrl(svg: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-let fontPromise: Promise<string | null> | null = null;
+function pngSize(dataUrl: string): {width: number; height: number} {
+  const header = atob(dataUrl.slice(dataUrl.indexOf(',') + 1, dataUrl.indexOf(',') + 45));
+  const read = (offset: number) =>
+    ((header.charCodeAt(offset) << 24) |
+      (header.charCodeAt(offset + 1) << 16) |
+      (header.charCodeAt(offset + 2) << 8) |
+      header.charCodeAt(offset + 3)) >>>
+    0;
+  return {width: read(16), height: read(20)};
+}
 
-export function loadBebasNeueDataUrl(): Promise<string | null> {
-  if (!fontPromise) {
-    fontPromise = import('@fontsource/bebas-neue/files/bebas-neue-latin-400-normal.woff2?inline')
-      .then(module => (typeof module.default === 'string' ? module.default : null))
-      .catch(() => null);
+async function toCardImage(load: Promise<{default: string}>): Promise<CardImage> {
+  const href = (await load).default;
+  return {href, ...pngSize(href)};
+}
+
+const customFontFiles = import.meta.glob<string>('../assets/fonts/*.{woff2,woff,ttf,otf}', {
+  query: '?inline',
+  import: 'default',
+});
+
+const WEIGHT_FILE_PATTERNS: Record<CardFontWeight, RegExp> = {
+  900: /black|heavy/i,
+  700: /(?<!semi|demi|extra|ultra)bold/i,
+  500: /medium/i,
+};
+
+/** Ordem de substituição quando uma variante da Transducer Extended ainda não foi adicionada. */
+const WEIGHT_FALLBACK_ORDER: Record<CardFontWeight, readonly CardFontWeight[]> = {
+  900: [900, 700, 500],
+  700: [700, 900, 500],
+  500: [500, 700, 900],
+};
+
+async function loadFonts(): Promise<{fonts: CardFontFace[]; fontLabel: string}> {
+  const entries = Object.entries(customFontFiles);
+  const weights: readonly CardFontWeight[] = [500, 700, 900];
+
+  if (entries.length) {
+    const found = new Map<CardFontWeight, string>();
+    await Promise.all(
+      weights.map(async weight => {
+        const match = entries.find(([path]) => WEIGHT_FILE_PATTERNS[weight].test(path.split('/').pop() ?? path));
+        if (match) found.set(weight, await match[1]());
+      }),
+    );
+    if (found.size) {
+      const fonts = weights.flatMap<CardFontFace>(weight => {
+        const source = WEIGHT_FALLBACK_ORDER[weight].map(candidate => found.get(candidate)).find(Boolean);
+        return source ? [{weight, dataUrl: source}] : [];
+      });
+      return {fonts, fontLabel: 'Transducer Extended'};
+    }
   }
-  return fontPromise;
+
+  const module = await import('@fontsource/krona-one/files/krona-one-latin-400-normal.woff2?inline');
+  return {
+    fonts: weights.map(weight => ({weight, dataUrl: module.default})),
+    fontLabel: 'Krona One',
+  };
+}
+
+async function registerFonts(fonts: readonly CardFontFace[]): Promise<void> {
+  if (typeof document === 'undefined' || typeof FontFace === 'undefined') return;
+  await Promise.all(
+    fonts.map(async font => {
+      const face = new FontFace(FONT_FAMILY, `url(${font.dataUrl})`, {weight: String(font.weight)});
+      await face.load();
+      document.fonts.add(face);
+    }),
+  );
+}
+
+let assetsPromise: Promise<ShareCardAssets> | null = null;
+
+export function loadShareCardAssets(): Promise<ShareCardAssets> {
+  if (!assetsPromise) {
+    assetsPromise = (async () => {
+      const [{fonts, fontLabel}, title, intro, box] = await Promise.all([
+        loadFonts(),
+        toCardImage(import('../assets/share/titulo.png?inline')),
+        toCardImage(import('../assets/share/texto-apresentacao.png?inline')),
+        toCardImage(import('../assets/share/retangulo-apresentacao.png?inline')),
+      ]);
+      await registerFonts(fonts);
+      return {fonts, fontLabel, title, intro, box};
+    })().catch(error => {
+      assetsPromise = null;
+      throw error;
+    });
+  }
+  return assetsPromise;
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {

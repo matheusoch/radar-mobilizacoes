@@ -1,5 +1,9 @@
 import {SITE_NAME, IMAGE_FORMATS, type CardFormatKey} from '../config/site';
 import type {MobilizationEvent} from '../types';
+import transducerBlack from '../assets/share/Transducer-Black.otf?inline';
+import transducerMedium from '../assets/share/Transducer-Medium.otf?inline';
+import transducerExtendedBlack from '../assets/share/TransducerExtended-Black.otf?inline';
+import transducerExtendedBold from '../assets/share/TransducerExtended-Bold.otf?inline';
 
 export const MAX_EVENTS_PER_CARD = 15;
 
@@ -591,29 +595,14 @@ async function toCardImage(load: Promise<{default: string}>): Promise<CardImage>
   return {href, ...pngSize(href)};
 }
 
-const customFontFiles = import.meta.glob<string>('../assets/share/*.otf', {
-  query: '?inline',
-  import: 'default',
-});
-
-const FONT_FILE_SPECS: readonly {filename: string; family: CardFontFamily; weight: CardFontWeight}[] = [
-  {filename: 'Transducer-Black.otf', family: 'Transducer', weight: 900},
-  {filename: 'Transducer-Medium.otf', family: 'Transducer', weight: 500},
-  {filename: 'TransducerExtended-Black.otf', family: 'Transducer Extended', weight: 900},
-  {filename: 'TransducerExtended-Bold.otf', family: 'Transducer Extended', weight: 700},
-];
-
 async function loadFonts(): Promise<{fonts: CardFontFace[]; fontLabel: string}> {
-  const entries = Object.entries(customFontFiles);
-  const loaded = await Promise.all(FONT_FILE_SPECS.map(async spec => {
-    const entry = entries.find(([filePath]) => (filePath.split('/').pop() ?? filePath) === spec.filename);
-    return entry ? {weight: spec.weight, family: spec.family, dataUrl: await entry[1]()} : null;
-  }));
-  const fonts = loaded.filter(font => font !== null) as CardFontFace[];
-  if (fonts.length === FONT_FILE_SPECS.length) return {fonts, fontLabel: 'Transducer / Transducer Extended'};
-  const module = await import('@fontsource/krona-one/files/krona-one-latin-400-normal.woff2?inline');
-  const fallback: CardFontFace[] = fonts.length ? fonts : ([500, 700, 900] as const).map(weight => ({weight, family: FONT_FAMILY, dataUrl: module.default}));
-  return {fonts: fallback, fontLabel: fonts.length ? 'Transducer (parcial)' : 'Krona One'};
+  const fonts: CardFontFace[] = [
+    {weight: 900, family: 'Transducer', dataUrl: transducerBlack},
+    {weight: 500, family: 'Transducer', dataUrl: transducerMedium},
+    {weight: 900, family: 'Transducer Extended', dataUrl: transducerExtendedBlack},
+    {weight: 700, family: 'Transducer Extended', dataUrl: transducerExtendedBold},
+  ];
+  return {fonts, fontLabel: 'Transducer / Transducer Extended'};
 }
 
 async function registerFonts(fonts: readonly CardFontFace[]): Promise<void> {

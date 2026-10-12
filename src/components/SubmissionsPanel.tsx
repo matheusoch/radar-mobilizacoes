@@ -11,12 +11,12 @@ const BADGE:Record<SubStatus,string>={pending:'badge-info',approved:'badge-good'
 
 function shortDate(date:string|null){return date&&/^\d{4}-\d{2}-\d{2}/.test(date)?`${date.slice(8,10)}/${date.slice(5,7)}/${date.slice(0,4)}`:'data não informada';}
 
-export function SubmissionsPanel({db,submissions,loadError,loading,busyId,onRefresh,onCreateDraft,onReview,onReopen,onOpenEvent}:{
-  db:any;submissions:SubRow[];loadError:string;loading:boolean;busyId:string|null;
+export function SubmissionsPanel<T extends SubRow>({db,submissions,loadError,loading,busyId,onRefresh,onCreateDraft,onReview,onReopen,onOpenEvent}:{
+  db:any;submissions:T[];loadError:string;loading:boolean;busyId:string|null;
   onRefresh:()=>Promise<unknown>;
-  onCreateDraft:(s:SubRow)=>Promise<unknown>;
-  onReview:(s:SubRow,status:'rejected'|'spam')=>Promise<unknown>;
-  onReopen:(s:SubRow)=>Promise<unknown>;
+  onCreateDraft:(s:T)=>Promise<unknown>;
+  onReview:(s:T,status:'rejected'|'spam')=>Promise<unknown>;
+  onReopen:(s:T)=>Promise<unknown>;
   onOpenEvent:(eventId:string)=>void;
 }){
   const[tab,setTab]=useState<SubTab>('pending');

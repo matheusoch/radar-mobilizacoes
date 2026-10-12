@@ -172,8 +172,11 @@ export function sanitizeText(value: unknown): string {
       return part.charAt(0).toLocaleUpperCase('pt-BR') + part.slice(1);
     })
     .join('');
-  protectedTokens.forEach((acronym, token) => { result = result.replace(token, acronym); });
-  return result;
+  protectedTokens.forEach((acronym, token) => { 
+    result = result.replace(token, acronym); 
+  });
+  
+  return result.toUpperCase(); 
 }
 
 function round(value: number): number {

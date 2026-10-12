@@ -13,6 +13,11 @@
  * - Exportação de SVGs independentes, prontos para download.
  */
 
+import transducerBlackUrl from '../assets/share/Transducer-Black.otf?url';
+import transducerMediumUrl from '../assets/share/Transducer-Medium.otf?url';
+import transducerExtendedBlackUrl from '../assets/share/TransducerExtended-Black.otf?url';
+import transducerExtendedBoldUrl from '../assets/share/TransducerExtended-Bold.otf?url';
+
 export interface MobilizationEvent {
   id?: string | number;
   title?: string;
@@ -404,14 +409,14 @@ function wrapText(
 /**
  * Gera os estilos tipográficos incorporados ao SVG.
  *
- * Os caminhos correspondem aos arquivos OTF presentes em
- * /src/assets/share/.
+ * Os arquivos OTF são importados com ?url para que o Vite os
+ * publique em dist/assets com URLs válidas em produção.
  */
 function getFontStyles(): string {
   return `
     @font-face {
       font-family: "Transducer";
-      src: url("/src/assets/share/Transducer-Black.otf")
+      src: url("${transducerBlackUrl}")
         format("opentype");
       font-weight: 900;
       font-style: normal;
@@ -419,7 +424,7 @@ function getFontStyles(): string {
 
     @font-face {
       font-family: "Transducer";
-      src: url("/src/assets/share/Transducer-Medium.otf")
+      src: url("${transducerMediumUrl}")
         format("opentype");
       font-weight: 500;
       font-style: normal;
@@ -427,7 +432,7 @@ function getFontStyles(): string {
 
     @font-face {
       font-family: "Transducer Extended";
-      src: url("/src/assets/share/Transducer-Extended-Black.otf")
+      src: url("${transducerExtendedBlackUrl}")
         format("opentype");
       font-weight: 900;
       font-style: normal;
@@ -435,7 +440,7 @@ function getFontStyles(): string {
 
     @font-face {
       font-family: "Transducer Extended";
-      src: url("/src/assets/share/Transducer-Extended-Bold.otf")
+      src: url("${transducerExtendedBoldUrl}")
         format("opentype");
       font-weight: 700;
       font-style: normal;

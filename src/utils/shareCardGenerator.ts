@@ -88,7 +88,7 @@ const COLORS = {
 } as const;
 
 const GRID = {
-  columnX: [57, 565] as number[],
+  columnX: [57, 565] as const,
   columnWidth: 459,
   barHeight: 14,
   titleY: 65,
@@ -203,13 +203,22 @@ export function formatCardTime(event: MobilizationEvent): string {
   return minutes && minutes !== '00' ? `${hours}h${minutes}` : `${hours}h`;
 }
 
-type Measure = (text: string, size: number, weight: Weight) => number;
+type Measure = (
+  text: string,
+  size: number,
+  weight: Weight,
+  family?: CardFontFamily,
+) => number;
 
 function createMeasure(): Measure {
-  const context = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
-  return (text, size, weight) => {
+  const context =
+    typeof document === 'undefined'
+      ? null
+      : document.createElement('canvas').getContext('2d');
+
+  return (text, size, weight, family = FONT_FAMILY) => {
     if (!context) return text.length * size * 0.9;
-    context.font = `${weight} ${size}px ${FONT_FAMILY}, sans-serif`;
+    context.font = `${weight} ${size}px "${family}", sans-serif`;
     return context.measureText(text).width;
   };
 }
@@ -454,77 +463,164 @@ function imageNode(image: CardImage, x: number, y: number): string {
   return `<image x="${round(x)}" y="${round(y)}" width="${image.width}" height="${image.height}" xlink:href="${image.href}"/>`;
 }
 
-function fontStyle(fonts: readonly CardFontFace[]): string {
+function getFontStyles(fonts: readonly CardFontFace[]): string {
   const faces = fonts
     .filter(font => FONT_DATA_URL_PATTERN.test(font.dataUrl))
     .map(font => {
-      const format = font.format ?? (/woff2/i.test(font.dataUrl)
-        ? 'woff2'
-        : /woff/i.test(font.dataUrl)
-          ? 'woff'
-          : 'truetype');
-      return `@font-face{font-family:'${font.family ?? FONT_FAMILY}';font-weight:${font.weight};font-style:normal;src:url(${font.dataUrl}) format('${format}');}`;
+      // Fonte importada de src/assets/share para ser embutida no SVG de produção.
+      const format = font.format ?? 'opentype';
+      return `@font-face{font-family:"${font.family ?? FONT_FAMILY}";font-weight:${font.weight};font-style:normal;src:url(${font.dataUrl}) format("${format}");}`;
     })
     .join('');
+
   return faces ? `<style>${faces}</style>` : '';
 }
 
 function renderItem(item: Item, top: number, measure: Measure): string {
   const y = top + item.y;
+
   if (item.kind === 'day') {
+    const centerX = item.x + GRID.columnWidth / 2;
+    // Full-column yellow header with square corners and a fine red outline.
+    const dateBackground =
+      `<rect x="${round(item.x)}" y="${round(y)}" width="${round(GRID.columnWidth)}" height="${round(GRID.dayHeight)}" fill="${COLORS.yellow}" stroke="${COLORS.red}" stroke-width="1"/>`;
+
+    // The baseline offset optically centers the glyphs vertically in the header.
     const baseline = y + GRID.dayHeight / 2 + GRID.daySize * 0.36;
-    return (
-      textNode(item.label, item.x, baseline, GRID.daySize, COLORS.yellow, {
-        weight: WEIGHTS.day,
+
+    return dateBackground + textNode(
+      sanitizeText(item.label),
+      centerX,
+      baseline,
+      GRID.daySize,
+      COLORS.red,
+      {
+        anchor: 'middle',
+        weight: 900,
         family: FONT_FAMILY_EXTENDED,
         letterSpacing: 1.5,
-      }) +
-      `<line x1="${item.x}" y1="${round(y + GRID.dayToLine)}" x2="${item.x + GRID.columnWidth}" y2="${round(y + GRID.dayToLine)}" stroke="${COLORS.white}" stroke-opacity="0.85" stroke-width="1.5"/>`
+      },
     );
   }
+
   if (item.kind === 'city') {
     const baseline = y + 30;
-    const stateWidth = item.state ? measure(item.state, GRID.stateSize, WEIGHTS.state) + 14 : 0;
+    const stateWidth = item.state
+      ? measure(item.state, GRID.stateSize, 700, FONT_FAMILY_EXTENDED) + 14
+      : 0;
+
     const citySize = fitSingleLine(
-      item.city,
+      sanitizeText(item.city),
       GRID.columnWidth - stateWidth,
       GRID.citySize,
       GRID.cityMinSize,
-      WEIGHTS.city,
+      900,
       measure,
     );
-    const cityWidth = measure(item.city, citySize, WEIGHTS.city);
-    return (
-      textNode(item.city, item.x, baseline, citySize, COLORS.white, {weight: 900, family: FONT_FAMILY}) +
-      (item.state
-        ? textNode(item.state, item.x + cityWidth + 14, baseline, GRID.stateSize, COLORS.yellow, {weight: 700, family: FONT_FAMILY_EXTENDED})
-        : '')
+
+    const cityWidth = measure(
+      sanitizeText(item.city),
+      citySize,
+      900,
+      FONT_FAMILY,
     );
+
+    const cityMarkup = textNode(
+      sanitizeText(item.city),
+      item.x,
+      baseline,
+      citySize,
+      COLORS.white,
+      {
+        weight: 900,
+        family: FONT_FAMILY,
+      },
+    );
+
+    const stateMarkup = item.state
+      ? textNode(
+          sanitizeText(item.state),
+          item.x + cityWidth + 14,
+          baseline,
+          GRID.stateSize,
+          COLORS.yellow,
+          {
+            weight: 700,
+            family: FONT_FAMILY_EXTENDED,
+          },
+        )
+      : '';
+
+    // Thin white separator immediately beneath every city heading.
+    const dividerY = y + GRID.cityHeight - 2;
+    const cityDivider =
+      `<line x1="${round(item.x)}" y1="${round(dividerY)}" x2="${round(item.x + GRID.columnWidth)}" y2="${round(dividerY)}" stroke="${COLORS.white}" stroke-opacity="0.85" stroke-width="1"/>`;
+
+    return cityMarkup + stateMarkup + cityDivider;
   }
-  const timeSize = fitSingleLine(item.time, GRID.timeBoxWidth - 14, GRID.timeSize, FIT_FLOOR, WEIGHTS.time, measure);
+
+  const timeSize = fitSingleLine(
+    sanitizeText(item.time),
+    GRID.timeBoxWidth - 14,
+    GRID.timeSize,
+    FIT_FLOOR,
+    900,
+    measure,
+  );
+
   const textX = item.x + GRID.textInset;
+
+  // Hours use a white rounded pill with red Transducer Black text.
   let markup =
-    textNode(item.time, item.x + GRID.timeBoxWidth / 2, y + GRID.rowMinHeight / 2 + timeSize * 0.36, timeSize, COLORS.white, {
-      anchor: 'middle',
-      weight: 900,
-      family: FONT_FAMILY,
-    });
+    `<rect x="${round(item.x)}" y="${round(y)}" width="${round(GRID.timeBoxWidth)}" height="${round(GRID.rowMinHeight)}" rx="16" ry="16" fill="${COLORS.white}"/>` +
+    textNode(
+      sanitizeText(item.time),
+      item.x + GRID.timeBoxWidth / 2,
+      y + GRID.rowMinHeight / 2 + timeSize * 0.36,
+      timeSize,
+      COLORS.red,
+      {
+        anchor: 'middle',
+        weight: 900,
+        family: FONT_FAMILY,
+      },
+    );
+
+  // Mobilization name: Transducer Black 900, white.
   item.title.lines.forEach((line, index) => {
-    markup += textNode(line, textX, y + titleBaseline(item.title, index), item.title.size, COLORS.white, {
-      weight: WEIGHTS.title,
-      family: FONT_FAMILY,
-    });
+    markup += textNode(
+      sanitizeText(line),
+      textX,
+      y + titleBaseline(item.title, index),
+      item.title.size,
+      COLORS.white,
+      {
+        weight: 900,
+        family: FONT_FAMILY,
+      },
+    );
   });
+
+  // Location: Transducer Medium 500, white at 85% opacity.
   if (item.place) {
     const place = item.place;
+
     place.lines.forEach((line, index) => {
-      markup += textNode(line, textX, y + placeBaseline(item.title, place, index), place.size, COLORS.white, {
-        weight: 500,
-        family: FONT_FAMILY,
-        opacity: 0.85,
-      });
+      markup += textNode(
+        sanitizeText(line),
+        textX,
+        y + placeBaseline(item.title, place, index),
+        place.size,
+        COLORS.white,
+        {
+          weight: 500,
+          family: FONT_FAMILY,
+          opacity: 0.85,
+        },
+      );
     });
   }
+
   return markup;
 }
 
@@ -537,7 +633,7 @@ export function generateShareCard(events: readonly MobilizationEvent[], options:
 
   const areaTop = GRID.areaTop + shiftY;
   const drafts = planPages(events, bottom - areaTop, measure);
-  const style = fontStyle(assets.fonts);
+  const style = getFontStyles(assets.fonts);
   const total = drafts.length;
 
   const pages = drafts.map<ShareCardPage>((draft, index) => {

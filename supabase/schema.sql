@@ -171,8 +171,24 @@ create table if not exists public.event_submissions(
   constraint event_submissions_message_len_chk check(message is null or char_length(message) <= 2500)
 );
 
+alter table public.events add column if not exists poster_sha256 text;
+create index if not exists events_poster_sha256_idx on public.events(poster_sha256) where poster_sha256 is not null;
+alter table public.event_submissions add column if not exists related_event_id uuid references public.events(id) on delete set null;
+
 create table if not exists public.poster_index (
-  sha256 text primary key check (sha256 ~ '^[0-9a-f]{64}
+  sha256 text primary key check (sha256 ~ '^[0-9a-f]{64}$'),
+  source_filename text not null,
+  source_filenames text[] not null default '{}',
+  source_indices integer[] not null default '{}',
+  storage_path text not null,
+  image_url text not null,
+  file_bytes bigint,
+  width integer,
+  height integer,
+  duplicate_count integer not null default 1,
+  matched_event_ids uuid[] not null default '{}',
+  indexed_at timestamptz not null default now()
+);
 alter table public.event_submissions enable row level security;
 
 drop policy if exists "chat approved or own" on public.chat_messages;

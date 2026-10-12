@@ -467,14 +467,16 @@ function getFontStyles(fonts: readonly CardFontFace[]): string {
   const faces = fonts
     .filter(font => FONT_DATA_URL_PATTERN.test(font.dataUrl))
     .map(font => {
-      // Fonte importada de src/assets/share para ser embutida no SVG de produção.
       const format = font.format ?? 'opentype';
       return `@font-face{font-family:"${font.family ?? FONT_FAMILY}";font-weight:${font.weight};font-style:normal;src:url(${font.dataUrl}) format("${format}");}`;
     })
     .join('');
 
-  return faces ? `<style>${faces}</style>` : '';
+  const globalRules = `text{text-transform:uppercase!important;} rect{rx:0!important;ry:0!important;}`;
+
+  return `<style>${faces}${globalRules}</style>`;
 }
+
 
 function renderItem(item: Item, top: number, measure: Measure): string {
   const y = top + item.y;

@@ -603,3 +603,38 @@ export function generateShareCard(events: readonly MobilizationEvent[], options:
       } else if (item.kind === 'city') {
         const cleanCity = escapeXml(sanitizeText(item.city).toUpperCase());
         const cleanState = escapeXml(item.state.toUpperCase());
+
+svg += <text x="${item.x}" y="${item.y + 25}"><tspan class="text-city" font-size="${GRID.citySize}px">${cleanCity}</tspan> <tspan class="text-state" font-size="${GRID.stateSize}px">${cleanState}</tspan></text>;
+svg += <line x1="${item.x}" y1="${item.y + 35}" x2="${item.x + GRID.columnWidth}" y2="${item.y + 35}" stroke="${COLORS.white}" stroke-width="1.5" opacity="0.6" />;
+} else if (item.kind === 'row') {
+svg += <rect x="${item.x}" y="${item.y}" width="${GRID.timeBoxWidth}" height="32" rx="16" fill="${COLORS.white}" />;
+svg += <text x="${item.x + GRID.timeBoxWidth / 2}" y="${item.y + 22}" class="text-time" font-size="${GRID.timeSize}px">${escapeXml(item.time)}</text>;
+item.title.lines.forEach((line, lIdx) => {
+svg += <text x="${item.x + GRID.textInset}" y="${item.y + titleBaseline(item.title, lIdx)}" class="text-title" font-size="${item.title.size}px">${escapeXml(line)}</text>;
+});
+if (item.place) {
+item.place.lines.forEach((line, lIdx) => {
+svg += <text x="${item.x + GRID.textInset}" y="${item.y + placeBaseline(item.title, item.place!, lIdx)}" class="text-place" font-size="${item.place!.size}px">${escapeXml(line)}</text>;
+});
+}
+}
+});
+svg += <text x="${dimensions.width / 2}" y="${dimensions.height - 50}" class="text-footer" font-size="28px">AGENDA-MOBILIZACOES.PARTICIPA.WORKERS.DEV</text></svg>;
+return {
+svg,
+width: dimensions.width,
+height: dimensions.height,
+index: idx + 1,
+total: drafts.length,
+shownEvents: draft.events
+};
+});
+const totalShown = pages.reduce((acc, p) => acc + p.shownEvents, 0);
+return {
+svg: pages[0].svg,
+width: dimensions.width,
+height: dimensions.height,
+pages,
+shownEvents: totalShown
+};
+}

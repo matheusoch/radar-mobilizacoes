@@ -785,3 +785,17 @@ body{background:var(--page);color:var(--ink)}
 .share-instagram p{margin:0;font-size:14px;line-height:1.5;color:var(--muted)}
 .share-canvas-pages{display:grid;gap:12px;width:100%}
 .share-canvas-wrap{max-height:none}
+
+
+/* Divulgação compacta: mantém o compartilhamento acessível sem competir com a agenda. */
+.share-section-compact{padding:14px 0;background:#fbfaf7;border-bottom:1px solid var(--line)}
+.share-cta-compact{display:flex;justify-content:space-between;align-items:center;gap:16px;max-width:1180px}
+.share-note-copy{display:flex;align-items:center;gap:10px;min-width:0}
+.share-note-copy>svg{flex:none;color:var(--accent)}
+.share-note-copy p{margin:0;color:var(--muted);font-size:13px;line-height:1.45}
+.share-cta-compact .share-cta-actions{gap:10px 16px;flex:none}
+.share-cta-compact .share-cta-main{min-height:36px;padding:8px 12px;font-size:12px}
+.share-cta-compact .share-section-link{margin-top:0;font-size:12px}
+.share-cta-compact .share-cta-feedback{min-height:0;margin:3px 0 0;font-size:11px;grid-column:1/-1}
+.share-card-actions .share-card-buttons{flex-wrap:wrap}
+@media(max-width:620px){.share-cta-compact{align-items:flex-start;flex-direction:column;gap:10px}.share-cta-compact .share-cta-actions{width:100%;align-items:flex-start;flex-wrap:wrap}.share-cta-compact .share-cta-main{min-height:38px}.share-cta-compact .share-cta-feedback{margin-top:0}}

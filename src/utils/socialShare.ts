@@ -32,6 +32,72 @@ function hashtagLine(hashtags: readonly string[]): string {
   return hashtags.map(tag => `#${tag}`).join(' ');
 }
 
+
+/** Monta uma legenda completa reutilizável pela Home e pelo criador de cards. */
+export function buildShareCaption(content: ShareContent): string {
+  const parts = [content.text.trim()];
+  const hashtags = normalizeHashtags(content.hashtags);
+  if (hashtags.length) parts.push(hashtagLine(hashtags));
+  if (content.url.trim()) parts.push(content.url.trim());
+  return parts.filter(Boolean).join('\n\n');
+}
+
+const ACRONYM_CASE = new Map<string, string>([
+  ['mst', 'MST'], ['une', 'UNE'], ['cut', 'CUT'], ['pt', 'PT'], ['psol', 'PSOL'],
+  ['pcb', 'PCB'], ['pstu', 'PSTU'], ['up', 'UP'], ['pcdob', 'PCdoB'],
+  ['uema', 'UEMA'], ['ufes', 'UFES'], ['ufrj', 'UFRJ'], ['ccsa', 'CCSA'], ['dce', 'DCE'],
+  ['sindipetro', 'SINDIPETRO'], ['mnlm', 'MNLM'], ['usp', 'USP'], ['ufba', 'UFBA'],
+  ['ufpe', 'UFPE'], ['ufmg', 'UFMG'], ['unb', 'UnB'], ['ufc', 'UFC'], ['ufpi', 'UFPI'],
+  ['ufsc', 'UFSC'], ['ufrgs', 'UFRGS'], ['ufs', 'UFS'], ['ufscar', 'UFSCar'],
+  ['ifce', 'IFCE'], ['ifrn', 'IFRN'], ['ifma', 'IFMA'], ['ifpe', 'IFPE'], ['ifsp', 'IFSP'],
+  ['ufg', 'UFG'], ['ufpa', 'UFPA'],
+]);
+
+const ACRONYM_PATTERN = /\b(MST|UNE|CUT|PT|PSOL|PCB|PSTU|UP|PCdoB|UEMA|UFES|UFRJ|CCSA|DCE|SINDIPETRO|MNLM|USP|UFBA|UFPE|UFMG|UnB|UFC|UFPI|UFSC|UFRGS|UFS|UFSCar|IFCE|IFRN|IFMA|IFPE|IFSP|UFG|UFPA)\b/gi;
+
+/** Normaliza a caixa das siglas conhecidas sem alterar o restante do texto. */
+export function preserveAcronyms(value: string): string {
+  return value.replace(ACRONYM_PATTERN, match => ACRONYM_CASE.get(match.toLocaleLowerCase('pt-BR')) ?? match.toUpperCase());
+}
+
+function uniqueEventCities(events: readonly MobilizationEvent[]): string[] {
+  const cities = new Map<string, string>();
+  for (const event of events) {
+    const city = preserveAcronyms((event.city || '').trim());
+    if (city) cities.set(city.toLocaleLowerCase('pt-BR'), city);
+  }
+  return [...cities.values()];
+}
+
+/** Lista até quatro cidades, com pontuação natural em português. */
+export function listEventCities(events: readonly MobilizationEvent[], max = 4): string {
+  const cities = uniqueEventCities(events).slice(0, Math.max(0, max));
+  if (cities.length <= 1) return cities[0] ?? '';
+  if (cities.length === 2) return cities[0] + ' e ' + cities[1];
+  return cities.slice(0, -1).join(', ') + ' e ' + cities[cities.length - 1];
+}
+
+/** Texto pronto para divulgar a agenda a partir da Home. */
+export function buildAgendaShareText(events: readonly MobilizationEvent[]): string {
+  const publicEvents = events.filter(event => event.public);
+  const total = publicEvents.length;
+  if (!total) {
+    return 'Agenda de Mobilizações pelo Lula: acesse a agenda e ajude a divulgar as próximas mobilizações.';
+  }
+
+  const cities = uniqueEventCities(publicEvents);
+  const cityList = listEventCities(publicEvents, 4);
+  const cityLine = cityList
+    ? (cities.length > 4 ? 'Algumas das cidades com mobilizações: ' : 'Cidades com mobilizações: ') + cityList + '.'
+    : '';
+
+  return [
+    'Agenda de Mobilizações pelo Lula: ' + total + ' ' + (total === 1 ? 'evento público organizado pelo Brasil.' : 'eventos públicos organizados pelo Brasil.'),
+    cityLine,
+    'Acesse a agenda completa e ajude a divulgar.',
+  ].filter(Boolean).join('\n');
+}
+
 function withUrl(content: ShareContent, hashtags: readonly string[]): string {
   const parts = [content.text.trim()];
   if (hashtags.length) parts.push(hashtagLine(hashtags));
@@ -126,24 +192,37 @@ export function openShareWindow(network: SocialNetwork, content: ShareContent): 
 }
 
 function shortDate(date: string): string {
-  const parsed = new Date(`${date}T12:00:00`);
+  const parsed = new Date(date + 'T12:00:00');
   if (Number.isNaN(parsed.getTime())) return date;
   return parsed.toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'});
 }
 
 export function describeEventForShare(event: MobilizationEvent): string {
-  const place = [event.city, event.state].filter(Boolean).join(' - ');
+  const title = preserveAcronyms(event.title || 'Mobilização');
+  const city = preserveAcronyms((event.city || '').trim());
+  const state = preserveAcronyms((event.state || '').trim());
+  const place = [city, state].filter(Boolean).join(' - ');
   const when = [shortDate(event.date), event.time].filter(Boolean).join(' · ');
-  return `${event.title} (${[when, place].filter(Boolean).join(' · ')})`;
+  return title + ' (' + [when, place].filter(Boolean).join(' · ') + ')';
 }
 
 export function buildEventsShareText(events: readonly MobilizationEvent[], maxListed = 3): string {
   if (!events.length) return 'Agenda de Mobilizações: confira os próximos atos e eventos pelo Brasil.';
-  const listed = events.slice(0, maxListed).map(event => `• ${describeEventForShare(event)}`);
+
+  const cities = uniqueEventCities(events);
+  const cityList = listEventCities(events, 4);
+  const cityLine = cityList
+    ? (cities.length > 4 ? 'Algumas das cidades com mobilizações: ' : 'Cidades com mobilizações: ') + cityList + '.'
+    : '';
+  const listed = events.slice(0, maxListed).map(event => '• ' + describeEventForShare(event));
   const rest = events.length - listed.length;
-  const header =
-    events.length === 1 ? 'Agenda de Mobilizações: confira este evento.' : 'Agenda de Mobilizações: confira os próximos eventos.';
-  return [header, ...listed, rest > 0 ? `+ ${rest} ${rest === 1 ? 'evento' : 'eventos'} na agenda` : '']
-    .filter(Boolean)
-    .join('\n');
+  const header = events.length === 1
+    ? 'Agenda de Mobilizações: confira este evento.'
+    : 'Agenda de Mobilizações: confira os próximos eventos.';
+  return [
+    header,
+    cityLine,
+    ...listed,
+    rest > 0 ? '+ ' + rest + ' ' + (rest === 1 ? 'evento' : 'eventos') + ' na agenda' : '',
+  ].filter(Boolean).join('\n');
 }

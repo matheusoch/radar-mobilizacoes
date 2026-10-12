@@ -4,7 +4,7 @@ import {Check, Copy, Download, Image as ImageIcon, Megaphone, Share2, X} from 'l
 import {BANNER_PATH, resolveSiteUrl} from '../config/site';
 import type {MobilizationEvent} from '../types';
 import {downloadBlob} from '../utils/shareCardGenerator';
-import {SOCIAL_NETWORKS, buildShareLink, type ShareContent} from '../utils/socialShare';
+import {SOCIAL_NETWORKS, buildAgendaShareText, buildShareCaption, buildShareLink, type ShareContent} from '../utils/socialShare';
 
 const SHARE_TITLE = 'Agenda de Mobilizações pelo Lula';
 const BANNER_FILE_NAME = 'agenda-mobilizacoes.png';
@@ -37,18 +37,14 @@ export default function ShareSection({events}: {events: MobilizationEvent[]}) {
   const [feedback, setFeedback] = useState('');
 
   const content = useMemo<ShareContent>(() => {
-    const url = resolveSiteUrl();
-    const total = events.filter(event => event.public).length;
-    const text = total
-      ? `Agenda de Mobilizações pelo Lula: ${total} ${total === 1 ? 'ato' : 'atos'} organizados pelo Brasil. Acesse a agenda e ajude a ocupar as ruas.`
-      : 'Agenda de Mobilizações pelo Lula: acesse a agenda e ajude a ocupar as ruas.';
-    return {text, url, hashtags: HASHTAGS};
+    return {
+      text: buildAgendaShareText(events),
+      url: resolveSiteUrl(),
+      hashtags: HASHTAGS,
+    };
   }, [events]);
 
-  const caption = useMemo(
-    () => `${content.text}\n\n${content.url}\n\n${HASHTAGS.map(tag => `#${tag}`).join(' ')}`,
-    [content],
-  );
+  const caption = useMemo(() => buildShareCaption(content), [content]);
 
   useEffect(() => {
     if (!feedback) return undefined;
@@ -100,31 +96,23 @@ export default function ShareSection({events}: {events: MobilizationEvent[]}) {
   };
 
   return (
-    <section className="share-section" aria-labelledby="share-section-title">
-      <div className="container share-cta">
-        <div className="eyebrow">
-          <Megaphone size={14} aria-hidden="true" /> DIVULGAR
+    <section className="share-section share-section-compact" aria-labelledby="share-section-title">
+      <div className="container share-cta share-cta-compact">
+        <div className="share-note-copy">
+          <Megaphone size={17} aria-hidden="true" />
+          <p id="share-section-title">Ajude mais pessoas a conhecerem a Agenda de Mobilizações</p>
         </div>
-        <h2 id="share-section-title">Ocupe as redes. Ocupe as ruas.</h2>
-        <p>
-          Cada compartilhamento coloca mais gente na rua. Envie a agenda para seus grupos e convoque quem está perto de
-          você.
-        </p>
         <div className="share-cta-actions">
-          <button type="button" className="button primary share-cta-main" onClick={share} disabled={busy}>
-            <Share2 size={18} aria-hidden="true" />
-            {busy ? 'Preparando…' : 'Compartilhar'}
+          <button type="button" className="button ghost share-cta-main" onClick={share} disabled={busy}>
+            <Share2 size={16} aria-hidden="true" />
+            {busy ? 'Preparando…' : 'Compartilhar agenda'}
           </button>
           <Link to="/divulgar" className="share-section-link">
-            <ImageIcon size={16} aria-hidden="true" /> Montar painel com eventos escolhidos
+            <ImageIcon size={15} aria-hidden="true" /> Criar painel
           </Link>
         </div>
         <p className="share-cta-feedback" aria-live="polite">
-          {feedback && (
-            <>
-              <Check size={14} aria-hidden="true" /> {feedback}
-            </>
-          )}
+          {feedback && <><Check size={14} aria-hidden="true" /> {feedback}</>}
         </p>
       </div>
 

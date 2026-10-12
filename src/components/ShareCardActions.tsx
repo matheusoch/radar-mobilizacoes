@@ -1,8 +1,8 @@
 import {useRef, useState} from 'react';
-import {Check, Download, FileCode2, Link2, Share2} from 'lucide-react';
+import {Check, Copy, Download, FileCode2, Link2, Share2} from 'lucide-react';
 import type {ShareCardResult} from '../utils/shareCardGenerator';
 import {downloadBlob, svgToBlob, svgToPngBlob} from '../utils/shareCardGenerator';
-import {SOCIAL_NETWORKS, buildShareLink, type ShareContent} from '../utils/socialShare';
+import {SOCIAL_NETWORKS, buildShareCaption, buildShareLink, type ShareContent} from '../utils/socialShare';
 
 interface Props {
   card: ShareCardResult | null;
@@ -81,6 +81,16 @@ export default function ShareCardActions({card, fileBase, content, shareTitle, c
     }
   };
 
+
+  const copyMessage = async () => {
+    try {
+      await copyToClipboard(buildShareCaption(content));
+      notify('Mensagem pronta copiada.');
+    } catch {
+      notify('Não foi possível copiar a mensagem.');
+    }
+  };
+
   const nativeShare = async () => {
     if (!navigator.share) {
       await copyLink();
@@ -118,6 +128,10 @@ export default function ShareCardActions({card, fileBase, content, shareTitle, c
         <button type="button" className="button ghost" onClick={nativeShare} disabled={disabled}>
           <Share2 size={17} />
           Compartilhar
+        </button>
+        <button type="button" className="button ghost" onClick={copyMessage} disabled={!card}>
+          <Copy size={17} />
+          Copiar mensagem
         </button>
         <button type="button" className="button ghost" onClick={copyLink} disabled={!card}>
           <Link2 size={17} />

@@ -59,7 +59,7 @@ export function matchesQuery(row: SubRow, query: string): boolean {
 }
 
 /** Filtra por aba e busca; mais recentes primeiro. Não altera o array recebido. */
-export function filterSubmissions(rows: SubRow[], tab: SubTab, query: string): SubRow[] {
+export function filterSubmissions<T extends SubRow>(rows: T[], tab: SubTab, query: string): T[] {
   return rows
     .filter((r) => (tab === 'all' ? true : r.status === tab))
     .filter((r) => matchesQuery(r, query))

@@ -21,6 +21,7 @@ export interface CardFontFace {
   weight: CardFontWeight;
   dataUrl: string;
   family?: CardFontFamily;
+  format?: 'opentype' | 'woff2' | 'woff' | 'truetype';
 }
 
 export interface ShareCardAssets {
@@ -87,7 +88,7 @@ const COLORS = {
 } as const;
 
 const GRID = {
-  columnX: [57, 565] as const,
+  columnX: [57, 565] as number[]
   columnWidth: 459,
   barHeight: 14,
   titleY: 65,
@@ -135,37 +136,42 @@ export function escapeXml(value: string): string {
     .replace(/'/g, '&apos;');
 }
 
-const CONNECTORS = new Set(['a','as','ao','aos','com','como','da','das','de','do','dos','e','em','entre','na','nas','no','nos','o','os','ou','para','pela','pelas','pelo','pelos','por','sem','sobre','um','uma','uns','umas']);
+const CONNECTORS = new Set([
+  'a', 'as', 'ao', 'aos', 'com', 'como', 'da', 'das', 'de', 'do', 'dos', 'e',
+  'em', 'entre', 'na', 'nas', 'no', 'nos', 'o', 'os', 'ou', 'para', 'pela',
+  'pelas', 'pelo', 'pelos', 'por', 'sem', 'sobre', 'um', 'uma', 'uns', 'umas',
+]);
 const PROTECTED_ACRONYMS = new Set(['MST','UNE','CUT','PT','PSOL']);
 const ACRONYM_PATTERN = /\b(MST|UNE|CUT|PT|PSOL)\b/gi;
 
 /** Sanitiza textos, converte travessões e preserva siglas políticas. */
+/**
+ * Normaliza textos em Title Case, mantém conectores em minúsculas
+ * exceto no início e preserva as siglas políticas conhecidas.
+ */
 export function sanitizeText(value: unknown): string {
   if (value === null || value === undefined) return '';
-  const input = String(value).replace(/[\u2014\u2013]/g, '-').replace(/\s+/g, ' ').trim();
+  const input = String(value).replace(/[\\u2014\\u2013]/g, '-').replace(/\\s+/g, ' ').trim();
   if (!input) return '';
-  const tokens = new Map<string, string>();
-  let counter = 0;
+  const protectedTokens = new Map<string, string>();
+  let tokenIndex = 0;
   const protectedInput = input.replace(ACRONYM_PATTERN, match => {
     const acronym = match.toUpperCase();
     if (!PROTECTED_ACRONYMS.has(acronym)) return match;
-    const key = 'ZXQPROTECTED' + counter++ + 'QXZ';
-    tokens.set(key, acronym);
-    return key;
+    const token = `zzqprotected${tokenIndex++}qxz`;
+    protectedTokens.set(token, acronym);
+    return token;
   });
-  let first = true;
-  let result = protectedInput.toLocaleLowerCase('pt-BR').split(/(\s+|[-/])/).map(part => {
-    if (!part || /^\s+$/.test(part) || part === '-' || part === '/') return part;
-    if (/^ZXQPROTECTED\d+QXZ$/.test(part)) { first = false; return part; }
-    if (!first && CONNECTORS.has(part)) return part;
-    first = false;
+  let firstWord = true;
+  let result = protectedInput.toLocaleLowerCase('pt-BR').split(/(\\s+|[-/])/).map(part => {
+    if (!part || /^\\s+$/.test(part) || part === '-' || part === '/') return part;
+    if (/^zzqprotected\\d+qxz$/.test(part)) { firstWord = false; return part; }
+    if (!firstWord && CONNECTORS.has(part)) return part;
+    firstWord = false;
     return part.charAt(0).toLocaleUpperCase('pt-BR') + part.slice(1);
   }).join('');
-  tokens.forEach((acronym, key) => { result = result.replace(key, acronym); });
+  protectedTokens.forEach((acronym, token) => { result = result.replace(token, acronym); });
   return result;
-}
-function upper(value: string): string {
-  return value.toLocaleUpperCase('pt-BR');
 }
 
 function round(value: number): number {
@@ -179,10 +185,10 @@ function parseDate(date: string): Date | null {
 
 export function formatCardDateLabel(date: string): string {
   const parsed = parseDate(date);
-  if (!parsed) return upper(date);
+  if (!parsed) return sanitizeText(date);
   const weekday = parsed.toLocaleDateString('pt-BR', {weekday: 'long'}).replace('-feira', '');
   const short = parsed.toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'});
-  return upper(`${weekday} - ${short}`);
+  return sanitizeText(`${weekday} - ${short}`);
 }
 
 /** Horário no formato do card: 8h, 16h, 16h30. */
@@ -285,10 +291,12 @@ function groupEvents(events: readonly MobilizationEvent[]): DayGroup[] {
       day = {date: event.date, cities: []};
       days.push(day);
     }
-    const cityKey = `${event.city}|${event.state}`.toLocaleLowerCase('pt-BR');
+    const normalizedCity = sanitizeText(event.city);
+    const normalizedState = sanitizeText(event.state);
+    const cityKey = `${normalizedCity}|${normalizedState}`.toLocaleLowerCase('pt-BR');
     let city = day.cities.find(item => `${item.city}|${item.state}`.toLocaleLowerCase('pt-BR') === cityKey);
     if (!city) {
-      city = {city: event.city, state: event.state, events: []};
+      city = {city: normalizedCity, state: normalizedState, events: []};
       day.cities.push(city);
     }
     city.events.push(event);
@@ -355,7 +363,7 @@ function planPages(events: readonly MobilizationEvent[], columnHeight: number, m
       let cityShown = false;
       for (const event of group.events) {
         const title = fitText(
-          upper(event.title.trim() || 'Mobilização'),
+          sanitizeText(event.title.trim() || 'Mobilização'),
           textWidth,
           GRID.titleSize,
           GRID.titleMinSize,
@@ -363,9 +371,9 @@ function planPages(events: readonly MobilizationEvent[], columnHeight: number, m
           WEIGHTS.title,
           measure,
         );
-        const placeSource = (event.venue || event.address || '').trim();
+        const placeSource = sanitizeText((event.venue || event.address || '').trim());
         const place = placeSource
-          ? fitText(upper(placeSource), textWidth, GRID.placeSize, GRID.placeMinSize, 2, WEIGHTS.place, measure)
+          ? fitText(sanitizeText(placeSource), textWidth, GRID.placeSize, GRID.placeMinSize, 2, WEIGHTS.place, measure)
           : null;
         const rowHeight = Math.max(GRID.rowMinHeight, rowContentHeight(title, place));
 
@@ -396,7 +404,7 @@ function planPages(events: readonly MobilizationEvent[], columnHeight: number, m
         }
         if (!cityShown) {
           y += last === 'day' ? GRID.cityAfterDay : GRID.cityAfterRow;
-          page.items.push({kind: 'city', x, y, city: upper(group.city), state: upper(group.state)});
+          page.items.push({kind: 'city', x, y, city: sanitizeText(group.city), state: sanitizeText(group.state)});
           y += GRID.cityHeight;
           last = 'city';
           cityShown = true;
@@ -427,11 +435,12 @@ function textNode(
   y: number,
   size: number,
   fill: string,
-  options: {anchor?: Anchor; weight?: Weight; letterSpacing?: number; family?: CardFontFamily} = {},
+  options: {anchor?: Anchor; weight?: Weight; letterSpacing?: number; family?: CardFontFamily; opacity?: number} = {},
 ): string {
-  const {anchor = 'start', weight = WEIGHTS.state, letterSpacing = 0, family = FONT_FAMILY} = options;
+  const {anchor = 'start', weight = WEIGHTS.state, letterSpacing = 0, family = FONT_FAMILY, opacity = 1} = options;
   const spacing = letterSpacing ? ` letter-spacing="${letterSpacing}"` : '';
-  return `<text x="${round(x)}" y="${round(y)}" font-size="${round(size)}" font-weight="${weight}" font-family="${escapeXml(family)}" fill="${fill}" text-anchor="${anchor}"${spacing}>${escapeXml(content)}</text>`;
+  const opacityAttribute = opacity < 1 ? ` opacity="${opacity}"` : '';
+  return `<text x="${round(x)}" y="${round(y)}" font-size="${round(size)}" font-weight="${weight}" font-family="${escapeXml(family)}" fill="${fill}" text-anchor="${anchor}"${spacing}${opacityAttribute}>${escapeXml(content)}</text>`;
 }
 
 function rect(x: number, y: number, width: number, height: number, fill: string): string {
@@ -447,13 +456,11 @@ function fontStyle(fonts: readonly CardFontFace[]): string {
   const faces = fonts
     .filter(font => FONT_DATA_URL_PATTERN.test(font.dataUrl))
     .map(font => {
-      const format = /woff2/i.test(font.dataUrl)
+      const format = font.format ?? (/woff2/i.test(font.dataUrl)
         ? 'woff2'
         : /woff/i.test(font.dataUrl)
           ? 'woff'
-          : /otf/i.test(font.dataUrl)
-            ? 'opentype'
-            : 'truetype';
+          : 'truetype');
       return `@font-face{font-family:'${font.family ?? FONT_FAMILY}';font-weight:${font.weight};font-style:normal;src:url(${font.dataUrl}) format('${format}');}`;
     })
     .join('');
@@ -486,20 +493,19 @@ function renderItem(item: Item, top: number, measure: Measure): string {
     );
     const cityWidth = measure(item.city, citySize, WEIGHTS.city);
     return (
-      textNode(item.city, item.x, baseline, citySize, COLORS.yellow, {weight: WEIGHTS.city, family: FONT_FAMILY}) +
+      textNode(item.city, item.x, baseline, citySize, COLORS.white, {weight: 900, family: FONT_FAMILY}) +
       (item.state
-        ? textNode(item.state, item.x + cityWidth + 14, baseline, GRID.stateSize, COLORS.white, {weight: WEIGHTS.state, family: FONT_FAMILY_EXTENDED})
+        ? textNode(item.state, item.x + cityWidth + 14, baseline, GRID.stateSize, COLORS.yellow, {weight: 700, family: FONT_FAMILY_EXTENDED})
         : '')
     );
   }
   const timeSize = fitSingleLine(item.time, GRID.timeBoxWidth - 14, GRID.timeSize, FIT_FLOOR, WEIGHTS.time, measure);
   const textX = item.x + GRID.textInset;
   let markup =
-    rect(item.x, y, GRID.timeBoxWidth, GRID.rowMinHeight, COLORS.white) +
-    textNode(item.time, item.x + GRID.timeBoxWidth / 2, y + GRID.rowMinHeight / 2 + timeSize * 0.36, timeSize, COLORS.red, {
+    textNode(item.time, item.x + GRID.timeBoxWidth / 2, y + GRID.rowMinHeight / 2 + timeSize * 0.36, timeSize, COLORS.white, {
       anchor: 'middle',
-      weight: WEIGHTS.time,
-        family: FONT_FAMILY,
+      weight: 900,
+      family: FONT_FAMILY,
     });
   item.title.lines.forEach((line, index) => {
     markup += textNode(line, textX, y + titleBaseline(item.title, index), item.title.size, COLORS.white, {
@@ -511,8 +517,9 @@ function renderItem(item: Item, top: number, measure: Measure): string {
     const place = item.place;
     place.lines.forEach((line, index) => {
       markup += textNode(line, textX, y + placeBaseline(item.title, place, index), place.size, COLORS.white, {
-        weight: WEIGHTS.place,
+        weight: 500,
         family: FONT_FAMILY,
+        opacity: 0.85,
       });
     });
   }
@@ -597,10 +604,10 @@ async function toCardImage(load: Promise<{default: string}>): Promise<CardImage>
 
 async function loadFonts(): Promise<{fonts: CardFontFace[]; fontLabel: string}> {
   const fonts: CardFontFace[] = [
-    {weight: 900, family: 'Transducer', dataUrl: transducerBlack},
-    {weight: 500, family: 'Transducer', dataUrl: transducerMedium},
-    {weight: 900, family: 'Transducer Extended', dataUrl: transducerExtendedBlack},
-    {weight: 700, family: 'Transducer Extended', dataUrl: transducerExtendedBold},
+    {weight: 900, family: 'Transducer', dataUrl: transducerBlack, format: 'opentype'},
+    {weight: 500, family: 'Transducer', dataUrl: transducerMedium, format: 'opentype'},
+    {weight: 900, family: 'Transducer Extended', dataUrl: transducerExtendedBlack, format: 'opentype'},
+    {weight: 700, family: 'Transducer Extended', dataUrl: transducerExtendedBold, format: 'opentype'},
   ];
   return {fonts, fontLabel: 'Transducer / Transducer Extended'};
 }

@@ -609,7 +609,7 @@ async function loadFonts(): Promise<{fonts: CardFontFace[]; fontLabel: string}> 
     const entry = entries.find(([filePath]) => (filePath.split('/').pop() ?? filePath) === spec.filename);
     return entry ? {weight: spec.weight, family: spec.family, dataUrl: await entry[1]()} : null;
   }));
-  const fonts = loaded.filter((font): font is CardFontFace => font !== null);
+  const fonts = loaded.filter(font => font !== null) as CardFontFace[];
   if (fonts.length === FONT_FILE_SPECS.length) return {fonts, fontLabel: 'Transducer / Transducer Extended'};
   const module = await import('@fontsource/krona-one/files/krona-one-latin-400-normal.woff2?inline');
   const fallback: CardFontFace[] = fonts.length ? fonts : ([500, 700, 900] as const).map(weight => ({weight, family: FONT_FAMILY, dataUrl: module.default}));

@@ -68,6 +68,7 @@ interface NormalizedEvent {
   id: string;
   title: string;
   weekday: string;
+  date: string;
   city: string;
   state: string;
   time: string;
@@ -99,10 +100,10 @@ const GRID: GridConfig = {
 const DEFAULTS = {
   width: 1080,
   height: 1350,
-  backgroundColor: '#F7F3EC',
-  textColor: '#171717',
-  accentColor: '#D92B27',
-  mutedColor: '#77716B',
+  backgroundColor: '#D81B1F',
+  textColor: '#FFFFFF',
+  accentColor: '#FFC301',
+  mutedColor: '#FFFFFF',
   eventsPerPage: 15,
   outputPrefix: 'mobilizacoes',
 };
@@ -229,7 +230,12 @@ export function sanitizeText(value: unknown): string {
 
   const titleCased = words
     .map((part: string) => {
-      if (!part || /^\s+$/.test(part) || part === '-' || part === '/') {
+      if (
+        !part ||
+        /^\s+$/.test(part) ||
+        part === '-' ||
+        part === '/'
+      ) {
         return part;
       }
 
@@ -307,6 +313,8 @@ function normalizeEvent(
     textOrEmpty(event.day) ||
     '';
 
+  const rawDate = textOrEmpty(event.date);
+
   const rawCity = textOrEmpty(event.city);
 
   const rawState =
@@ -326,6 +334,7 @@ function normalizeEvent(
     id: textOrEmpty(event.id) || `event-${index + 1}`,
     title: sanitizeText(rawTitle),
     weekday: sanitizeText(rawWeekday),
+    date: sanitizeText(rawDate),
     city: sanitizeText(rawCity),
     state: sanitizeText(rawState).toLocaleUpperCase('pt-BR'),
     time: sanitizeText(rawTime),
@@ -395,39 +404,39 @@ function wrapText(
 /**
  * Gera os estilos tipográficos incorporados ao SVG.
  *
- * Os caminhos apontam para os assets do projeto.
- * Ajuste os nomes dos arquivos caso a nomenclatura local seja diferente.
+ * Os caminhos correspondem aos arquivos OTF presentes em
+ * /src/assets/share/.
  */
 function getFontStyles(): string {
   return `
     @font-face {
       font-family: "Transducer";
-      src: url("/src/assets/share/Transducer-Black.woff2")
-        format("woff2");
+      src: url("/src/assets/share/Transducer-Black.otf")
+        format("opentype");
       font-weight: 900;
       font-style: normal;
     }
 
     @font-face {
       font-family: "Transducer";
-      src: url("/src/assets/share/Transducer-Medium.woff2")
-        format("woff2");
+      src: url("/src/assets/share/Transducer-Medium.otf")
+        format("opentype");
       font-weight: 500;
       font-style: normal;
     }
 
     @font-face {
       font-family: "Transducer Extended";
-      src: url("/src/assets/share/Transducer-Extended-Black.woff2")
-        format("woff2");
+      src: url("/src/assets/share/Transducer-Extended-Black.otf")
+        format("opentype");
       font-weight: 900;
       font-style: normal;
     }
 
     @font-face {
       font-family: "Transducer Extended";
-      src: url("/src/assets/share/Transducer-Extended-Bold.woff2")
-        format("woff2");
+      src: url("/src/assets/share/Transducer-Extended-Bold.otf")
+        format("opentype");
       font-weight: 700;
       font-style: normal;
     }
@@ -549,7 +558,7 @@ function svgText(
 ): string {
   const {
     fontSize = 20,
-    fill = '#171717',
+    fill = '#FFFFFF',
     letterSpacing = 0,
     textAnchor = 'start',
     opacity = 1,
@@ -571,6 +580,9 @@ function svgText(
 
 /**
  * Gera o conteúdo SVG de um evento individual.
+ *
+ * Os eventos não têm retângulos brancos de fundo.
+ * O destaque amarelo permanece como uma linha lateral fina.
  */
 function renderEvent(
   event: NormalizedEvent,
@@ -616,6 +628,19 @@ function renderEvent(
   const cityText = event.city;
   const stateText = event.state;
   const weekdayText = event.weekday;
+  const dateText = event.date;
+
+  // Exibe o dia e a data juntos, em amarelo.
+  // Evita repetir a data caso ela já esteja no texto do dia.
+  const dayDateText =
+    weekdayText && dateText
+      ? (
+          weekdayText.includes(dateText)
+            ? weekdayText
+            : `${weekdayText} · ${dateText}`
+        )
+      : (weekdayText || dateText);
+
   const timeText = event.time;
   const locationText = event.location;
 
@@ -623,15 +648,6 @@ function renderEvent(
 
   pieces.push(`
     <g class="event" data-event-id="${escapeXml(event.id)}">
-      <rect
-        x="${x}"
-        y="${y}"
-        width="${width}"
-        height="${height}"
-        rx="4"
-        fill="#FFFFFF"
-        fill-opacity="0.78"
-      />
       <rect
         x="${x}"
         y="${y}"
@@ -644,9 +660,9 @@ function renderEvent(
 
   let currentY = y + 24;
 
-  if (weekdayText) {
+  if (dayDateText) {
     const weekdayLines = wrapText(
-      weekdayText,
+      dayDateText,
       Math.max(16, Math.floor(contentWidth / 10)),
       1,
     );
@@ -762,11 +778,10 @@ function renderEvent(
     );
 
     metadataLines.forEach((line, lineIndex) => {
-      const metadataY =
-        Math.min(
-          y + height - 8,
-          currentY + 15 + lineIndex * 14,
-        );
+      const metadataY = Math.min(
+        y + height - 8,
+        currentY + 15 + lineIndex * 14,
+      );
 
       pieces.push(
         svgText(
@@ -1068,6 +1083,16 @@ function renderPage(
     </g>
 
     ${footer}
+
+    <!-- Barra amarela oficial no topo do card: 14 px de altura. -->
+    <rect
+      class="top-accent-bar"
+      x="0"
+      y="0"
+      width="${width}"
+      height="14"
+      fill="${escapeXml(accentColor)}"
+    />
   </g>
 </svg>`;
 }

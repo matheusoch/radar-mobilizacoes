@@ -1,16 +1,18 @@
-import {Download, MessageCircle, Share2, Link2, Check} from 'lucide-react';
-import {useState} from 'react';
+import {Download, FileCode2, Share2, Link2, Check} from 'lucide-react';
+import {useEffect, useMemo, useState} from 'react';
+import {resolveSiteUrl} from '../config/site';
 import type {MobilizationEvent} from '../types';
+import {
+  downloadBlob,
+  generateShareCard,
+  loadBebasNeueDataUrl,
+  svgToBlob,
+  svgToDataUrl,
+  svgToPngBlob,
+} from '../utils/shareCardGenerator';
+import {SOCIAL_NETWORKS, buildShareLink, describeEventForShare, type ShareContent} from '../utils/socialShare';
 
-type Props = { event: MobilizationEvent };
-
-function eventText(event: MobilizationEvent) {
-  const date = new Date(`${event.date}T12:00:00`).toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-  });
-  return `${event.title}\n📅 ${date}${event.time ? ` · ${event.time}` : ''}\n📍 ${event.city}${event.state ? ` - ${event.state}` : ''}, ${event.venue}`;
-}
+type Props = {event: MobilizationEvent};
 
 async function copyText(value: string) {
   if (navigator.clipboard?.writeText) {
@@ -27,8 +29,8 @@ async function copyText(value: string) {
   area.remove();
 }
 
-function fileName(event: MobilizationEvent) {
-  return `${event.city}-${event.date}-poster.jpg`
+function fileBase(event: MobilizationEvent) {
+  return `${event.city}-${event.date}`
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -39,38 +41,75 @@ function fileName(event: MobilizationEvent) {
 export default function PosterActions({event}: Props) {
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [fontDataUrl, setFontDataUrl] = useState<string | null>(null);
 
-  if (!event.image_url) return null;
+  useEffect(() => {
+    let active = true;
+    loadBebasNeueDataUrl().then(url => {
+      if (active) setFontDataUrl(url);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  const url = window.location.href;
-  const text = eventText(event);
+  const card = useMemo(() => generateShareCard([event], {format: 'feed', fontDataUrl}), [event, fontDataUrl]);
+  const hasPoster = Boolean(event.image_url);
+  const base = fileBase(event);
+
+  const content = useMemo<ShareContent>(
+    () => ({
+      text: describeEventForShare(event),
+      url: `${resolveSiteUrl()}/evento/${encodeURIComponent(event.id)}`,
+      hashtags: ['AgendaDeMobilizacoes'],
+    }),
+    [event],
+  );
 
   const showFeedback = (message: string) => {
     setFeedback(message);
-    window.setTimeout(() => setFeedback(''), 2200);
+    window.setTimeout(() => setFeedback(''), 2600);
   };
+
+  const fetchPoster = async (): Promise<Blob> => {
+    const response = await fetch(event.image_url!, {mode: 'cors'});
+    if (!response.ok) throw new Error('Não foi possível carregar o pôster.');
+    return response.blob();
+  };
+
+  const buildCardPng = () => svgToPngBlob(card.svg, card.width, card.height);
 
   const sharePoster = async () => {
     setBusy(true);
     try {
-      const response = await fetch(event.image_url!, {mode: 'cors'});
-      if (!response.ok) throw new Error('Não foi possível carregar o pôster.');
-      const blob = await response.blob();
-      const mime = blob.type || 'image/jpeg';
-      const file = new File([blob], fileName(event), {type: mime});
+      let blob: Blob;
+      let name: string;
+      if (hasPoster) {
+        try {
+          blob = await fetchPoster();
+          name = `${base}-poster.${blob.type === 'image/png' ? 'png' : 'jpg'}`;
+        } catch {
+          blob = await buildCardPng();
+          name = `${base}-card.png`;
+        }
+      } else {
+        blob = await buildCardPng();
+        name = `${base}-card.png`;
+      }
+      const file = new File([blob], name, {type: blob.type || 'image/png'});
       if (navigator.share && navigator.canShare?.({files: [file]})) {
-        await navigator.share({title: event.title, text, files: [file]});
+        await navigator.share({title: event.title, text: content.text, files: [file]});
         return;
       }
       if (navigator.share) {
-        await navigator.share({title: event.title, text, url});
+        await navigator.share({title: event.title, text: content.text, url: content.url});
         showFeedback('Seu dispositivo não aceita compartilhar o arquivo; enviei o link.');
         return;
       }
       showFeedback('Seu navegador não oferece compartilhamento nativo.');
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
-      showFeedback('Não foi possível compartilhar a imagem. Use “Baixar imagem”.');
+      showFeedback('Não foi possível compartilhar a imagem. Use “Baixar card”.');
     } finally {
       setBusy(false);
     }
@@ -79,17 +118,8 @@ export default function PosterActions({event}: Props) {
   const downloadPoster = async () => {
     setBusy(true);
     try {
-      const response = await fetch(event.image_url!, {mode: 'cors'});
-      if (!response.ok) throw new Error('download-failed');
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = objectUrl;
-      anchor.download = fileName(event);
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(objectUrl);
+      const blob = await fetchPoster();
+      downloadBlob(blob, `${base}-poster.${blob.type === 'image/png' ? 'png' : 'jpg'}`);
       showFeedback('Pôster baixado.');
     } catch {
       const anchor = document.createElement('a');
@@ -103,14 +133,26 @@ export default function PosterActions({event}: Props) {
     }
   };
 
-  const shareWhatsApp = () => {
-    const message = `${text}\n\n${url}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+  const downloadCardPng = async () => {
+    setBusy(true);
+    try {
+      downloadBlob(await buildCardPng(), `${base}-card.png`);
+      showFeedback('Card PNG baixado.');
+    } catch {
+      showFeedback('Não foi possível gerar o PNG. Tente o SVG.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const downloadCardSvg = () => {
+    downloadBlob(svgToBlob(card.svg), `${base}-card.svg`);
+    showFeedback('Card SVG baixado.');
   };
 
   const copyLink = async () => {
     try {
-      await copyText(url);
+      await copyText(content.url);
       showFeedback('Link copiado.');
     } catch {
       showFeedback('Não consegui copiar automaticamente.');
@@ -121,29 +163,69 @@ export default function PosterActions({event}: Props) {
     <div className="poster-section">
       <div className="poster-heading">
         <div>
-          <div className="eyebrow">PÔSTER</div>
+          <div className="eyebrow">{hasPoster ? 'PÔSTER' : 'CARD DE DIVULGAÇÃO'}</div>
           <h2>Compartilhe esta mobilização</h2>
         </div>
-        {feedback && <span className="poster-feedback" aria-live="polite"><Check size={15}/>{feedback}</span>}
+        {feedback && (
+          <span className="poster-feedback" aria-live="polite">
+            <Check size={15} />
+            {feedback}
+          </span>
+        )}
       </div>
       <figure className="poster-frame">
-        <img src={event.image_url} alt={`Pôster de ${event.title}`} loading="lazy" />
+        {hasPoster ? (
+          <img src={event.image_url!} alt={`Pôster de ${event.title}`} loading="lazy" />
+        ) : (
+          <img
+            src={svgToDataUrl(card.svg)}
+            width={card.width}
+            height={card.height}
+            alt={`Card de divulgação de ${event.title}`}
+          />
+        )}
       </figure>
       <div className="poster-actions" aria-label="Ações do pôster">
         <button className="button primary" onClick={sharePoster} disabled={busy}>
-          <Share2 size={17}/>{busy ? 'Preparando…' : 'Compartilhar pôster'}
+          <Share2 size={17} />
+          {busy ? 'Preparando…' : hasPoster ? 'Compartilhar pôster' : 'Compartilhar card'}
         </button>
-        <button className="button whatsapp" onClick={shareWhatsApp}>
-          <MessageCircle size={17}/>WhatsApp
+        {hasPoster && (
+          <button className="button ghost" onClick={downloadPoster} disabled={busy}>
+            <Download size={17} />
+            Baixar pôster
+          </button>
+        )}
+        <button className="button ghost" onClick={downloadCardPng} disabled={busy}>
+          <Download size={17} />
+          Baixar card
         </button>
-        <button className="button ghost" onClick={downloadPoster} disabled={busy}>
-          <Download size={17}/>Baixar imagem
+        <button className="button ghost" onClick={downloadCardSvg}>
+          <FileCode2 size={17} />
+          Card SVG
         </button>
         <button className="button ghost" onClick={copyLink}>
-          <Link2 size={17}/>Copiar link
+          <Link2 size={17} />
+          Copiar link
         </button>
       </div>
-      <p className="poster-help">No celular, “Compartilhar pôster” tenta enviar a própria imagem para os aplicativos disponíveis. O botão WhatsApp envia o link do evento com contexto.</p>
+      <div className="share-social" role="group" aria-label="Compartilhar nas redes">
+        {SOCIAL_NETWORKS.map(network => (
+          <a
+            key={network.id}
+            className={`share-social-link share-social-${network.id}`}
+            href={buildShareLink(network.id, content)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {network.label}
+          </a>
+        ))}
+      </div>
+      <p className="poster-help">
+        No celular, “Compartilhar” tenta enviar a própria imagem para os aplicativos disponíveis. Os botões das redes
+        publicam o link do evento com contexto.
+      </p>
     </div>
   );
 }

@@ -1,16 +1,13 @@
-import {useEffect,useMemo,useRef,useState} from 'react';
-import {CalendarDays,Check,Download,Image as ImageIcon,Link as LinkIcon,Share2,Star,X} from 'lucide-react';
+import {useEffect,useMemo,useState} from 'react';
+import {CalendarDays,Check,Image as ImageIcon,Star,X} from 'lucide-react';
+import {IMAGE_FORMATS,IMAGE_FORMAT_KEYS,resolveSiteUrl,type ImageFormatKey} from '../config/site';
 import type {MobilizationEvent} from '../types';
+import {generateShareCard,loadBebasNeueDataUrl,svgToDataUrl} from '../utils/shareCardGenerator';
+import {buildEventsShareText,type ShareContent} from '../utils/socialShare';
+import ShareCardActions from './ShareCardActions';
 
 const MAX_EVENTS=5;
-const CARD_WIDTH=1080;
-const CARD_HEIGHT=1350;
-const BG='#ba1414';
-const PANEL='#951010';
-const WHITE='#ffffff';
-const YELLOW='#f7db26';
-
-function dateObj(date:string){return new Date(date+'T12:00:00');}
+const HASHTAGS=['AgendaDeMobilizacoes'] as const;
 
 function getTimeInfo(event:MobilizationEvent){
   const raw=(event.time_label||event.time||'').trim();
@@ -33,267 +30,6 @@ function displayLocation(event:MobilizationEvent){
   return [event.city,event.state].filter(Boolean).join(' ');
 }
 
-function formatDateLabel(date:string){
-  const d=dateObj(date);
-  const weekday=d.toLocaleDateString('pt-BR',{weekday:'long'}).replace('-feira','').toUpperCase();
-  return weekday+' - '+d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-}
-
-function wrapLines(ctx:CanvasRenderingContext2D,text:string,maxWidth:number,maxLines=2){
-  const words=text.trim().split(/\s+/).filter(Boolean);
-  const lines:string[]=[];
-  let line='';
-  for(const word of words){
-    const next=line?line+' '+word:word;
-    if(ctx.measureText(next).width<=maxWidth||!line) line=next;
-    else {lines.push(line);line=word;}
-  }
-  if(line)lines.push(line);
-  if(lines.length<=maxLines)return lines;
-
-  const clipped=lines.slice(0,maxLines);
-  let last=clipped[maxLines-1];
-  while(ctx.measureText(last+'…').width>maxWidth&&last.length>5)last=last.slice(0,-1);
-  clipped[maxLines-1]=last+'…';
-  return clipped;
-}
-
-function fitWrappedText(ctx:CanvasRenderingContext2D,text:string,maxWidth:number,maxLines:number,startSize:number,minSize:number,fontFamily:string){
-  let size=startSize;
-  while(size>=minSize){
-    ctx.font='900 italic '+size+'px '+fontFamily;
-    const lines=wrapLines(ctx,text,maxWidth,maxLines);
-    if(lines.every(line=>ctx.measureText(line).width<=maxWidth))return {size,lines};
-    size-=1;
-  }
-  ctx.font='900 italic '+minSize+'px '+fontFamily;
-  return {size:minSize,lines:wrapLines(ctx,text,maxWidth,maxLines)};
-}
-
-function fitSingleLine(ctx:CanvasRenderingContext2D,text:string,maxWidth:number,startSize:number,minSize:number,weight='700'){
-  let size=startSize;
-  while(size>=minSize){
-    ctx.font=weight+' italic '+size+'px "Arial Narrow", Arial, sans-serif';
-    if(ctx.measureText(text).width<=maxWidth)return {size,text};
-    size-=1;
-  }
-  ctx.font=weight+' italic '+minSize+'px "Arial Narrow", Arial, sans-serif';
-  let clipped=text;
-  while(ctx.measureText(clipped+'…').width>maxWidth&&clipped.length>6)clipped=clipped.slice(0,-1);
-  return {size:minSize,text:clipped+'…'};
-}
-
-function roundRect(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number,r:number){
-  ctx.beginPath();
-  if(typeof ctx.roundRect==='function'){ctx.roundRect(x,y,w,h,r);return;}
-  ctx.moveTo(x+r,y);
-  ctx.lineTo(x+w-r,y);
-  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
-  ctx.lineTo(x+w,y+h-r);
-  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
-  ctx.lineTo(x+r,y+h);
-  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
-  ctx.lineTo(x,y+r);
-  ctx.quadraticCurveTo(x,y,x+r,y);
-  ctx.closePath();
-}
-
-function pill(ctx:CanvasRenderingContext2D,text:string,x:number,y:number,w:number,h:number,font:string){
-  ctx.fillStyle=WHITE;
-  roundRect(ctx,x,y,w,h,h/2);
-  ctx.fill();
-  ctx.fillStyle=PANEL;
-  ctx.font=font;
-  ctx.textAlign='center';
-  ctx.textBaseline='middle';
-  ctx.fillText(text,x+w/2,y+h/2+1);
-  ctx.textAlign='left';
-  ctx.textBaseline='alphabetic';
-}
-
-function eventMetrics(ctx:CanvasRenderingContext2D,event:MobilizationEvent,maxWidth:number,rowH:number,compact:boolean){
-  const title=fitWrappedText(
-    ctx,
-    event.title+(displayLocation(event)?' - '+displayLocation(event):''),
-    maxWidth,
-    2,
-    compact?24:29,
-    compact?14:20,
-    '"Arial Narrow", Arial, sans-serif'
-  );
-  const timeInfo=getTimeInfo(event);
-  const schedule=timeInfo.detail
-    ? fitSingleLine(ctx,timeInfo.detail,maxWidth,compact?12:14,10,'700')
-    : null;
-  const venue=fitSingleLine(ctx,event.venue||'Local não informado',maxWidth,compact?15:20,11);
-  const type=fitSingleLine(ctx,(event.type||'Mobilização').toUpperCase(),maxWidth,compact?13:17,10,'900');
-
-  const titleHeight=title.lines.length*(title.size+2);
-  const scheduleHeight=schedule?(schedule.size+2):0;
-  const venueHeight=venue.size+2;
-  const typeHeight=type.size+2;
-  const gaps=(schedule?4:0)+3+4;
-  const total=titleHeight+scheduleHeight+venueHeight+typeHeight+gaps;
-
-  // Se a pilha ainda passa da linha disponível, reduzimos a tipografia
-  // em conjunto, preservando duas linhas para títulos longos.
-  if(total>rowH-10){
-    let scale=Math.max(0.70,(rowH-10)/total);
-    const title2=fitWrappedText(
-      ctx,
-      event.title+(displayLocation(event)?' - '+displayLocation(event):''),
-      maxWidth,
-      2,
-      Math.max(14,Math.floor(title.size*scale)),
-      14,
-      '"Arial Narrow", Arial, sans-serif'
-    );
-    const schedule2=timeInfo.detail
-      ? fitSingleLine(ctx,timeInfo.detail,maxWidth,Math.max(10,Math.floor((schedule?.size||12)*scale)),9,'700')
-      : null;
-    const venue2=fitSingleLine(ctx,event.venue||'Local não informado',maxWidth,Math.max(11,Math.floor(venue.size*scale)),10);
-    const type2=fitSingleLine(ctx,(event.type||'Mobilização').toUpperCase(),maxWidth,Math.max(10,Math.floor(type.size*scale)),9,'900');
-    return {title:title2,schedule:schedule2,venue:venue2,type:type2};
-  }
-
-  return {title,schedule,venue,type};
-}
-
-function renderCard(canvas:HTMLCanvasElement,events:MobilizationEvent[],templateImage:HTMLImageElement){
-  const ordered=events.slice().sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
-
-  canvas.width=CARD_WIDTH;
-  canvas.height=CARD_HEIGHT;
-
-  const ctx=canvas.getContext('2d');
-  if(!ctx)return;
-
-  // O PNG é o template completo. O código abaixo desenha somente os eventos.
-  ctx.clearRect(0,0,CARD_WIDTH,CARD_HEIGHT);
-  ctx.drawImage(templateImage,0,0,CARD_WIDTH,CARD_HEIGHT);
-
-  // Área útil do painel existente no template.
-  // Os eventos começam no topo e avançam para baixo; nunca são centralizados verticalmente.
-  const panelX=103.5;
-  const panelY=327;
-  const panelW=873;
-  const panelH=953;
-  const panelBottom=panelY+panelH;
-
-  const contentTop=375;
-  const contentBottom=1180;
-  const timeX=145;
-  const timeW=150;
-  const contentX=320;
-  const rightInset=50;
-  const maxTextWidth=panelX+panelW-rightInset-contentX;
-
-  const dates=[...new Set(ordered.map(event=>event.date))];
-  const compact=ordered.length>=4;
-  // Com cinco eventos, a compactação precisa depender do total de eventos,
-  // e não da quantidade de datas. Se dois eventos caem no mesmo dia, eles
-  // continuam ocupando duas linhas e também precisam caber no painel.
-  const ultraCompact=ordered.length>=5;
-  const rowH=ultraCompact?110:(compact?128:150);
-  const eventGap=ultraCompact?2:(compact?6:9);
-  const dateH=ultraCompact?36:(compact?46:52);
-  const dateGap=ultraCompact?4:(compact?8:11);
-  const groupGap=ultraCompact?5:(compact?12:16);
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(panelX+25,contentTop-8,panelW-50,contentBottom-contentTop+16);
-  ctx.clip();
-
-  let y=contentTop;
-
-  for(const date of dates){
-    const dayEvents=ordered.filter(event=>event.date===date);
-
-    // A data também é conteúdo do evento e permanece no fluxo vertical.
-    const dateW=282;
-    if(y+dateH>contentBottom)break;
-
-    pill(
-      ctx,
-      formatDateLabel(date),
-      (CARD_WIDTH-dateW)/2,
-      y,
-      dateW,
-      dateH,
-      '900 italic '+(ultraCompact?19:(compact?22:25))+'px "Arial Narrow", Arial, sans-serif'
-    );
-
-    y+=dateH+dateGap;
-
-    for(const event of dayEvents){
-      if(y+rowH>contentBottom)break;
-
-      const rowY=y;
-      const rowCenter=rowY+rowH/2;
-      const info=eventMetrics(ctx,event,maxTextWidth,rowH,compact);
-
-      const pillH=Math.min(ultraCompact?48:(compact?54:58),Math.max(42,rowH-30));
-      pill(
-        ctx,
-        formatTime(event),
-        timeX,
-        rowCenter-pillH/2,
-        timeW,
-        pillH,
-        '900 italic '+(ultraCompact?22:(compact?25:29))+'px "Arial Narrow", Arial, sans-serif'
-      );
-
-      const titleLH=info.title.size+2;
-      const titleH=info.title.lines.length*titleLH;
-      const scheduleH=info.schedule?info.schedule.size+2:0;
-      const venueH=info.venue.size+2;
-      const typeH=info.type.size+2;
-      const scheduleGap=info.schedule?3:0;
-      const stackH=titleH+scheduleGap+scheduleH+3+venueH+4+typeH;
-
-      // O texto fica no centro HORIZONTAL da sua própria linha,
-      // mas a linha inteira segue de cima para baixo no painel.
-      let textY=rowCenter-stackH/2;
-      if(textY<rowY+5)textY=rowY+5;
-      if(textY+stackH>rowY+rowH-5)textY=rowY+rowH-5-stackH;
-
-      ctx.textAlign='left';
-      ctx.fillStyle=WHITE;
-      ctx.font='900 italic '+info.title.size+'px "Arial Narrow", Arial, sans-serif';
-      info.title.lines.forEach((line,index)=>{
-        ctx.fillText(line,contentX,textY+info.title.size+index*titleLH);
-      });
-      textY+=titleH;
-
-      if(info.schedule){
-        textY+=scheduleGap;
-        ctx.fillStyle=WHITE;
-        ctx.font='700 italic '+info.schedule.size+'px "Arial Narrow", Arial, sans-serif';
-        ctx.fillText(info.schedule.text,contentX,textY+info.schedule.size);
-        textY+=scheduleH;
-      }
-
-      textY+=3;
-      ctx.fillStyle=WHITE;
-      ctx.font='700 italic '+info.venue.size+'px "Arial Narrow", Arial, sans-serif';
-      ctx.fillText(info.venue.text,contentX,textY+info.venue.size);
-      textY+=venueH+4;
-
-      ctx.fillStyle=YELLOW;
-      ctx.font='900 italic '+info.type.size+'px "Arial Narrow", Arial, sans-serif';
-      ctx.fillText(info.type.text,contentX,textY+info.type.size);
-
-      y+=rowH+eventGap;
-    }
-
-    y+=groupGap;
-  }
-
-  ctx.restore();
-  ctx.textAlign='left';
-}
-
 function groupSort(events:MobilizationEvent[]){
   return events.slice().sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
 }
@@ -304,8 +40,8 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   const[query,setQuery]=useState('');
   const[dateFilter,setDateFilter]=useState('');
   const[selected,setSelected]=useState<string[]>(initialIds.slice(0,MAX_EVENTS));
-  const[feedback,setFeedback]=useState('');
-  const canvasRef=useRef<HTMLCanvasElement>(null);
+  const[format,setFormat]=useState<ImageFormatKey>('feed');
+  const[fontDataUrl,setFontDataUrl]=useState<string|null>(null);
 
   const candidates=useMemo(()=>{
     const today=new Date().toISOString().slice(0,10);
@@ -329,28 +65,15 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   ),[events,selected]);
 
   useEffect(()=>{
-    if(!canvasRef.current||!chosen.length)return;
-    let cancelled=false;
-    const template=new Image();
+    let active=true;
+    loadBebasNeueDataUrl().then(url=>{if(active)setFontDataUrl(url);});
+    return()=>{active=false;};
+  },[]);
 
-    const paint=()=>{
-      if(cancelled||!canvasRef.current||!template.complete||template.naturalWidth===0)return;
-      try{
-        renderCard(canvasRef.current,chosen,template);
-        setFeedback('');
-      }catch{
-        setFeedback('A prévia visual não pôde ser gerada neste navegador.');
-      }
-    };
-
-    template.onload=paint;
-    template.onerror=()=>{
-      if(!cancelled)setFeedback('Não foi possível carregar o template da divulgação.');
-    };
-    template.src='/agenda-template.png';
-
-    return()=>{cancelled=true;};
-  },[chosen]);
+  const card=useMemo(
+    ()=>chosen.length?generateShareCard(chosen,{format,fontDataUrl}):null,
+    [chosen,format,fontDataUrl]
+  );
 
   useEffect(()=>{
     const next=selected.length
@@ -365,40 +88,17 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
       if(current.length>=MAX_EVENTS)return current;
       return [...current,id];
     });
-    setFeedback('');
   };
 
-  const copyLink=async()=>{
-    try{
-      await navigator.clipboard.writeText(window.location.href);
-      setFeedback('Link do painel copiado.');
-    }catch{
-      setFeedback('Não foi possível copiar automaticamente.');
-    }
-    window.setTimeout(()=>setFeedback(''),2500);
-  };
-
-  const share=async()=>{
-    if(navigator.share){
-      try{
-        await navigator.share({
-          title:'Agenda de Mobilizações',
-          text:'Confira este painel de mobilizações na Agenda.',
-          url:window.location.href
-        });
-      }catch{}
-    }else{
-      await copyLink();
-    }
-  };
-
-  const download=()=>{
-    if(!canvasRef.current)return;
-    const link=document.createElement('a');
-    link.download='agenda-de-mobilizacoes.png';
-    link.href=canvasRef.current.toDataURL('image/png');
-    link.click();
-  };
+  const content=useMemo<ShareContent>(()=>{
+    const base=resolveSiteUrl();
+    const ids=selected.map(encodeURIComponent).join(',');
+    return {
+      text:buildEventsShareText(chosen),
+      url:ids?base+'/divulgar?eventos='+ids:base+'/divulgar',
+      hashtags:HASHTAGS,
+    };
+  },[chosen,selected]);
 
   return <div className='container page share-builder-page'>
     <div className='eyebrow'>
@@ -508,9 +208,31 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
           <ImageIcon size={19}/>
         </div>
 
+        <div className='share-format-tabs' role='radiogroup' aria-label='Formato da imagem'>
+          {IMAGE_FORMAT_KEYS.map(key=>
+            <button
+              key={key}
+              type='button'
+              role='radio'
+              aria-checked={format===key}
+              className={format===key?'share-format-tab active':'share-format-tab'}
+              onClick={()=>setFormat(key)}
+            >
+              <strong>{IMAGE_FORMATS[key].label}</strong>
+              <small>{IMAGE_FORMATS[key].width}×{IMAGE_FORMATS[key].height}</small>
+            </button>
+          )}
+        </div>
+
         <div className='share-canvas-wrap'>
-          {chosen.length
-            ? <canvas ref={canvasRef} className='share-canvas'/>
+          {card
+            ? <img
+                className='share-canvas'
+                src={svgToDataUrl(card.svg)}
+                width={card.width}
+                height={card.height}
+                alt={'Prévia do painel com '+card.shownEvents+(card.shownEvents===1?' evento':' eventos')}
+              />
             : <div className='share-canvas-placeholder'>
                 <CalendarDays size={30}/>
                 <strong>Seu painel aparecerá aqui</strong>
@@ -518,25 +240,20 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
               </div>}
         </div>
 
-        <div className='share-actions'>
-          <button className='button primary' type='button' onClick={download} disabled={!chosen.length}>
-            <Download size={17}/>Baixar PNG
-          </button>
-          <button className='button ghost' type='button' onClick={share} disabled={!chosen.length}>
-            <Share2 size={17}/>Compartilhar
-          </button>
-          <button className='button ghost' type='button' onClick={copyLink} disabled={!chosen.length}>
-            <LinkIcon size={17}/>Copiar link
-          </button>
-        </div>
-
-        {feedback&&
+        {card&&card.hiddenEvents>0&&
           <div className='share-feedback' aria-live='polite'>
-            <LinkIcon size={14}/>{feedback}
+            {card.hiddenEvents} evento(s) não couberam neste formato; escolha menos eventos ou outro formato.
           </div>}
 
+        <ShareCardActions
+          card={card}
+          fileBase={'agenda-de-mobilizacoes-'+format}
+          content={content}
+          shareTitle='Agenda de Mobilizações'
+        />
+
         <p className='share-help'>
-          O painel segue a identidade visual da Agenda e fica vinculado a um link próprio,
+          O painel é gerado em vetor (SVG) com a identidade visual da Agenda e fica vinculado a um link próprio,
           para facilitar a circulação nas redes.
         </p>
       </aside>

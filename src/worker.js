@@ -1,3 +1,4 @@
+import {SITE_NAME,SITE_DESCRIPTION,DEFAULT_OG_IMAGE_PATH} from "./config/site.ts";
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const schema = {
   type: "object", additionalProperties: false,
@@ -928,4 +929,136 @@ async function handler(request,env){
   return json({events:geographicallyChecked,sourceUrl:tweet.url||postUrl,urlError:tweet.error,visionStatus:vision.status,visionNote:vision.status==="used"?"Leitura direta da imagem realizada.":vision.status==="unavailable"?"Leitura visual indisponível; foi utilizada a alternativa de OCR/texto.":"Nenhuma imagem original enviada.",geography:{municipalityDatabase:"IBGE",googleMapsConfigured:Boolean(env.GOOGLE_MAPS_API_KEY),placesSearchLimit:6}});
  }catch{return json({error:"A IA não conseguiu organizar essas informações desta vez. Confira o texto e tente novamente."},502)}
 }
-export default {async fetch(request,env){const url=new URL(request.url);if(url.pathname==="/api/interpret-events")return handler(request,env);if(url.pathname==="/api/research-events")return researchHandler(request,env);if(url.pathname==="/api/resolve-location")return resolveLocationHandler(request,env);return env.ASSETS.fetch(request)}};
+
+// ---------------------------------------------------------------------------
+// Open Graph dinâmico para bots de redes sociais (/evento/:slug e /divulgar)
+// ---------------------------------------------------------------------------
+const SOCIAL_BOT_PATTERN=/facebookexternalhit|facebot|meta-externalagent|meta-externalfetcher|twitterbot|whatsapp|telegrambot|slackbot|slack-imgproxy|linkedinbot|discordbot|bluesky|cardyb|mastodon|skypeuripreview|pinterest|redditbot|embedly|iframely|vkshare|signal|googlebot|bingbot|applebot|threads/i;
+const SLUG_PATTERN=/^[A-Za-z0-9._~-]{1,120}$/;
+const MAX_SHARE_EVENTS=5;
+
+const isSocialBot=request=>SOCIAL_BOT_PATTERN.test(request.headers.get("user-agent")||"");
+const escapeHtml=value=>String(value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+const truncateText=(value,max)=>value.length>max?value.slice(0,max-1).trimEnd()+"…":value;
+
+async function fetchPublicEventsBySlug(env,slugs){
+ const list=[...new Set(slugs)].filter(slug=>SLUG_PATTERN.test(slug)).slice(0,MAX_SHARE_EVENTS);
+ if(!list.length||!env.SUPABASE_URL||!env.SUPABASE_PUBLISHABLE_KEY)return [];
+ const endpoint=new URL(String(env.SUPABASE_URL).replace(/\/+$/,"")+"/rest/v1/events");
+ endpoint.searchParams.set("select","slug,title,type,date,time,time_label,city,state,venue,image_url");
+ endpoint.searchParams.set("is_public","eq.true");
+ endpoint.searchParams.set("slug","in.("+list.join(",")+")");
+ endpoint.searchParams.set("order","date.asc,time.asc");
+ try{
+  const response=await fetch(endpoint,{headers:{apikey:env.SUPABASE_PUBLISHABLE_KEY,accept:"application/json"},signal:AbortSignal.timeout(2500)});
+  if(!response.ok)return [];
+  const rows=await response.json();
+  return Array.isArray(rows)?rows:[];
+ }catch{return []}
+}
+
+function formatLongDate(date){
+ const parsed=new Date(String(date||"")+"T12:00:00Z");
+ if(Number.isNaN(parsed.getTime()))return "";
+ return parsed.toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long",timeZone:"UTC"});
+}
+function formatShortDate(date){
+ const parsed=new Date(String(date||"")+"T12:00:00Z");
+ if(Number.isNaN(parsed.getTime()))return "";
+ return parsed.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",timeZone:"UTC"});
+}
+const placeLabel=event=>[event.city,event.state].filter(Boolean).join(" - ");
+const timeLabel=event=>{const raw=clean(event.time_label)||clean(event.time).slice(0,5);return raw};
+function absoluteUrl(value,origin){
+ if(typeof value!=="string"||!value.trim())return "";
+ try{return new URL(value.trim(),origin).toString()}catch{return ""}
+}
+function defaultMeta(origin){
+ return {
+  title:SITE_NAME,
+  description:SITE_DESCRIPTION,
+  image:origin+DEFAULT_OG_IMAGE_PATH,
+  imageAlt:SITE_NAME,
+  url:origin+"/",
+  type:"website"
+ };
+}
+function eventMeta(event,origin,pageUrl){
+ const place=placeLabel(event);
+ const when=[formatLongDate(event.date),timeLabel(event)].filter(Boolean).join(" às ");
+ const where=[event.venue,place].filter(Boolean).join(", ");
+ const title=truncateText([clean(event.title)||"Mobilização",place].filter(Boolean).join(" · "),110);
+ const description=truncateText([when,where,clean(event.type)].filter(Boolean).join(" · ")+". "+SITE_NAME+".",200);
+ const poster=absoluteUrl(event.image_url,origin);
+ return {title,description,image:poster||origin+DEFAULT_OG_IMAGE_PATH,imageAlt:poster?"Pôster de "+clean(event.title):SITE_NAME,url:pageUrl,type:"article"};
+}
+function shareMeta(events,origin,pageUrl){
+ if(!events.length){
+  return {...defaultMeta(origin),title:"Divulgue a "+SITE_NAME,description:"Monte um card com os próximos atos e compartilhe nas redes.",url:pageUrl};
+ }
+ const lines=events.map(event=>[formatShortDate(event.date),timeLabel(event),placeLabel(event)].filter(Boolean).join(" · ")+" — "+(clean(event.title)||"Mobilização"));
+ const withPoster=events.find(event=>absoluteUrl(event.image_url,origin));
+ return {
+  title:events.length===1?(clean(events[0].title)||SITE_NAME):SITE_NAME+": "+events.length+" eventos selecionados",
+  description:truncateText(lines.join(" | "),240),
+  image:withPoster?absoluteUrl(withPoster.image_url,origin):origin+DEFAULT_OG_IMAGE_PATH,
+  imageAlt:withPoster?"Pôster de "+clean(withPoster.title):SITE_NAME,
+  url:pageUrl,
+  type:"website"
+ };
+}
+
+function applySocialMeta(response,meta){
+ const setContent=value=>({element(element){element.setAttribute("content",value)}});
+ const extraTags=[
+  ["property","og:url",meta.url],
+  ["property","og:site_name",SITE_NAME],
+  ["property","og:locale","pt_BR"],
+  ["property","og:image:alt",meta.imageAlt],
+  ["name","twitter:image:alt",meta.imageAlt]
+ ].map(([attr,key,value])=>'<meta '+attr+'="'+key+'" content="'+escapeHtml(value)+'"/>').join("");
+ return new HTMLRewriter()
+  .on("title",{element(element){element.setInnerContent(meta.title)}})
+  .on('meta[name="description"]',setContent(meta.description))
+  .on('meta[property="og:title"]',setContent(meta.title))
+  .on('meta[property="og:description"]',setContent(meta.description))
+  .on('meta[property="og:type"]',setContent(meta.type))
+  .on('meta[property="og:image"]',setContent(meta.image))
+  .on('meta[name="twitter:card"]',setContent("summary_large_image"))
+  .on('meta[name="twitter:title"]',setContent(meta.title))
+  .on('meta[name="twitter:description"]',setContent(meta.description))
+  .on('meta[name="twitter:image"]',setContent(meta.image))
+  .on('link[rel="canonical"]',{element(element){element.setAttribute("href",meta.url)}})
+  .on("head",{element(element){element.append(extraTags,{html:true})}})
+  .transform(response);
+}
+
+async function socialPreviewHandler(request,env,url){
+ if(request.method!=="GET"&&request.method!=="HEAD")return null;
+ const eventRoute=/^\/evento\/([^/]+)\/?$/.exec(url.pathname);
+ const shareRoute=/^\/divulgar\/?$/.test(url.pathname);
+ if(!eventRoute&&!shareRoute)return null;
+
+ const asset=await env.ASSETS.fetch(request);
+ const response=new Response(asset.body,asset);
+ response.headers.append("vary","User-Agent");
+ const isHtml=(response.headers.get("content-type")||"").includes("text/html");
+ if(!response.ok||!isHtml||!isSocialBot(request))return response;
+
+ const origin=url.origin;
+ let meta=defaultMeta(origin);
+ if(eventRoute){
+  let slug="";
+  try{slug=decodeURIComponent(eventRoute[1])}catch{}
+  const [event]=await fetchPublicEventsBySlug(env,[slug]);
+  if(event)meta=eventMeta(event,origin,origin+"/evento/"+encodeURIComponent(event.slug||slug));
+ }else{
+  const slugs=(url.searchParams.get("eventos")||"").split(",").map(item=>item.trim()).filter(Boolean).slice(0,MAX_SHARE_EVENTS);
+  const events=slugs.length?await fetchPublicEventsBySlug(env,slugs):[];
+  meta=shareMeta(events,origin,origin+"/divulgar"+(events.length?"?eventos="+events.map(event=>encodeURIComponent(event.slug)).join(","):""));
+ }
+ const rewritten=applySocialMeta(response,meta);
+ rewritten.headers.set("cache-control","public, max-age=300");
+ return rewritten;
+}
+export default {async fetch(request,env){const url=new URL(request.url);if(url.pathname==="/api/interpret-events")return handler(request,env);if(url.pathname==="/api/research-events")return researchHandler(request,env);if(url.pathname==="/api/resolve-location")return resolveLocationHandler(request,env);const preview=await socialPreviewHandler(request,env,url);if(preview)return preview;return env.ASSETS.fetch(request)}};

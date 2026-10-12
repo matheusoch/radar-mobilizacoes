@@ -1,290 +1,129 @@
-/**
- * src/utils/shareCardGenerator.ts
- *
- * Gerador de cards SVG para divulgação de mobilizações.
- * Compatível com TypeScript e ES2020.
- *
- * Inclui:
- * - Tipagem dos eventos e opções de geração.
- * - Hierarquia tipográfica Transducer.
- * - Sanitização de textos e proteção de siglas.
- * - Layout de duas colunas com coordenadas dinâmicas.
- * - Paginação automática para mais de 15 eventos.
- * - Exportação de SVGs independentes, prontos para download.
- */
+import {SITE_NAME, IMAGE_FORMATS, type CardFormatKey} from '../config/site';
+import type {MobilizationEvent} from '../types';
 
-import transducerBlackUrl from '../assets/share/Transducer-Black.otf?url';
-import transducerMediumUrl from '../assets/share/Transducer-Medium.otf?url';
-import transducerExtendedBlackUrl from '../assets/share/TransducerExtended-Black.otf?url';
-import transducerExtendedBoldUrl from '../assets/share/TransducerExtended-Bold.otf?url';
+export const MAX_EVENTS_PER_CARD = 15;
 
-export interface MobilizationEvent {
-  id?: string | number;
-  title?: string;
-  name?: string;
-  date?: string;
-  day?: string;
-  weekday?: string;
-  city?: string;
-  state?: string;
-  uf?: string;
-  time?: string;
-  hour?: string;
-  location?: string;
-  venue?: string;
-  address?: string;
-  modality?: string;
-  type?: string;
-  url?: string;
+export interface CardImage {
+  href: string;
+  width: number;
+  height: number;
+}
+
+/** Medium, Bold e Black da família Transducer Extended. */
+export type CardFontWeight = 500 | 700 | 900;
+export type CardFontFamily = 'Transducer' | 'Transducer Extended';
+
+export interface CardFontFace {
+  weight: CardFontWeight;
+  dataUrl: string;
+  family?: CardFontFamily;
+}
+
+export interface ShareCardAssets {
+  fonts: readonly CardFontFace[];
+  /** Nome da família efetivamente embutida (Transducer quando os arquivos existem em src/assets/fonts). */
+  fontLabel: string;
+  title: CardImage;
+  intro: CardImage;
+  box: CardImage;
 }
 
 export interface ShareCardOptions {
-  events: MobilizationEvent[];
-  title?: string;
-  subtitle?: string;
-  date?: string;
-  page?: number;
-  eventsPerPage?: number;
-  width?: number;
-  height?: number;
-  backgroundColor?: string;
-  textColor?: string;
-  accentColor?: string;
-  mutedColor?: string;
-  showPageNumber?: boolean;
-  showEventCount?: boolean;
-  outputPrefix?: string;
+  format?: CardFormatKey;
+  assets: ShareCardAssets;
 }
 
-interface GridConfig {
-  columnX: number[];
-  top: number;
-  columnWidth: number;
-  columnGap: number;
-  rowHeight: number;
-  rowGap: number;
-  paddingX: number;
-  paddingTop: number;
-  headerHeight: number;
-  footerHeight: number;
-}
-
-interface NormalizedEvent {
-  id: string;
-  title: string;
-  weekday: string;
-  date: string;
-  city: string;
-  state: string;
-  time: string;
-  location: string;
-}
-
-interface CardPage {
-  page: number;
-  totalPages: number;
-  events: NormalizedEvent[];
+export interface ShareCardPage {
   svg: string;
+  width: number;
+  height: number;
+  index: number;
+  total: number;
+  shownEvents: number;
 }
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
-const GRID: GridConfig = {
-  columnX: [57, 565],
-  top: 300,
-  columnWidth: 458,
-  columnGap: 50,
-  rowHeight: 105,
-  rowGap: 14,
-  paddingX: 57,
-  paddingTop: 60,
-  headerHeight: 250,
-  footerHeight: 75,
-};
-
-const DEFAULTS = {
-  width: 1080,
-  height: 1350,
-  backgroundColor: '#D81B1F',
-  textColor: '#FFFFFF',
-  accentColor: '#FFC301',
-  mutedColor: '#FFFFFF',
-  eventsPerPage: 15,
-  outputPrefix: 'mobilizacoes',
-};
-
-const CONNECTORS = new Set([
-  'a',
-  'as',
-  'ao',
-  'aos',
-  'com',
-  'como',
-  'da',
-  'das',
-  'de',
-  'dela',
-  'delas',
-  'dele',
-  'deles',
-  'do',
-  'dos',
-  'e',
-  'em',
-  'entre',
-  'essa',
-  'essas',
-  'esse',
-  'esses',
-  'esta',
-  'estas',
-  'este',
-  'estes',
-  'na',
-  'nas',
-  'no',
-  'nos',
-  'num',
-  'numa',
-  'nuns',
-  'numas',
-  'o',
-  'os',
-  'ou',
-  'pela',
-  'pelas',
-  'pelo',
-  'pelos',
-  'pra',
-  'pras',
-  'pro',
-  'pros',
-  'para',
-  'perante',
-  'por',
-  'sem',
-  'sob',
-  'sobre',
-  'um',
-  'uma',
-  'uns',
-  'umas',
-]);
-
-const PROTECTED_ACRONYMS = new Set([
-  'MST',
-  'UNE',
-  'CUT',
-  'PT',
-  'PSOL',
-]);
-
-const ACRONYM_PATTERN =
-  /\b(MST|UNE|CUT|PT|PSOL)\b/gi;
-
-/**
- * Converte textos em Title Case, mantendo conectores em minúsculas
- * e preservando as siglas políticas definidas em PROTECTED_ACRONYMS.
- *
- * Travessões tipográficos são normalizados para hífen ASCII.
- *
- * Exemplos:
- * "ato do MST em São Paulo" -> "Ato do MST em São Paulo"
- * "MARCHA DA UNE"           -> "Marcha da UNE"
- * "LUTA - TRABALHO"         -> "Luta - Trabalho"
- */
-export function sanitizeText(value: unknown): string {
-  if (value === null || value === undefined) {
-    return '';
-  }
-
-  const original = String(value)
-    .replace(/[\u2014\u2013]/g, '-')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  if (!original) {
-    return '';
-  }
-
-  const protectedTokens = new Map<string, string>();
-  let tokenIndex = 0;
-
-  const withProtectedAcronyms = original.replace(
-    ACRONYM_PATTERN,
-    (match: string) => {
-      const acronym = match.toUpperCase();
-
-      if (!PROTECTED_ACRONYMS.has(acronym)) {
-        return match;
-      }
-
-      const token = `ZXQPROTECTED${tokenIndex++}QXZ`;
-
-      protectedTokens.set(token, acronym);
-
-      return token;
-    },
-  );
-
-  const lower = withProtectedAcronyms.toLocaleLowerCase('pt-BR');
-
-  const words = lower.split(/(\s+|[-/])/);
-
-  let isFirstWord = true;
-
-  const titleCased = words
-    .map((part: string) => {
-      if (
-        !part ||
-        /^\s+$/.test(part) ||
-        part === '-' ||
-        part === '/'
-      ) {
-        return part;
-      }
-
-      const protectedMatch = part.match(
-        /^ZXQPROTECTED\d+QXZ$/,
-      );
-
-      if (protectedMatch) {
-        isFirstWord = false;
-        return part;
-      }
-
-      const normalized = part.normalize('NFC');
-
-      if (!isFirstWord && CONNECTORS.has(normalized)) {
-        return normalized;
-      }
-
-      isFirstWord = false;
-
-      const firstCharacter = normalized.charAt(0);
-      const remainingCharacters = normalized.slice(1);
-
-      return (
-        firstCharacter.toLocaleUpperCase('pt-BR') +
-        remainingCharacters
-      );
-    })
-    .join('');
-
-  let result = titleCased;
-
-  protectedTokens.forEach((acronym, token) => {
-    result = result.replace(token, acronym);
-  });
-
-  return result;
+export interface ShareCardResult {
+  /** SVG da primeira página, mantido para quem só precisa de uma imagem. */
+  svg: string;
+  width: number;
+  height: number;
+  pages: ShareCardPage[];
+  shownEvents: number;
 }
 
-/**
- * Escapa conteúdo dinâmico antes de inseri-lo em elementos SVG.
- */
-function escapeXml(value: unknown): string {
-  return String(value ?? '')
+type Weight = CardFontWeight;
+type Anchor = 'start' | 'middle';
+
+/** Hierarquia tipográfica do modelo do Photoshop (Transducer Extended). */
+const WEIGHTS = {
+  city: 900,
+  state: 700,
+  time: 900,
+  title: 900,
+  place: 500,
+  day: 900,
+  ui: 500,
+} as const satisfies Record<string, Weight>;
+
+const FIT_STEP = 0.5;
+const FIT_FLOOR = 7;
+const LINE_CAPS: readonly number[] = [2, 3, 4, Number.POSITIVE_INFINITY];
+
+const FONT_FAMILY = 'Transducer';
+const FONT_FAMILY_EXTENDED = 'Transducer Extended';
+const FONT_DATA_URL_PATTERN = /^data:(?:font|application)\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/i;
+const IMAGE_DATA_URL_PATTERN = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/i;
+
+const COLORS = {
+  background: '#D81B1F',
+  bar: '#FFC301',
+  yellow: '#FFC301',
+  white: '#FFFFFF',
+  red: '#D81B1F',
+} as const;
+
+const GRID = {
+  columnX: [57, 565] as const,
+  columnWidth: 459,
+  barHeight: 14,
+  titleY: 65,
+  introY: 209,
+  boxY: 277,
+  areaTop: 463,
+  leftX: 57,
+  dayHeight: 49,
+  dayToLine: 74,
+  cityHeight: 40,
+  cityAfterDay: 16,
+  cityAfterRow: 22,
+  rowAfterCity: 11,
+  rowAfterRow: 22,
+  dayAfterRow: 40,
+  rowMinHeight: 42,
+  timeBoxWidth: 70,
+  textInset: 82,
+  titleSize: 16,
+  titleMinSize: 10,
+  titleLineRatio: 1.25,
+  placeSize: 13.5,
+  placeMinSize: 9,
+  placeLineRatio: 1.2,
+  placeGap: 6,
+  citySize: 22,
+  cityMinSize: 12,
+  stateSize: 16,
+  daySize: 21,
+  timeSize: 17,
+} as const;
+
+const FORMAT_OFFSETS: Record<CardFormatKey, {shiftY: number; bottom: number}> = {
+  feed: {shiftY: 0, bottom: 1300},
+  story: {shiftY: 185, bottom: 1670},
+};
+
+export function escapeXml(value: string): string {
+  return value
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -292,953 +131,557 @@ function escapeXml(value: unknown): string {
     .replace(/'/g, '&apos;');
 }
 
-/**
- * Normaliza valores textuais opcionais.
- */
-function textOrEmpty(value: unknown): string {
-  return typeof value === 'string' || typeof value === 'number'
-    ? String(value).trim()
-    : '';
+const CONNECTORS = new Set(['a','as','ao','aos','com','como','da','das','de','do','dos','e','em','entre','na','nas','no','nos','o','os','ou','para','pela','pelas','pelo','pelos','por','sem','sobre','um','uma','uns','umas']);
+const PROTECTED_ACRONYMS = new Set(['MST','UNE','CUT','PT','PSOL']);
+const ACRONYM_PATTERN = /\b(MST|UNE|CUT|PT|PSOL)\b/gi;
+
+/** Sanitiza textos, converte travessões e preserva siglas políticas. */
+export function sanitizeText(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const input = String(value).replace(/[\u2014\u2013]/g, '-').replace(/\s+/g, ' ').trim();
+  if (!input) return '';
+  const tokens = new Map<string, string>();
+  let counter = 0;
+  const protectedInput = input.replace(ACRONYM_PATTERN, match => {
+    const acronym = match.toUpperCase();
+    if (!PROTECTED_ACRONYMS.has(acronym)) return match;
+    const key = 'ZXQPROTECTED' + counter++ + 'QXZ';
+    tokens.set(key, acronym);
+    return key;
+  });
+  let first = true;
+  let result = protectedInput.toLocaleLowerCase('pt-BR').split(/(\s+|[-/])/).map(part => {
+    if (!part || /^\s+$/.test(part) || part === '-' || part === '/') return part;
+    if (/^ZXQPROTECTED\d+QXZ$/.test(part)) { first = false; return part; }
+    if (!first && CONNECTORS.has(part)) return part;
+    first = false;
+    return part.charAt(0).toLocaleUpperCase('pt-BR') + part.slice(1);
+  }).join('');
+  tokens.forEach((acronym, key) => { result = result.replace(key, acronym); });
+  return result;
+}
+function upper(value: string): string {
+  return value.toLocaleUpperCase('pt-BR');
 }
 
-/**
- * Normaliza um evento recebido da aplicação.
- */
-function normalizeEvent(
-  event: MobilizationEvent,
-  index: number,
-): NormalizedEvent {
-  const rawTitle =
-    textOrEmpty(event.title) ||
-    textOrEmpty(event.name) ||
-    'Mobilização';
+function round(value: number): number {
+  return Math.round(value * 10) / 10;
+}
 
-  const rawWeekday =
-    textOrEmpty(event.weekday) ||
-    textOrEmpty(event.day) ||
-    '';
+function parseDate(date: string): Date | null {
+  const parsed = new Date(`${date}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
-  const rawDate = textOrEmpty(event.date);
+export function formatCardDateLabel(date: string): string {
+  const parsed = parseDate(date);
+  if (!parsed) return upper(date);
+  const weekday = parsed.toLocaleDateString('pt-BR', {weekday: 'long'}).replace('-feira', '');
+  const short = parsed.toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'});
+  return upper(`${weekday} - ${short}`);
+}
 
-  const rawCity = textOrEmpty(event.city);
+/** Horário no formato do card: 8h, 16h, 16h30. */
+export function formatCardTime(event: MobilizationEvent): string {
+  const raw = (event.time_label || event.time || '').trim();
+  const match = raw.match(/(\d{1,2})\s*[:hH]\s*(\d{2})?/);
+  if (!match) return '--h';
+  const hours = String(Number(match[1]));
+  const minutes = match[2];
+  return minutes && minutes !== '00' ? `${hours}h${minutes}` : `${hours}h`;
+}
 
-  const rawState =
-    textOrEmpty(event.state) ||
-    textOrEmpty(event.uf);
+type Measure = (text: string, size: number, weight: Weight) => number;
 
-  const rawTime =
-    textOrEmpty(event.time) ||
-    textOrEmpty(event.hour);
-
-  const rawLocation =
-    textOrEmpty(event.location) ||
-    textOrEmpty(event.venue) ||
-    textOrEmpty(event.address);
-
-  return {
-    id: textOrEmpty(event.id) || `event-${index + 1}`,
-    title: sanitizeText(rawTitle),
-    weekday: sanitizeText(rawWeekday),
-    date: sanitizeText(rawDate),
-    city: sanitizeText(rawCity),
-    state: sanitizeText(rawState).toLocaleUpperCase('pt-BR'),
-    time: sanitizeText(rawTime),
-    location: sanitizeText(rawLocation),
+function createMeasure(): Measure {
+  const context = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
+  return (text, size, weight) => {
+    if (!context) return text.length * size * 0.9;
+    context.font = `${weight} ${size}px ${FONT_FAMILY}, sans-serif`;
+    return context.measureText(text).width;
   };
 }
 
-/**
- * Divide texto em linhas respeitando um limite aproximado de caracteres.
- * Evita quebrar palavras sempre que possível.
- */
-function wrapText(
-  text: string,
-  maxCharacters: number,
-  maxLines: number,
-): string[] {
-  const normalized = text.trim();
+interface FittedText {
+  lines: string[];
+  size: number;
+}
 
-  if (!normalized) {
-    return [];
-  }
-
-  const words = normalized.split(/\s+/);
+function wrapWords(text: string, maxWidth: number, size: number, weight: Weight, measure: Measure): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
-  let currentLine = '';
-
+  let current = '';
   for (const word of words) {
-    const candidate = currentLine
-      ? `${currentLine} ${word}`
-      : word;
-
-    if (candidate.length <= maxCharacters || !currentLine) {
-      currentLine = candidate;
-      continue;
-    }
-
-    lines.push(currentLine);
-    currentLine = word;
-
-    if (lines.length === maxLines - 1) {
-      break;
+    const next = current ? `${current} ${word}` : word;
+    if (!current || measure(next, size, weight) <= maxWidth) {
+      current = next;
+    } else {
+      lines.push(current);
+      current = word;
     }
   }
-
-  if (currentLine && lines.length < maxLines) {
-    lines.push(currentLine);
-  }
-
-  const consumedText = lines.join(' ');
-
-  if (
-    consumedText.length < normalized.length &&
-    lines.length > 0
-  ) {
-    const lastIndex = lines.length - 1;
-    const lastLine = lines[lastIndex];
-
-    lines[lastIndex] =
-      lastLine.length >= 3
-        ? `${lastLine.replace(/[.,;:!?-]*$/, '')}…`
-        : `${lastLine}…`;
-  }
-
-  return lines;
+  if (current) lines.push(current);
+  return lines.length ? lines : [''];
 }
 
 /**
- * Gera os estilos tipográficos incorporados ao SVG.
- *
- * Os arquivos OTF são importados com ?url para que o Vite os
- * publique em dist/assets com URLs válidas em produção.
+ * Reduz a fonte aos poucos até o texto caber na largura, sem cortar nem usar reticências.
+ * Prefere o tamanho original em até `preferredLines` linhas; só então permite mais linhas.
  */
-function getFontStyles(): string {
-  return `
-    @font-face {
-      font-family: "Transducer";
-      src: url("${transducerBlackUrl}")
-        format("opentype");
-      font-weight: 900;
-      font-style: normal;
+function fitText(
+  text: string,
+  maxWidth: number,
+  baseSize: number,
+  minSize: number,
+  preferredLines: number,
+  weight: Weight,
+  measure: Measure,
+): FittedText {
+  const fits = (lines: readonly string[], size: number) => lines.every(line => measure(line, size, weight) <= maxWidth);
+  const caps = [preferredLines, ...LINE_CAPS.filter(cap => cap > preferredLines)];
+  for (const cap of caps) {
+    const lowest = Number.isFinite(cap) ? minSize : FIT_FLOOR;
+    for (let size = baseSize; size >= lowest; size -= FIT_STEP) {
+      const lines = wrapWords(text, maxWidth, size, weight, measure);
+      if (lines.length <= cap && fits(lines, size)) return {lines, size: round(size)};
     }
-
-    @font-face {
-      font-family: "Transducer";
-      src: url("${transducerMediumUrl}")
-        format("opentype");
-      font-weight: 500;
-      font-style: normal;
-    }
-
-    @font-face {
-      font-family: "Transducer Extended";
-      src: url("${transducerExtendedBlackUrl}")
-        format("opentype");
-      font-weight: 900;
-      font-style: normal;
-    }
-
-    @font-face {
-      font-family: "Transducer Extended";
-      src: url("${transducerExtendedBoldUrl}")
-        format("opentype");
-      font-weight: 700;
-      font-style: normal;
-    }
-
-    text {
-      font-kerning: normal;
-      text-rendering: geometricPrecision;
-    }
-
-    .card-title {
-      font-family: "Transducer Extended", sans-serif;
-      font-weight: 900;
-    }
-
-    .event-weekday {
-      font-family: "Transducer Extended", sans-serif;
-      font-weight: 900;
-    }
-
-    .event-city,
-    .event-time,
-    .event-name {
-      font-family: "Transducer", sans-serif;
-      font-weight: 900;
-    }
-
-    .event-state {
-      font-family: "Transducer Extended", sans-serif;
-      font-weight: 700;
-    }
-
-    .event-location {
-      font-family: "Transducer", sans-serif;
-      font-weight: 500;
-    }
-
-    .metadata {
-      font-family: "Transducer", sans-serif;
-      font-weight: 500;
-    }
-  `;
+  }
+  return {lines: wrapWords(text, maxWidth, FIT_FLOOR, weight, measure), size: FIT_FLOOR};
 }
 
-/**
- * Calcula a posição e as dimensões da grade em função do tamanho do SVG.
- */
-function calculateGrid(
-  width: number,
-  height: number,
-  eventsPerPage: number,
-): GridConfig {
-  const columns = 2;
+function fitSingleLine(text: string, maxWidth: number, baseSize: number, minSize: number, weight: Weight, measure: Measure): number {
+  for (let size = baseSize; size >= minSize; size -= FIT_STEP) {
+    if (measure(text, size, weight) <= maxWidth) return round(size);
+  }
+  const width = measure(text, minSize, weight);
+  return width > maxWidth ? round(Math.max(FIT_FLOOR, (minSize * maxWidth) / width)) : minSize;
+}
 
-  const paddingX = Math.min(
-    GRID.paddingX,
-    Math.max(24, width * 0.055),
-  );
+interface CityGroup {
+  city: string;
+  state: string;
+  events: MobilizationEvent[];
+}
 
-  const columnGap = Math.max(24, width * 0.046);
+interface DayGroup {
+  date: string;
+  cities: CityGroup[];
+}
 
-  const columnWidth =
-    (width - paddingX * 2 - columnGap) / columns;
+function sortKey(event: MobilizationEvent): string {
+  return `${event.date}|${(event.time || event.time_label || '').padStart(5, '0')}`;
+}
 
-  const columnX = [
-    paddingX,
-    paddingX + columnWidth + columnGap,
-  ];
+function groupEvents(events: readonly MobilizationEvent[]): DayGroup[] {
+  const ordered = events.slice().sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+  const days: DayGroup[] = [];
+  for (const event of ordered) {
+    let day = days.find(item => item.date === event.date);
+    if (!day) {
+      day = {date: event.date, cities: []};
+      days.push(day);
+    }
+    const cityKey = `${event.city}|${event.state}`.toLocaleLowerCase('pt-BR');
+    let city = day.cities.find(item => `${item.city}|${item.state}`.toLocaleLowerCase('pt-BR') === cityKey);
+    if (!city) {
+      city = {city: event.city, state: event.state, events: []};
+      day.cities.push(city);
+    }
+    city.events.push(event);
+  }
+  return days;
+}
 
-  const headerHeight = Math.min(
-    GRID.headerHeight,
-    height * 0.21,
-  );
+type Item =
+  | {kind: 'day'; x: number; y: number; label: string}
+  | {kind: 'city'; x: number; y: number; city: string; state: string}
+  | {
+      kind: 'row';
+      x: number;
+      y: number;
+      height: number;
+      time: string;
+      title: FittedText;
+      place: FittedText | null;
+    };
 
-  const footerHeight = GRID.footerHeight;
+interface PageDraft {
+  items: Item[];
+  events: number;
+}
 
-  const top = headerHeight + 30;
+function titleBaseline(title: FittedText, index: number): number {
+  return title.size + title.size * GRID.titleLineRatio * index;
+}
 
-  const availableHeight =
-    height - top - footerHeight - 30;
+function placeBaseline(title: FittedText, place: FittedText, index: number): number {
+  const lastTitle = titleBaseline(title, title.lines.length - 1);
+  const lineHeight = place.size * GRID.placeLineRatio;
+  return lastTitle + GRID.placeGap + lineHeight * (index + 1);
+}
 
-  const rows = Math.ceil(eventsPerPage / columns);
+function rowContentHeight(title: FittedText, place: FittedText | null): number {
+  if (!place) return titleBaseline(title, title.lines.length - 1) + 10;
+  return placeBaseline(title, place, place.lines.length - 1) + 4;
+}
 
-  const rowGap = rows > 1 ? 12 : 0;
+function planPages(events: readonly MobilizationEvent[], columnHeight: number, measure: Measure): PageDraft[] {
+  const pages: PageDraft[] = [];
+  let page: PageDraft = {items: [], events: 0};
+  let column = 0;
+  let y = 0;
+  let last: 'day' | 'city' | 'row' | null = null;
+  const textWidth = GRID.columnWidth - GRID.textInset;
 
-  const rowHeight = Math.max(
-    58,
-    (availableHeight - rowGap * (rows - 1)) / rows,
-  );
-
-  return {
-    columnX,
-    top,
-    columnWidth,
-    columnGap,
-    rowHeight,
-    rowGap,
-    paddingX,
-    paddingTop: GRID.paddingTop,
-    headerHeight,
-    footerHeight,
+  const startNextColumn = (forcePage: boolean) => {
+    if (column === 0 && !forcePage) {
+      column = 1;
+    } else {
+      pages.push(page);
+      page = {items: [], events: 0};
+      column = 0;
+    }
+    y = 0;
+    last = null;
   };
+
+  for (const day of groupEvents(events)) {
+    let dayShown = false;
+    for (const group of day.cities) {
+      let cityShown = false;
+      for (const event of group.events) {
+        const title = fitText(
+          upper(event.title.trim() || 'Mobilização'),
+          textWidth,
+          GRID.titleSize,
+          GRID.titleMinSize,
+          2,
+          WEIGHTS.title,
+          measure,
+        );
+        const placeSource = (event.venue || event.address || '').trim();
+        const place = placeSource
+          ? fitText(upper(placeSource), textWidth, GRID.placeSize, GRID.placeMinSize, 2, WEIGHTS.place, measure)
+          : null;
+        const rowHeight = Math.max(GRID.rowMinHeight, rowContentHeight(title, place));
+
+        const needed = (): number => {
+          const atTop = last === null;
+          let total = 0;
+          if (!dayShown) total += (atTop ? 0 : GRID.dayAfterRow) + GRID.dayToLine;
+          if (!cityShown) total += (!dayShown ? GRID.cityAfterDay : GRID.cityAfterRow) + GRID.cityHeight;
+          total += (cityShown ? GRID.rowAfterRow : GRID.rowAfterCity) + rowHeight;
+          return total;
+        };
+
+        const pageFull = page.events >= MAX_EVENTS_PER_CARD;
+        if (pageFull || (last !== null && y + needed() > columnHeight)) {
+          startNextColumn(pageFull);
+          dayShown = false;
+          cityShown = false;
+        }
+
+        const x = GRID.columnX[column] ?? GRID.columnX[0];
+
+        if (!dayShown) {
+          y += last === null ? 0 : GRID.dayAfterRow;
+          page.items.push({kind: 'day', x, y, label: formatCardDateLabel(day.date)});
+          y += GRID.dayToLine;
+          last = 'day';
+          dayShown = true;
+        }
+        if (!cityShown) {
+          y += last === 'day' ? GRID.cityAfterDay : GRID.cityAfterRow;
+          page.items.push({kind: 'city', x, y, city: upper(group.city), state: upper(group.state)});
+          y += GRID.cityHeight;
+          last = 'city';
+          cityShown = true;
+        }
+        y += last === 'city' ? GRID.rowAfterCity : GRID.rowAfterRow;
+        page.items.push({
+          kind: 'row',
+          x,
+          y,
+          height: rowHeight,
+          time: formatCardTime(event),
+          title,
+          place,
+        });
+        y += rowHeight;
+        last = 'row';
+        page.events += 1;
+      }
+    }
+  }
+  if (page.items.length || !pages.length) pages.push(page);
+  return pages;
 }
 
-/**
- * Produz um elemento SVG de texto.
- */
-function svgText(
+function textNode(
+  content: string,
   x: number,
   y: number,
-  text: string,
-  className: string,
-  options: {
-    fontSize?: number;
-    fill?: string;
-    letterSpacing?: number;
-    textAnchor?: 'start' | 'middle' | 'end';
-    opacity?: number;
-  } = {},
+  size: number,
+  fill: string,
+  options: {anchor?: Anchor; weight?: Weight; letterSpacing?: number; family?: CardFontFamily} = {},
 ): string {
-  const {
-    fontSize = 20,
-    fill = '#FFFFFF',
-    letterSpacing = 0,
-    textAnchor = 'start',
-    opacity = 1,
-  } = options;
-
-  return `
-    <text
-      x="${x}"
-      y="${y}"
-      class="${className}"
-      font-size="${fontSize}"
-      fill="${escapeXml(fill)}"
-      letter-spacing="${letterSpacing}"
-      text-anchor="${textAnchor}"
-      opacity="${opacity}"
-    >${escapeXml(text)}</text>
-  `;
+  const {anchor = 'start', weight = WEIGHTS.state, letterSpacing = 0, family = FONT_FAMILY} = options;
+  const spacing = letterSpacing ? ` letter-spacing="${letterSpacing}"` : '';
+  return `<text x="${round(x)}" y="${round(y)}" font-size="${round(size)}" font-weight="${weight}" font-family="${escapeXml(family)}" fill="${fill}" text-anchor="${anchor}"${spacing}>${escapeXml(content)}</text>`;
 }
 
-/**
- * Gera o conteúdo SVG de um evento individual.
- *
- * Os eventos não têm retângulos brancos de fundo.
- * O destaque amarelo permanece como uma linha lateral fina.
- */
-function renderEvent(
-  event: NormalizedEvent,
-  index: number,
-  grid: GridConfig,
-  options: Required<
-    Pick<
-      ShareCardOptions,
-      | 'width'
-      | 'height'
-      | 'backgroundColor'
-      | 'textColor'
-      | 'accentColor'
-      | 'mutedColor'
-    >
-  >,
-): string {
-  const columnIndex = index % 2;
-  const rowIndex = Math.floor(index / 2);
+function rect(x: number, y: number, width: number, height: number, fill: string): string {
+  return `<rect x="${round(x)}" y="${round(y)}" width="${round(width)}" height="${round(height)}" fill="${fill}"/>`;
+}
 
-  const x = grid.columnX[columnIndex];
-  const y =
-    grid.top + rowIndex * (grid.rowHeight + grid.rowGap);
+function imageNode(image: CardImage, x: number, y: number): string {
+  if (!IMAGE_DATA_URL_PATTERN.test(image.href)) return '';
+  return `<image x="${round(x)}" y="${round(y)}" width="${image.width}" height="${image.height}" xlink:href="${image.href}"/>`;
+}
 
-  const width = grid.columnWidth;
-  const height = grid.rowHeight;
+function fontStyle(fonts: readonly CardFontFace[]): string {
+  const faces = fonts
+    .filter(font => FONT_DATA_URL_PATTERN.test(font.dataUrl))
+    .map(font => {
+      const format = /woff2/i.test(font.dataUrl)
+        ? 'woff2'
+        : /woff/i.test(font.dataUrl)
+          ? 'woff'
+          : /otf/i.test(font.dataUrl)
+            ? 'opentype'
+            : 'truetype';
+      return `@font-face{font-family:'${font.family ?? FONT_FAMILY}';font-weight:${font.weight};font-style:normal;src:url(${font.dataUrl}) format('${format}');}`;
+    })
+    .join('');
+  return faces ? `<style>${faces}</style>` : '';
+}
 
-  const textColor = options.textColor;
-  const accentColor = options.accentColor;
-  const mutedColor = options.mutedColor;
-
-  const innerPadding = 15;
-
-  const contentX = x + innerPadding;
-  const contentWidth = width - innerPadding * 2;
-
-  const titleLines = wrapText(
-    event.title,
-    Math.max(15, Math.floor(contentWidth / 10.5)),
-    2,
-  );
-
-  const cityText = event.city;
-  const stateText = event.state;
-  const weekdayText = event.weekday;
-  const dateText = event.date;
-
-  // Exibe o dia e a data juntos, em amarelo.
-  // Evita repetir a data caso ela já esteja no texto do dia.
-  const dayDateText =
-    weekdayText && dateText
-      ? (
-          weekdayText.includes(dateText)
-            ? weekdayText
-            : `${weekdayText} · ${dateText}`
-        )
-      : (weekdayText || dateText);
-
-  const timeText = event.time;
-  const locationText = event.location;
-
-  const pieces: string[] = [];
-
-  pieces.push(`
-    <g class="event" data-event-id="${escapeXml(event.id)}">
-      <rect
-        x="${x}"
-        y="${y}"
-        width="5"
-        height="${height}"
-        rx="2"
-        fill="${escapeXml(accentColor)}"
-      />
-  `);
-
-  let currentY = y + 24;
-
-  if (dayDateText) {
-    const weekdayLines = wrapText(
-      dayDateText,
-      Math.max(16, Math.floor(contentWidth / 10)),
-      1,
+function renderItem(item: Item, top: number, measure: Measure): string {
+  const y = top + item.y;
+  if (item.kind === 'day') {
+    const baseline = y + GRID.dayHeight / 2 + GRID.daySize * 0.36;
+    return (
+      textNode(item.label, item.x, baseline, GRID.daySize, COLORS.yellow, {
+        weight: WEIGHTS.day,
+        family: FONT_FAMILY_EXTENDED,
+        letterSpacing: 1.5,
+      }) +
+      `<line x1="${item.x}" y1="${round(y + GRID.dayToLine)}" x2="${item.x + GRID.columnWidth}" y2="${round(y + GRID.dayToLine)}" stroke="${COLORS.white}" stroke-opacity="0.85" stroke-width="1.5"/>`
     );
-
-    pieces.push(
-      svgText(
-        contentX,
-        currentY,
-        weekdayLines[0] || '',
-        'event-weekday',
-        {
-          fontSize: 15,
-          fill: accentColor,
-          letterSpacing: 0.5,
-        },
-      ),
-    );
-
-    currentY += 20;
   }
-
-  if (cityText || stateText) {
-    const cityMaxCharacters = Math.max(
-      10,
-      Math.floor(contentWidth / 11),
+  if (item.kind === 'city') {
+    const baseline = y + 30;
+    const stateWidth = item.state ? measure(item.state, GRID.stateSize, WEIGHTS.state) + 14 : 0;
+    const citySize = fitSingleLine(
+      item.city,
+      GRID.columnWidth - stateWidth,
+      GRID.citySize,
+      GRID.cityMinSize,
+      WEIGHTS.city,
+      measure,
     );
-
-    const cityLines = wrapText(
-      cityText,
-      cityMaxCharacters,
-      1,
+    const cityWidth = measure(item.city, citySize, WEIGHTS.city);
+    return (
+      textNode(item.city, item.x, baseline, citySize, COLORS.yellow, {weight: WEIGHTS.city, family: FONT_FAMILY}) +
+      (item.state
+        ? textNode(item.state, item.x + cityWidth + 14, baseline, GRID.stateSize, COLORS.white, {weight: WEIGHTS.state, family: FONT_FAMILY_EXTENDED})
+        : '')
     );
-
-    if (cityLines.length > 0) {
-      pieces.push(
-        svgText(
-          contentX,
-          currentY,
-          cityLines[0],
-          'event-city',
-          {
-            fontSize: 19,
-            fill: textColor,
-          },
-        ),
-      );
-    }
-
-    if (stateText) {
-      pieces.push(
-        svgText(
-          x + width - innerPadding,
-          currentY,
-          stateText,
-          'event-state',
-          {
-            fontSize: 16,
-            fill: textColor,
-            textAnchor: 'end',
-          },
-        ),
-      );
-    }
-
-    currentY += 22;
   }
-
-  if (titleLines.length > 0) {
-    const availableTitleLines = titleLines.slice(0, 2);
-
-    availableTitleLines.forEach((line, lineIndex) => {
-      pieces.push(
-        svgText(
-          contentX,
-          currentY + lineIndex * 18,
-          line,
-          'event-name',
-          {
-            fontSize: 15,
-            fill: textColor,
-          },
-        ),
-      );
+  const timeSize = fitSingleLine(item.time, GRID.timeBoxWidth - 14, GRID.timeSize, FIT_FLOOR, WEIGHTS.time, measure);
+  const textX = item.x + GRID.textInset;
+  let markup =
+    rect(item.x, y, GRID.timeBoxWidth, GRID.rowMinHeight, COLORS.white) +
+    textNode(item.time, item.x + GRID.timeBoxWidth / 2, y + GRID.rowMinHeight / 2 + timeSize * 0.36, timeSize, COLORS.red, {
+      anchor: 'middle',
+      weight: WEIGHTS.time,
+        family: FONT_FAMILY,
     });
-
-    currentY += availableTitleLines.length * 18;
-  }
-
-  const metadata: string[] = [];
-
-  if (timeText) {
-    metadata.push(timeText);
-  }
-
-  if (locationText) {
-    metadata.push(locationText);
-  }
-
-  const remainingHeight = y + height - currentY - 8;
-
-  if (metadata.length > 0 && remainingHeight >= 13) {
-    const metadataText = metadata.join(' · ');
-
-    const maxCharacters = Math.max(
-      16,
-      Math.floor(contentWidth / 8),
-    );
-
-    const metadataLines = wrapText(
-      metadataText,
-      maxCharacters,
-      remainingHeight >= 30 ? 2 : 1,
-    );
-
-    metadataLines.forEach((line, lineIndex) => {
-      const metadataY = Math.min(
-        y + height - 8,
-        currentY + 15 + lineIndex * 14,
-      );
-
-      pieces.push(
-        svgText(
-          contentX,
-          metadataY,
-          line,
-          'event-location',
-          {
-            fontSize: 11,
-            fill: mutedColor,
-          },
-        ),
-      );
+  item.title.lines.forEach((line, index) => {
+    markup += textNode(line, textX, y + titleBaseline(item.title, index), item.title.size, COLORS.white, {
+      weight: WEIGHTS.title,
+      family: FONT_FAMILY,
+    });
+  });
+  if (item.place) {
+    const place = item.place;
+    place.lines.forEach((line, index) => {
+      markup += textNode(line, textX, y + placeBaseline(item.title, place, index), place.size, COLORS.white, {
+        weight: WEIGHTS.place,
+        family: FONT_FAMILY,
+      });
     });
   }
-
-  pieces.push('</g>');
-
-  return pieces.join('\n');
+  return markup;
 }
 
-/**
- * Gera o cabeçalho do card.
- */
-function renderHeader(
-  options: ShareCardOptions,
-  grid: GridConfig,
-  page: number,
-  totalPages: number,
-): string {
-  const width = options.width ?? DEFAULTS.width;
-  const accentColor =
-    options.accentColor ?? DEFAULTS.accentColor;
-  const textColor = options.textColor ?? DEFAULTS.textColor;
+export function generateShareCard(events: readonly MobilizationEvent[], options: ShareCardOptions): ShareCardResult {
+  const formatKey = options.format ?? 'feed';
+  const {width, height} = IMAGE_FORMATS[formatKey];
+  const {shiftY, bottom} = FORMAT_OFFSETS[formatKey];
+  const {assets} = options;
+  const measure = createMeasure();
 
-  const title = sanitizeText(
-    options.title || 'Agenda de Mobilizações',
-  );
+  const areaTop = GRID.areaTop + shiftY;
+  const drafts = planPages(events, bottom - areaTop, measure);
+  const style = fontStyle(assets.fonts);
+  const total = drafts.length;
 
-  const subtitle = sanitizeText(options.subtitle || '');
+  const pages = drafts.map<ShareCardPage>((draft, index) => {
+    const body = draft.items.length
+      ? draft.items.map(item => renderItem(item, areaTop, measure)).join('')
+      : textNode('NENHUM EVENTO SELECIONADO', width / 2, areaTop + 60, 22, COLORS.white, {
+          anchor: 'middle',
+          weight: WEIGHTS.title,
+          letterSpacing: 1,
+        });
+    const counter =
+      total > 1
+        ? textNode(`CARD ${index + 1} DE ${total}`, width / 2, bottom + 40, 15, COLORS.white, {
+            anchor: 'middle',
+            weight: WEIGHTS.ui,
+            letterSpacing: 2,
+          })
+        : '';
+    const label = `${SITE_NAME}: ${draft.events} ${draft.events === 1 ? 'evento' : 'eventos'}${total > 1 ? `, card ${index + 1} de ${total}` : ''}`;
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="card-title">` +
+      `<title id="card-title">${escapeXml(label)}</title>` +
+      style +
+      `<g font-family="'${FONT_FAMILY}', 'Arial Black', sans-serif">` +
+      rect(0, 0, width, height, COLORS.background) +
+      rect(0, 0, width, GRID.barHeight, COLORS.bar) +
+      imageNode(assets.title, GRID.leftX, GRID.titleY + shiftY) +
+      imageNode(assets.intro, GRID.leftX, GRID.introY + shiftY) +
+      imageNode(assets.box, GRID.leftX, GRID.boxY + shiftY) +
+      body +
+      counter +
+      `</g></svg>`;
+    return {svg, width, height, index, total, shownEvents: draft.events};
+  });
 
-  const date = sanitizeText(options.date || '');
-
-  const parts: string[] = [];
-
-  parts.push(`
-    <g class="header">
-      <rect
-        x="0"
-        y="0"
-        width="${width}"
-        height="${grid.headerHeight}"
-        fill="${escapeXml(options.backgroundColor ?? DEFAULTS.backgroundColor)}"
-      />
-      <rect
-        x="${grid.paddingX}"
-        y="48"
-        width="72"
-        height="7"
-        rx="3"
-        fill="${escapeXml(accentColor)}"
-      />
-  `);
-
-  parts.push(
-    svgText(
-      grid.paddingX,
-      92,
-      title,
-      'card-title',
-      {
-        fontSize: title.length > 27 ? 37 : 46,
-        fill: textColor,
-      },
-    ),
-  );
-
-  if (subtitle) {
-    parts.push(
-      svgText(
-        grid.paddingX,
-        132,
-        subtitle,
-        'metadata',
-        {
-          fontSize: 19,
-          fill: textColor,
-        },
-      ),
-    );
-  }
-
-  if (date) {
-    parts.push(
-      svgText(
-        grid.paddingX,
-        170,
-        date,
-        'metadata',
-        {
-          fontSize: 17,
-          fill: accentColor,
-        },
-      ),
-    );
-  }
-
-  parts.push(`
-      <line
-        x1="${grid.paddingX}"
-        y1="${grid.headerHeight - 1}"
-        x2="${width - grid.paddingX}"
-        y2="${grid.headerHeight - 1}"
-        stroke="${escapeXml(textColor)}"
-        stroke-opacity="0.14"
-        stroke-width="1"
-      />
-    </g>
-  `);
-
-  if (totalPages > 1) {
-    parts.push(
-      svgText(
-        width - grid.paddingX,
-        170,
-        `${page + 1}/${totalPages}`,
-        'metadata',
-        {
-          fontSize: 16,
-          fill: accentColor,
-          textAnchor: 'end',
-        },
-      ),
-    );
-  }
-
-  return parts.join('\n');
-}
-
-/**
- * Gera o rodapé do card.
- */
-function renderFooter(
-  options: ShareCardOptions,
-  grid: GridConfig,
-  page: number,
-  totalPages: number,
-  totalEvents: number,
-): string {
-  const width = options.width ?? DEFAULTS.width;
-  const height = options.height ?? DEFAULTS.height;
-  const textColor = options.textColor ?? DEFAULTS.textColor;
-  const mutedColor = options.mutedColor ?? DEFAULTS.mutedColor;
-  const accentColor =
-    options.accentColor ?? DEFAULTS.accentColor;
-
-  const footerY = height - grid.footerHeight;
-
-  const parts: string[] = [];
-
-  parts.push(`
-    <g class="footer">
-      <line
-        x1="${grid.paddingX}"
-        y1="${footerY}"
-        x2="${width - grid.paddingX}"
-        y2="${footerY}"
-        stroke="${escapeXml(textColor)}"
-        stroke-opacity="0.18"
-        stroke-width="1"
-      />
-  `);
-
-  if (options.showEventCount !== false) {
-    parts.push(
-      svgText(
-        grid.paddingX,
-        footerY + 30,
-        `${totalEvents} ${totalEvents === 1 ? 'mobilização' : 'mobilizações'}`,
-        'metadata',
-        {
-          fontSize: 14,
-          fill: mutedColor,
-        },
-      ),
-    );
-  }
-
-  if (options.showPageNumber !== false && totalPages > 1) {
-    parts.push(
-      svgText(
-        width - grid.paddingX,
-        footerY + 30,
-        `Página ${page + 1} de ${totalPages}`,
-        'metadata',
-        {
-          fontSize: 14,
-          fill: accentColor,
-          textAnchor: 'end',
-        },
-      ),
-    );
-  }
-
-  parts.push('</g>');
-
-  return parts.join('\n');
-}
-
-/**
- * Gera um SVG completo para uma página.
- */
-function renderPage(
-  events: NormalizedEvent[],
-  options: ShareCardOptions,
-  page: number,
-  totalPages: number,
-  totalEvents: number,
-): string {
-  const width = options.width ?? DEFAULTS.width;
-  const height = options.height ?? DEFAULTS.height;
-
-  const backgroundColor =
-    options.backgroundColor ?? DEFAULTS.backgroundColor;
-
-  const textColor = options.textColor ?? DEFAULTS.textColor;
-  const accentColor =
-    options.accentColor ?? DEFAULTS.accentColor;
-  const mutedColor =
-    options.mutedColor ?? DEFAULTS.mutedColor;
-
-  const eventsPerPage =
-    options.eventsPerPage ?? DEFAULTS.eventsPerPage;
-
-  const grid = calculateGrid(
+  const first = pages[0];
+  if (!first) throw new Error('Nenhuma página gerada.');
+  return {
+    svg: first.svg,
     width,
     height,
-    eventsPerPage,
-  );
-
-  const header = renderHeader(
-    options,
-    grid,
-    page,
-    totalPages,
-  );
-
-  const footer = renderFooter(
-    options,
-    grid,
-    page,
-    totalPages,
-    totalEvents,
-  );
-
-  const eventMarkup = events
-    .map((event, index) =>
-      renderEvent(event, index, grid, {
-        width,
-        height,
-        backgroundColor,
-        textColor,
-        accentColor,
-        mutedColor,
-      }),
-    )
-    .join('\n');
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<svg
-  xmlns="${SVG_NS}"
-  width="${width}"
-  height="${height}"
-  viewBox="0 0 ${width} ${height}"
-  role="img"
-  aria-label="${escapeXml(options.title || 'Agenda de Mobilizações')}"
->
-  <title>${escapeXml(options.title || 'Agenda de Mobilizações')}</title>
-  <defs>
-    <style>
-      ${getFontStyles()}
-    </style>
-    <clipPath id="card-clip-${page}">
-      <rect width="${width}" height="${height}" />
-    </clipPath>
-  </defs>
-
-  <g clip-path="url(#card-clip-${page})">
-    <rect
-      width="${width}"
-      height="${height}"
-      fill="${escapeXml(backgroundColor)}"
-    />
-
-    ${header}
-
-    <g class="events">
-      ${eventMarkup}
-    </g>
-
-    ${footer}
-
-    <!-- Barra amarela oficial no topo do card: 14 px de altura. -->
-    <rect
-      class="top-accent-bar"
-      x="0"
-      y="0"
-      width="${width}"
-      height="14"
-      fill="${escapeXml(accentColor)}"
-    />
-  </g>
-</svg>`;
+    pages,
+    shownEvents: pages.reduce((sum, page) => sum + page.shownEvents, 0),
+  };
 }
 
-/**
- * Função principal.
- *
- * Retorna um único SVG quando os eventos cabem em uma página.
- * Quando há mais eventos, retorna um conjunto de cards de continuação.
- *
- * A paginação padrão é de 15 eventos por card.
- */
-export function generateShareCard(
-  options: ShareCardOptions,
-): string | string[] {
-  const events = Array.isArray(options.events)
-    ? options.events
-    : [];
+export function svgToDataUrl(svg: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
 
-  const eventsPerPage = Math.max(
-    1,
-    Math.floor(
-      options.eventsPerPage ?? DEFAULTS.eventsPerPage,
-    ),
+function pngSize(dataUrl: string): {width: number; height: number} {
+  const header = atob(dataUrl.slice(dataUrl.indexOf(',') + 1, dataUrl.indexOf(',') + 45));
+  const read = (offset: number) =>
+    ((header.charCodeAt(offset) << 24) |
+      (header.charCodeAt(offset + 1) << 16) |
+      (header.charCodeAt(offset + 2) << 8) |
+      header.charCodeAt(offset + 3)) >>>
+    0;
+  return {width: read(16), height: read(20)};
+}
+
+async function toCardImage(load: Promise<{default: string}>): Promise<CardImage> {
+  const href = (await load).default;
+  return {href, ...pngSize(href)};
+}
+
+const customFontFiles = import.meta.glob<string>('../assets/share/*.otf', {
+  query: '?inline',
+  import: 'default',
+});
+
+const FONT_FILE_SPECS: readonly {filename: string; family: CardFontFamily; weight: CardFontWeight}[] = [
+  {filename: 'Transducer-Black.otf', family: 'Transducer', weight: 900},
+  {filename: 'Transducer-Medium.otf', family: 'Transducer', weight: 500},
+  {filename: 'TransducerExtended-Black.otf', family: 'Transducer Extended', weight: 900},
+  {filename: 'TransducerExtended-Bold.otf', family: 'Transducer Extended', weight: 700},
+];
+
+async function loadFonts(): Promise<{fonts: CardFontFace[]; fontLabel: string}> {
+  const entries = Object.entries(customFontFiles);
+  const loaded = await Promise.all(FONT_FILE_SPECS.map(async spec => {
+    const entry = entries.find(([filePath]) => (filePath.split('/').pop() ?? filePath) === spec.filename);
+    return entry ? {weight: spec.weight, family: spec.family, dataUrl: await entry[1]()} : null;
+  }));
+  const fonts = loaded.filter((font): font is CardFontFace => font !== null);
+  if (fonts.length === FONT_FILE_SPECS.length) return {fonts, fontLabel: 'Transducer / Transducer Extended'};
+  const module = await import('@fontsource/krona-one/files/krona-one-latin-400-normal.woff2?inline');
+  const fallback: CardFontFace[] = fonts.length ? fonts : ([500, 700, 900] as const).map(weight => ({weight, family: FONT_FAMILY, dataUrl: module.default}));
+  return {fonts: fallback, fontLabel: fonts.length ? 'Transducer (parcial)' : 'Krona One'};
+}
+
+async function registerFonts(fonts: readonly CardFontFace[]): Promise<void> {
+  if (typeof document === 'undefined' || typeof FontFace === 'undefined') return;
+  await Promise.all(
+    fonts.map(async font => {
+      const face = new FontFace(font.family ?? FONT_FAMILY, `url(${font.dataUrl})`, {weight: String(font.weight)});
+      await face.load();
+      document.fonts.add(face);
+    }),
   );
+}
 
-  const normalizedEvents = events.map((event, index) =>
-    normalizeEvent(event, index),
-  );
+let assetsPromise: Promise<ShareCardAssets> | null = null;
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(normalizedEvents.length / eventsPerPage),
-  );
-
-  const pages: CardPage[] = [];
-
-  for (let page = 0; page < totalPages; page += 1) {
-    const start = page * eventsPerPage;
-    const end = start + eventsPerPage;
-
-    const pageEvents = normalizedEvents.slice(start, end);
-
-    pages.push({
-      page,
-      totalPages,
-      events: pageEvents,
-      svg: renderPage(
-        pageEvents,
-        options,
-        page,
-        totalPages,
-        normalizedEvents.length,
-      ),
+export function loadShareCardAssets(): Promise<ShareCardAssets> {
+  if (!assetsPromise) {
+    assetsPromise = (async () => {
+      const [{fonts, fontLabel}, title, intro, box] = await Promise.all([
+        loadFonts(),
+        toCardImage(import('../assets/share/titulo.png?inline')),
+        toCardImage(import('../assets/share/texto-apresentacao.png?inline')),
+        toCardImage(import('../assets/share/retangulo-apresentacao.png?inline')),
+      ]);
+      await registerFonts(fonts);
+      return {fonts, fontLabel, title, intro, box};
+    })().catch(error => {
+      assetsPromise = null;
+      throw error;
     });
   }
-
-  if (pages.length === 1) {
-    return pages[0].svg;
-  }
-
-  return pages.map((page) => page.svg);
+  return assetsPromise;
 }
 
-/**
- * Versão estruturada para quem precisa dos SVGs e dos metadados
- * de paginação no mesmo resultado.
- */
-export function generateShareCardPages(
-  options: ShareCardOptions,
-): CardPage[] {
-  const events = Array.isArray(options.events)
-    ? options.events
-    : [];
-
-  const eventsPerPage = Math.max(
-    1,
-    Math.floor(
-      options.eventsPerPage ?? DEFAULTS.eventsPerPage,
-    ),
-  );
-
-  const normalizedEvents = events.map((event, index) =>
-    normalizeEvent(event, index),
-  );
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(normalizedEvents.length / eventsPerPage),
-  );
-
-  return Array.from({ length: totalPages }, (_, page) => {
-    const pageEvents = normalizedEvents.slice(
-      page * eventsPerPage,
-      (page + 1) * eventsPerPage,
-    );
-
-    return {
-      page,
-      totalPages,
-      events: pageEvents,
-      svg: renderPage(
-        pageEvents,
-        options,
-        page,
-        totalPages,
-        normalizedEvents.length,
-      ),
-    };
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Não foi possível renderizar o card.'));
+    image.src = src;
   });
 }
 
-/**
- * Converte um SVG em Blob para download ou processamento posterior.
- * Disponível em navegadores.
- */
-export function shareCardToBlob(svg: string): Blob {
-  return new Blob([svg], {
-    type: 'image/svg+xml;charset=utf-8',
+export async function svgToPngBlob(svg: string, width: number, height: number): Promise<Blob> {
+  const image = await loadImage(svgToDataUrl(svg));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Canvas indisponível neste navegador.');
+  context.drawImage(image, 0, 0, width, height);
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(blob => (blob ? resolve(blob) : reject(new Error('Falha ao gerar o PNG.'))), 'image/png');
   });
 }
 
-/**
- * Gera um nome de arquivo consistente para cada página.
- */
-export function getShareCardFilename(
-  options: ShareCardOptions,
-  page = 0,
-  totalPages = 1,
-): string {
-  const prefix = (
-    options.outputPrefix || DEFAULTS.outputPrefix
-  )
-    .trim()
-    .toLocaleLowerCase('pt-BR')
-    .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '') || DEFAULTS.outputPrefix;
+export function downloadBlob(blob: Blob, fileName: string): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
 
-  if (totalPages <= 1) {
-    return `${prefix}.svg`;
-  }
-
-  return `${prefix}-pagina-${page + 1}.svg`;
+export function svgToBlob(svg: string): Blob {
+  return new Blob([svg], {type: 'image/svg+xml;charset=utf-8'});
 }

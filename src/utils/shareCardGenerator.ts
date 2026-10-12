@@ -144,14 +144,13 @@ const CONNECTORS = new Set([
 const PROTECTED_ACRONYMS = new Set(['MST','UNE','CUT','PT','PSOL']);
 const ACRONYM_PATTERN = /\b(MST|UNE|CUT|PT|PSOL)\b/gi;
 
-/** Sanitiza textos, converte travessões e preserva siglas políticas. */
 /**
  * Normaliza textos em Title Case, mantém conectores em minúsculas
  * exceto no início e preserva as siglas políticas conhecidas.
  */
 export function sanitizeText(value: unknown): string {
   if (value === null || value === undefined) return '';
-  const input = String(value).replace(/[\\u2014\\u2013]/g, '-').replace(/\\s+/g, ' ').trim();
+  const input = String(value).replace(/[\u2014\u2013]/g, '-').replace(/\s+/g, ' ').trim();
   if (!input) return '';
   const protectedTokens = new Map<string, string>();
   let tokenIndex = 0;
@@ -163,13 +162,16 @@ export function sanitizeText(value: unknown): string {
     return token;
   });
   let firstWord = true;
-  let result = protectedInput.toLocaleLowerCase('pt-BR').split(/(\\s+|[-/])/).map(part => {
-    if (!part || /^\\s+$/.test(part) || part === '-' || part === '/') return part;
-    if (/^zzqprotected\\d+qxz$/.test(part)) { firstWord = false; return part; }
-    if (!firstWord && CONNECTORS.has(part)) return part;
-    firstWord = false;
-    return part.charAt(0).toLocaleUpperCase('pt-BR') + part.slice(1);
-  }).join('');
+  let result = protectedInput.toLocaleLowerCase('pt-BR')
+    .split(/(\s+|[-/])/)
+    .map(part => {
+      if (!part || /^\s+$/.test(part) || part === '-' || part === '/') return part;
+      if (/^zzqprotected\d+qxz$/.test(part)) { firstWord = false; return part; }
+      if (!firstWord && CONNECTORS.has(part)) return part;
+      firstWord = false;
+      return part.charAt(0).toLocaleUpperCase('pt-BR') + part.slice(1);
+    })
+    .join('');
   protectedTokens.forEach((acronym, token) => { result = result.replace(token, acronym); });
   return result;
 }

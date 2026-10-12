@@ -77,31 +77,35 @@ export function listEventCities(events: readonly MobilizationEvent[], max = 4): 
   return cities.slice(0, -1).join(', ') + ' e ' + cities[cities.length - 1];
 }
 
-/** Texto pronto para divulgar a agenda a partir da Home. */
-export function buildAgendaShareText(events: readonly MobilizationEvent[]): string {
-  const publicEvents = events.filter(event => event.public);
-  const total = publicEvents.length;
-  if (!total) {
-    return 'Agenda de Mobilizações pelo Lula: acesse a agenda e ajude a divulgar as próximas mobilizações.';
-  }
+export const SHARE_SHORT_URL = 'https://t.co/uxXXtYDpBA';
 
-  const cities = uniqueEventCities(publicEvents);
-  const cityList = listEventCities(publicEvents, 4);
-  const cityLine = cityList
-    ? (cities.length > 4 ? 'Algumas das cidades com mobilizações: ' : 'Cidades com mobilizações: ') + cityList + '.'
-    : '';
-
+/** Texto exato para divulgar a agenda geral na Home. */
+export function buildAgendaShareText(): string {
   return [
-    'Agenda de Mobilizações pelo Lula: ' + total + ' ' + (total === 1 ? 'evento público organizado pelo Brasil.' : 'eventos públicos organizados pelo Brasil.'),
-    cityLine,
-    'Acesse a agenda completa e ajude a divulgar.',
-  ].filter(Boolean).join('\n');
+    '💡 Conheça o Radar de Mobilizações!',
+    '',
+    'É uma plataforma independente que junta TODAS as mobilizações e eventos em um lugar só. Você entra, filtra por localização e modalidade e já descobre como participar.',
+    '',
+    'Vamos lotar as ruas e as redes!',
+    '🔗 ' + SHARE_SHORT_URL,
+  ].join('\n');
+}
+
+/** Legenda exata para compartilhar os cards dos eventos selecionados. */
+export function buildCardShareText(events: readonly MobilizationEvent[]): string {
+  const cityList = listEventCities(events, 4) || 'sua cidade';
+  return [
+    '📢 Mobilize-se nos eventos que terão em: ' + cityList + '. Confira o card dos eventos e ajudem a lotar as ruas e as redes!',
+    '',
+    'Para saber de mais eventos, acesse a Agenda de Mobilizações: ' + SHARE_SHORT_URL,
+  ].join('\n');
 }
 
 function withUrl(content: ShareContent, hashtags: readonly string[]): string {
-  const parts = [content.text.trim()];
+  const text = content.text.trim();
+  const parts = [text];
   if (hashtags.length) parts.push(hashtagLine(hashtags));
-  parts.push(content.url);
+  if (content.url && !text.includes(content.url)) parts.push(content.url);
   return parts.filter(Boolean).join('\n\n');
 }
 
@@ -154,13 +158,13 @@ export function buildShareLink(network: SocialNetwork, rawContent: ShareContent)
       return `https://wa.me/?${query({text: withUrl(content, hashtags)})}`;
     case 'telegram':
       return `https://t.me/share/url?${query({
-        url: content.url,
+        url: content.text.includes(content.url) ? '' : content.url,
         text: [content.text.trim(), hashtagLine(hashtags)].filter(Boolean).join('\n\n'),
       })}`;
     case 'x':
       return `https://x.com/intent/post?${query({
         text: content.text.trim(),
-        url: content.url,
+        url: content.text.includes(content.url) ? '' : content.url,
         hashtags: hashtags.join(','),
       })}`;
     case 'threads':

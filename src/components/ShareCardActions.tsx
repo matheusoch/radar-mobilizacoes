@@ -2,7 +2,7 @@ import {useRef, useState} from 'react';
 import {Check, Copy, Download, FileCode2, Link2, Share2} from 'lucide-react';
 import type {ShareCardResult} from '../utils/shareCardGenerator';
 import {downloadBlob, svgToBlob, svgToPngBlob} from '../utils/shareCardGenerator';
-import {SOCIAL_NETWORKS, buildShareCaption, buildShareLink, type ShareContent} from '../utils/socialShare';
+import {SOCIAL_NETWORKS, buildShareLink, type ShareContent} from '../utils/socialShare';
 
 interface Props {
   card: ShareCardResult | null;
@@ -84,7 +84,7 @@ export default function ShareCardActions({card, fileBase, content, shareTitle, c
 
   const copyMessage = async () => {
     try {
-      await copyToClipboard(buildShareCaption(content));
+      await copyToClipboard(content.text);
       notify('Mensagem pronta copiada.');
     } catch {
       notify('Não foi possível copiar a mensagem.');
@@ -92,21 +92,29 @@ export default function ShareCardActions({card, fileBase, content, shareTitle, c
   };
 
   const nativeShare = async () => {
+    // A cópia é iniciada dentro do clique, em paralelo à preparação dos PNGs.
+    const copyTask = copyToClipboard(content.text)
+      .then(() => notify('Mensagem pronta copiada.'))
+      .catch(() => notify('Não foi possível copiar automaticamente; use “Copiar mensagem”.'));
+
     if (!navigator.share) {
-      await copyLink();
+      await copyTask;
       return;
     }
+
     setBusy(true);
     try {
       const files = await buildPngs();
       if (navigator.canShare?.({files})) {
         await navigator.share({title: shareTitle, text: content.text, files});
       } else {
-        await navigator.share({title: shareTitle, text: content.text, url: content.url});
+        await navigator.share({title: shareTitle, text: content.text});
       }
+      await copyTask;
     } catch (error) {
+      await copyTask;
       if (error instanceof DOMException && error.name === 'AbortError') return;
-      notify('Não foi possível compartilhar. Use os botões das redes ou baixe a imagem.');
+      notify('A mensagem foi copiada quando possível. Use os botões das redes ou baixe as imagens.');
     } finally {
       setBusy(false);
     }

@@ -1,14 +1,13 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {Link} from 'react-router-dom';
 import {Check, Copy, Download, Image as ImageIcon, Megaphone, Share2, X} from 'lucide-react';
-import {BANNER_PATH, resolveSiteUrl} from '../config/site';
+import {BANNER_PATH} from '../config/site';
 import type {MobilizationEvent} from '../types';
 import {downloadBlob} from '../utils/shareCardGenerator';
-import {SOCIAL_NETWORKS, buildAgendaShareText, buildShareCaption, buildShareLink, type ShareContent} from '../utils/socialShare';
+import {SOCIAL_NETWORKS, SHARE_SHORT_URL, buildAgendaShareText, buildShareLink, type ShareContent} from '../utils/socialShare';
 
 const SHARE_TITLE = 'Agenda de Mobilizações pelo Lula';
-const BANNER_FILE_NAME = 'agenda-mobilizacoes.png';
-const HASHTAGS = ['AgendaDeMobilizacoes'] as const;
+const BANNER_FILE_NAME = 'agenda-mobilizações.png';
 
 async function fetchBanner(): Promise<Blob> {
   const response = await fetch(BANNER_PATH);
@@ -36,15 +35,13 @@ export default function ShareSection({events}: {events: MobilizationEvent[]}) {
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState('');
 
-  const content = useMemo<ShareContent>(() => {
-    return {
-      text: buildAgendaShareText(events),
-      url: resolveSiteUrl(),
-      hashtags: HASHTAGS,
-    };
-  }, [events]);
+  const content = useMemo<ShareContent>(() => ({
+    text: buildAgendaShareText(),
+    url: SHARE_SHORT_URL,
+    hashtags: [],
+  }), []);
 
-  const caption = useMemo(() => buildShareCaption(content), [content]);
+  const caption = content.text;
 
   useEffect(() => {
     if (!feedback) return undefined;
@@ -56,20 +53,29 @@ export default function ShareSection({events}: {events: MobilizationEvent[]}) {
   const closeFallback = () => dialogRef.current?.close();
 
   const share = async () => {
+    // Dispara a cópia imediatamente no clique e continua mesmo se o navegador negar a permissão.
+    const copyTask = copyToClipboard(caption)
+      .then(() => setFeedback('Texto pronto copiado. Você também pode anexar o banner ao publicar.'))
+      .catch(() => setFeedback('Não foi possível copiar automaticamente; a legenda continua disponível abaixo.'));
+
     if (typeof navigator.share !== 'function') {
+      await copyTask;
       openFallback();
       return;
     }
+
     setBusy(true);
     try {
       const blob = await fetchBanner();
       const file = new File([blob], BANNER_FILE_NAME, {type: blob.type || 'image/png'});
       if (navigator.canShare?.({files: [file]})) {
-        await navigator.share({title: SHARE_TITLE, text: `${content.text}\n\n${content.url}`, files: [file]});
+        await navigator.share({title: SHARE_TITLE, text: caption, files: [file]});
       } else {
-        await navigator.share({title: SHARE_TITLE, text: content.text, url: content.url});
+        await navigator.share({title: SHARE_TITLE, text: caption});
       }
+      await copyTask;
     } catch (error) {
+      await copyTask;
       if (error instanceof DOMException && error.name === 'AbortError') return;
       openFallback();
     } finally {
@@ -89,7 +95,7 @@ export default function ShareSection({events}: {events: MobilizationEvent[]}) {
   const copyCaption = async () => {
     try {
       await copyToClipboard(caption);
-      setFeedback('Legenda copiada. Cole na publicação do Instagram.');
+      setFeedback('Texto pronto copiado.');
     } catch {
       setFeedback('Não foi possível copiar a legenda.');
     }

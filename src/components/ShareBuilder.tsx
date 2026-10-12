@@ -1,10 +1,10 @@
 import {useEffect,useMemo,useState} from 'react';
 import {CalendarDays,Check,Image as ImageIcon,Star,X} from 'lucide-react';
-import {CARD_FORMAT_KEYS,IMAGE_FORMATS,resolveSiteUrl,type CardFormatKey} from '../config/site';
+import {CARD_FORMAT_KEYS,IMAGE_FORMATS,type CardFormatKey} from '../config/site';
 import type {MobilizationEvent} from '../types';
 import {MAX_EVENTS_PER_CARD,generateShareCard,svgToDataUrl} from '../utils/shareCardGenerator';
 import {useShareCardAssets} from '../utils/useShareCardAssets';
-import {buildEventsShareText,type ShareContent} from '../utils/socialShare';
+import {SHARE_SHORT_URL,buildCardShareText,type ShareContent} from '../utils/socialShare';
 import ShareCardActions from './ShareCardActions';
 
 const MAX_EVENTS=MAX_EVENTS_PER_CARD*2;
@@ -85,15 +85,11 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
     });
   };
 
-  const content=useMemo<ShareContent>(()=>{
-    const base=resolveSiteUrl();
-    const ids=selected.map(encodeURIComponent).join(',');
-    return {
-      text:buildEventsShareText(chosen),
-      url:ids?base+'/divulgar?eventos='+ids:base+'/divulgar',
-      hashtags:HASHTAGS,
-    };
-  },[chosen,selected]);
+  const content=useMemo<ShareContent>(()=>({
+    text:buildCardShareText(chosen),
+    url:SHARE_SHORT_URL,
+    hashtags:[],
+  }),[chosen]);
 
   return <div className='container page share-builder-page'>
     <div className='eyebrow'>

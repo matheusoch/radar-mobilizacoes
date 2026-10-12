@@ -38,16 +38,25 @@ export default function ShareCardActions({card, fileBase, content, shareTitle, c
     timer.current = window.setTimeout(() => setFeedback(''), 2800);
   };
 
-  const buildPng = async (): Promise<Blob> => {
+  const pageName = (index: number, extension: string): string =>
+    card && card.pages.length > 1 ? `${fileBase}-${index + 1}.${extension}` : `${fileBase}.${extension}`;
+
+  const buildPngs = async (): Promise<File[]> => {
     if (!card) throw new Error('Card indisponível.');
-    return svgToPngBlob(card.svg, card.width, card.height);
+    return Promise.all(
+      card.pages.map(async page => {
+        const blob = await svgToPngBlob(page.svg, page.width, page.height);
+        return new File([blob], pageName(page.index, 'png'), {type: 'image/png'});
+      }),
+    );
   };
 
   const downloadPng = async () => {
     setBusy(true);
     try {
-      downloadBlob(await buildPng(), `${fileBase}.png`);
-      notify('Imagem PNG baixada.');
+      const files = await buildPngs();
+      files.forEach((file, index) => window.setTimeout(() => downloadBlob(file, file.name), index * 350));
+      notify(files.length > 1 ? `${files.length} imagens PNG baixadas.` : 'Imagem PNG baixada.');
     } catch {
       notify('Não foi possível gerar o PNG. Tente baixar o SVG.');
     } finally {
@@ -57,8 +66,10 @@ export default function ShareCardActions({card, fileBase, content, shareTitle, c
 
   const downloadSvg = () => {
     if (!card) return;
-    downloadBlob(svgToBlob(card.svg), `${fileBase}.svg`);
-    notify('Arquivo SVG baixado.');
+    card.pages.forEach((page, index) =>
+      window.setTimeout(() => downloadBlob(svgToBlob(page.svg), pageName(page.index, 'svg')), index * 350),
+    );
+    notify(card.pages.length > 1 ? 'Arquivos SVG baixados.' : 'Arquivo SVG baixado.');
   };
 
   const copyLink = async () => {
@@ -77,9 +88,9 @@ export default function ShareCardActions({card, fileBase, content, shareTitle, c
     }
     setBusy(true);
     try {
-      const file = new File([await buildPng()], `${fileBase}.png`, {type: 'image/png'});
-      if (navigator.canShare?.({files: [file]})) {
-        await navigator.share({title: shareTitle, text: content.text, files: [file]});
+      const files = await buildPngs();
+      if (navigator.canShare?.({files})) {
+        await navigator.share({title: shareTitle, text: content.text, files});
       } else {
         await navigator.share({title: shareTitle, text: content.text, url: content.url});
       }

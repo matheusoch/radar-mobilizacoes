@@ -22,6 +22,10 @@ export type ImageFormat = (typeof IMAGE_FORMATS)[ImageFormatKey];
 
 export const IMAGE_FORMAT_KEYS = Object.keys(IMAGE_FORMATS) as ImageFormatKey[];
 
+export type CardFormatKey = 'feed' | 'story';
+export const CARD_FORMAT_KEYS: readonly CardFormatKey[] = ['feed', 'story'];
+export const BANNER_PATH = '/agenda-mobilizacoes.png';
+
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 function stripTrailingSlash(value: string): string {

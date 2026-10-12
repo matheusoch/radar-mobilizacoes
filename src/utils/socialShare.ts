@@ -46,8 +46,43 @@ function query(params: Record<string, string>): string {
     .join('&');
 }
 
-export function buildShareLink(network: SocialNetwork, content: ShareContent): string {
+export const NETWORK_CHAR_LIMITS: Record<SocialNetwork, number> = {
+  whatsapp: 4000,
+  telegram: 4000,
+  x: 280,
+  threads: 500,
+  bluesky: 300,
+  facebook: 400,
+};
+const X_URL_LENGTH = 23;
+
+function clampText(text: string, max: number): string {
+  const characters = Array.from(text);
+  if (characters.length <= max) return text;
+  return `${characters.slice(0, Math.max(1, max - 1)).join('').trimEnd()}…`;
+}
+
+/** Ajusta o texto para caber no limite da rede, já contando link e hashtags. */
+export function fitTextForNetwork(network: SocialNetwork, content: ShareContent): string {
   const hashtags = normalizeHashtags(content.hashtags);
+  const text = content.text.trim();
+  const tagLength = hashtags.length ? Array.from(hashtagLine(hashtags)).length + 2 : 0;
+  const limit = NETWORK_CHAR_LIMITS[network];
+  switch (network) {
+    case 'x':
+      return clampText(text, limit - X_URL_LENGTH - 2 - (hashtags.length ? tagLength : 0));
+    case 'facebook':
+      return clampText(text, limit);
+    case 'telegram':
+      return clampText(text, limit - tagLength);
+    default:
+      return clampText(text, limit - Array.from(content.url).length - 2 - tagLength);
+  }
+}
+
+export function buildShareLink(network: SocialNetwork, rawContent: ShareContent): string {
+  const hashtags = normalizeHashtags(rawContent.hashtags);
+  const content: ShareContent = {...rawContent, text: fitTextForNetwork(network, rawContent)};
   switch (network) {
     case 'whatsapp':
       return `https://wa.me/?${query({text: withUrl(content, hashtags)})}`;

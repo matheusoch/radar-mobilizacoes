@@ -1,15 +1,15 @@
 import {Download, FileCode2, Share2, Link2, Check} from 'lucide-react';
-import {useEffect, useMemo, useState} from 'react';
+import {useMemo, useState} from 'react';
 import {resolveSiteUrl} from '../config/site';
 import type {MobilizationEvent} from '../types';
 import {
   downloadBlob,
   generateShareCard,
-  loadBebasNeueDataUrl,
   svgToBlob,
   svgToDataUrl,
   svgToPngBlob,
 } from '../utils/shareCardGenerator';
+import {useShareCardAssets} from '../utils/useShareCardAssets';
 import {SOCIAL_NETWORKS, buildShareLink, describeEventForShare, type ShareContent} from '../utils/socialShare';
 
 type Props = {event: MobilizationEvent};
@@ -41,19 +41,9 @@ function fileBase(event: MobilizationEvent) {
 export default function PosterActions({event}: Props) {
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState('');
-  const [fontDataUrl, setFontDataUrl] = useState<string | null>(null);
+  const assets = useShareCardAssets();
 
-  useEffect(() => {
-    let active = true;
-    loadBebasNeueDataUrl().then(url => {
-      if (active) setFontDataUrl(url);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const card = useMemo(() => generateShareCard([event], {format: 'feed', fontDataUrl}), [event, fontDataUrl]);
+  const card = useMemo(() => (assets ? generateShareCard([event], {format: 'feed', assets}) : null), [event, assets]);
   const hasPoster = Boolean(event.image_url);
   const base = fileBase(event);
 
@@ -77,7 +67,10 @@ export default function PosterActions({event}: Props) {
     return response.blob();
   };
 
-  const buildCardPng = () => svgToPngBlob(card.svg, card.width, card.height);
+  const buildCardPng = async (): Promise<Blob> => {
+    if (!card) throw new Error('Card indisponível.');
+    return svgToPngBlob(card.svg, card.width, card.height);
+  };
 
   const sharePoster = async () => {
     setBusy(true);
@@ -146,6 +139,7 @@ export default function PosterActions({event}: Props) {
   };
 
   const downloadCardSvg = () => {
+    if (!card) return;
     downloadBlob(svgToBlob(card.svg), `${base}-card.svg`);
     showFeedback('Card SVG baixado.');
   };
@@ -176,14 +170,14 @@ export default function PosterActions({event}: Props) {
       <figure className="poster-frame">
         {hasPoster ? (
           <img src={event.image_url!} alt={`Pôster de ${event.title}`} loading="lazy" />
-        ) : (
+        ) : card ? (
           <img
             src={svgToDataUrl(card.svg)}
             width={card.width}
             height={card.height}
             alt={`Card de divulgação de ${event.title}`}
           />
-        )}
+        ) : null}
       </figure>
       <div className="poster-actions" aria-label="Ações do pôster">
         <button className="button primary" onClick={sharePoster} disabled={busy}>

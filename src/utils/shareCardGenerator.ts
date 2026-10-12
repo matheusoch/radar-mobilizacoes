@@ -88,7 +88,7 @@ const COLORS = {
 } as const;
 
 const GRID = {
-  columnX: [57, 565] as number[]
+  columnX: [57, 565] as number[],
   columnWidth: 459,
   barHeight: 14,
   titleY: 65,

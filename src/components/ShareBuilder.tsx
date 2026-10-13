@@ -6,13 +6,14 @@ import {MAX_EVENTS_PER_CARD,generateShareCard,svgToDataUrl} from '../utils/share
 import {useShareCardAssets} from '../utils/useShareCardAssets';
 import {SHARE_SHORT_URL,buildCardShareText,type ShareContent} from '../utils/socialShare';
 import ShareCardActions from './ShareCardActions';
+import {formatTimeText} from '../utils/formatTime';
 
 const MAX_EVENTS=MAX_EVENTS_PER_CARD*2;
 const HASHTAGS=['AgendaDeMobilizacoes'] as const;
 
 function getTimeInfo(event:MobilizationEvent){
-  const raw=(event.time_label||event.time||'').trim();
-  const matches=[...raw.matchAll(/\d{1,2}:\d{2}/g)].map(match=>match[0]);
+  const raw=formatTimeText(event.time_label||event.time).trim();
+  const matches=[...raw.matchAll(/\b\d{1,2}h(?:\d{2})?\b/g)].map(match=>match[0]);
   if(matches.length<=1){
     return {primary:matches[0]||'—',detail:''};
   }

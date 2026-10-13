@@ -1,4 +1,5 @@
 import type {MobilizationEvent} from '../types';
+import {formatTimeText} from './formatTime';
 
 export type SocialNetwork = 'whatsapp' | 'telegram' | 'x' | 'threads' | 'bluesky' | 'facebook';
 
@@ -206,7 +207,7 @@ export function describeEventForShare(event: MobilizationEvent): string {
   const city = preserveAcronyms((event.city || '').trim());
   const state = preserveAcronyms((event.state || '').trim());
   const place = [city, state].filter(Boolean).join(' - ');
-  const when = [shortDate(event.date), event.time].filter(Boolean).join(' · ');
+  const when = [shortDate(event.date), formatTimeText(event.time_label||event.time)].filter(Boolean).join(' · ');
   return title + ' (' + [when, place].filter(Boolean).join(' · ') + ')';
 }
 

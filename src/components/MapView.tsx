@@ -5,6 +5,7 @@ import L from 'leaflet';
 import {Link} from 'react-router-dom';
 import {Search,LocateFixed} from 'lucide-react';
 import type {MobilizationEvent} from '../types';
+import {formatTimeText} from '../utils/formatTime';
 
 const icon=new L.Icon({
   iconUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -45,7 +46,7 @@ export default function MapView({events}:{events:MobilizationEvent[]}){
     <MapContainer center={[-14.2,-51.9]} zoom={4} scrollWheelZoom className="map">
       <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
       <FitBounds events={filtered}/>
-      {mapped.map(e=><Marker key={e.id} position={[e.lat!,e.lng!]} icon={icon}><Popup><strong>{e.city} · {e.state}</strong><br/>{e.time_label||e.time||'Horário não informado'} · {e.venue}<br/><Link to={'/evento/'+e.id}>Ver evento</Link></Popup></Marker>)}
+      {mapped.map(e=><Marker key={e.id} position={[e.lat!,e.lng!]} icon={icon}><Popup><strong>{e.city} · {e.state}</strong><br/>{formatTimeText(e.time_label||e.time)||'Horário não informado'} · {e.venue}<br/><Link to={'/evento/'+e.id}>Ver evento</Link></Popup></Marker>)}
     </MapContainer>
     <div className="map-note">O mapa usa as coordenadas cadastradas para cada evento. Quando um evento ainda não tem coordenadas, ele continua disponível no calendário e nos filtros, mas não aparece como ponto.</div>
   </div>

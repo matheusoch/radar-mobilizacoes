@@ -26,11 +26,10 @@ export interface CardFontFace {
 
 export interface ShareCardAssets {
   fonts: readonly CardFontFace[];
-  /** Nome da família efetivamente embutida (Transducer quando os arquivos existem em src/assets/fonts). */
+  /** Nome da família efetivamente embutida. */
   fontLabel: string;
-  title: CardImage;
-  intro: CardImage;
-  box: CardImage;
+  /** Template original completo; os eventos são renderizados como vetores sobre ele. */
+  background: CardImage;
 }
 
 export interface ShareCardOptions {
@@ -88,14 +87,10 @@ const COLORS = {
 } as const;
 
 const GRID = {
-  columnX: [57, 565] as const,
-  columnWidth: 459,
-  barHeight: 14,
-  titleY: 65,
-  introY: 209,
-  boxY: 277,
+  // Two columns inset evenly inside the rounded panel of agenda-template.png.
+  columnX: [136, 550] as const,
+  columnWidth: 394,
   areaTop: 463,
-  leftX: 57,
   dayHeight: 49,
   dayToLine: 74,
   cityHeight: 40,
@@ -122,8 +117,10 @@ const GRID = {
 } as const;
 
 const FORMAT_OFFSETS: Record<CardFormatKey, {shiftY: number; bottom: number}> = {
-  feed: {shiftY: 0, bottom: 1300},
-  story: {shiftY: 185, bottom: 1670},
+  // Feed uses the Photoshop template at its native 1080×1350 size.
+  feed: {shiftY: 0, bottom: 1180},
+  // Story centers that same unscaled template in the 1080×1920 canvas.
+  story: {shiftY: 285, bottom: 1465},
 };
 
 export function escapeXml(value: string): string {
@@ -685,7 +682,7 @@ export function generateShareCard(events: readonly MobilizationEvent[], options:
         });
     const counter =
       total > 1
-        ? textNode(`CARD ${index + 1} DE ${total}`, width / 2, bottom + 40, 15, COLORS.white, {
+        ? textNode(`CARD ${index + 1} DE ${total}`, width / 2, bottom + 120, 15, COLORS.white, {
             anchor: 'middle',
             weight: WEIGHTS.ui,
             letterSpacing: 2,
@@ -696,12 +693,10 @@ export function generateShareCard(events: readonly MobilizationEvent[], options:
       `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="card-title">` +
       `<title id="card-title">${escapeXml(label)}</title>` +
       style +
+      `<defs><pattern id="card-bg-strip" patternUnits="userSpaceOnUse" width="${width}" height="1"><image x="0" y="-10" width="${assets.background.width}" height="${assets.background.height}" xlink:href="${assets.background.href}"/></pattern></defs>` +
+      `<rect x="0" y="0" width="${width}" height="${height}" fill="url(#card-bg-strip)"/>` +
       `<g font-family="'${FONT_FAMILY}', 'Arial Black', sans-serif">` +
-      rect(0, 0, width, height, COLORS.background) +
-      rect(0, 0, width, GRID.barHeight, COLORS.bar) +
-      imageNode(assets.title, GRID.leftX, GRID.titleY + shiftY) +
-      imageNode(assets.intro, GRID.leftX, GRID.introY + shiftY) +
-      imageNode(assets.box, GRID.leftX, GRID.boxY + shiftY) +
+      imageNode(assets.background, 0, shiftY) +
       body +
       counter +
       `</g></svg>`;
@@ -765,14 +760,12 @@ let assetsPromise: Promise<ShareCardAssets> | null = null;
 export function loadShareCardAssets(): Promise<ShareCardAssets> {
   if (!assetsPromise) {
     assetsPromise = (async () => {
-      const [{fonts, fontLabel}, title, intro, box] = await Promise.all([
+      const [{fonts, fontLabel}, background] = await Promise.all([
         loadFonts(),
-        toCardImage(import('../assets/share/titulo.png?inline')),
-        toCardImage(import('../assets/share/texto-apresentacao.png?inline')),
-        toCardImage(import('../assets/share/retangulo-apresentacao.png?inline')),
+        toCardImage(import('../assets/share/agenda-template.png?inline')),
       ]);
       await registerFonts(fonts);
-      return {fonts, fontLabel, title, intro, box};
+      return {fonts, fontLabel, background};
     })().catch(error => {
       assetsPromise = null;
       throw error;

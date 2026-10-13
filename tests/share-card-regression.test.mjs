@@ -38,9 +38,7 @@ const assets = {
     { weight: 700, family: 'Transducer Extended', dataUrl: 'data:font/otf;base64,AA==' },
   ],
   fontLabel: 'Transducer / Transducer Extended',
-  title: { href: 'data:image/png;base64,AA==', width: 100, height: 30 },
-  intro: { href: 'data:image/png;base64,AA==', width: 100, height: 30 },
-  box: { href: 'data:image/png;base64,AA==', width: 100, height: 30 },
+  background: { href: 'data:image/png;base64,AA==', width: 1080, height: 1350 },
 };
 
 function event(overrides = {}) {
@@ -120,8 +118,19 @@ test('unbroken long titles and venue names wrap within the SVG text column', () 
 
   assert.ok(titleLines.length > 1, 'long title should be split across lines');
   assert.ok(venueLines.length > 1, 'long venue should be split across lines');
-  assert.ok(titleLines.every(line => line.text.length * line.size * 0.9 <= 377), 'each title line should fit the estimated SVG column width');
-  assert.ok(venueLines.every(line => line.text.length * line.size * 0.9 <= 377), 'each venue line should fit the estimated SVG column width');
+  assert.ok(titleLines.every(line => line.text.length * line.size * 0.9 <= 312), 'each title line should fit the estimated SVG column width');
+  assert.ok(venueLines.every(line => line.text.length * line.size * 0.9 <= 312), 'each venue line should fit the estimated SVG column width');
   assert.equal(titleLines.map(line => line.text).join(''), title);
   assert.equal(venueLines.map(line => line.text).join(''), venue);
+});
+
+test('uses the Photoshop template as the exact base for Feed and centered Story layouts', () => {
+  const feed = generateShareCard([event()], { format: 'feed', assets });
+  const story = generateShareCard([event()], { format: 'story', assets });
+
+  assert.match(feed.svg, /patternUnits="userSpaceOnUse" width="1080" height="1"/);
+  assert.match(feed.svg, /<image x="0" y="0" width="1080" height="1350" xlink:href="data:image\/png;base64,AA=="/);
+  assert.match(story.svg, /<image x="0" y="285" width="1080" height="1350" xlink:href="data:image\/png;base64,AA=="/);
+  assert.match(feed.svg, /<rect x="136" y="463" width="394" height="49" fill="#FFC301"/);
+  assert.doesNotMatch(feed.svg, /<rect x="0" y="0" width="1080" height="14" fill="#FFC301"[/]>/);
 });

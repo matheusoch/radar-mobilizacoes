@@ -70,7 +70,7 @@ test('SVG card escapes hostile text and embeds the expected Transducer font face
   assert.match(result.svg, /@font-face/);
   assert.match(result.svg, /Transducer Extended/);
   assert.match(result.svg, /&lt;SCRIPT&gt;/);
-  assert.match(result.svg, /Praça &amp; Palácio/);
+  assert.match(result.svg, /PRAÇA &amp; PALÁCIO/);
   assert.doesNotMatch(result.svg, /<script>/i);
   assert.equal(result.shownEvents, 1);
 });

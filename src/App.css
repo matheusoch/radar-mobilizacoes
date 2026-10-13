@@ -317,7 +317,7 @@ body{background:var(--page);color:var(--ink)}
   justify-content:center;
   padding:0 1.5cqw;
   box-sizing:border-box;
-  font-family:"Arial Narrow",Arial,sans-serif;
+  font-family:var(--font-heading);
   font-size:clamp(9px,2.59cqw,14px);
   font-weight:900;
   font-style:italic;
@@ -345,7 +345,7 @@ body{background:var(--page);color:var(--ink)}
   justify-content:center;
   padding:0 1cqw;
   box-sizing:border-box;
-  font-family:"Arial Narrow",Arial,sans-serif;
+  font-family:var(--font-heading);
   font-size:clamp(10px,2.87cqw,15.5px);
   font-weight:900;
   font-style:italic;
@@ -353,7 +353,7 @@ body{background:var(--page);color:var(--ink)}
 }
 .share-card-info{
   min-width:0;
-  font-family:"Arial Narrow",Arial,sans-serif;
+  font-family:var(--font-heading);
   font-style:italic;
   line-height:1.03;
 }
@@ -388,7 +388,7 @@ body{background:var(--page);color:var(--ink)}
   margin-top:3.0cqw;
   text-align:center;
   color:#fff;
-  font-family:"Arial Narrow",Arial,sans-serif;
+  font-family:var(--font-heading);
   font-style:italic;
   line-height:1.12;
 }

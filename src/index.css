@@ -1,6 +1,22 @@
+/* Local Transducer type family: matching the visual identity used by the mobilization cards. */
+@font-face{font-family:"Transducer";src:url("./assets/share/Transducer-Regular.otf") format("opentype");font-style:normal;font-weight:400;font-display:swap}
+@font-face{font-family:"Transducer";src:url("./assets/share/Transducer-Medium.otf") format("opentype");font-style:normal;font-weight:500;font-display:swap}
+@font-face{font-family:"Transducer";src:url("./assets/share/Transducer-Bold.otf") format("opentype");font-style:normal;font-weight:700;font-display:swap}
+@font-face{font-family:"Transducer";src:url("./assets/share/Transducer-Black.otf") format("opentype");font-style:normal;font-weight:900;font-display:swap}
+@font-face{font-family:"Transducer";src:url("./assets/share/Transducer-MediumItalic.otf") format("opentype");font-style:italic;font-weight:500;font-display:swap}
+@font-face{font-family:"Transducer";src:url("./assets/share/Transducer-BoldItalic.otf") format("opentype");font-style:italic;font-weight:700;font-display:swap}
+@font-face{font-family:"Transducer";src:url("./assets/share/Transducer-BlackItalic.otf") format("opentype");font-style:italic;font-weight:900;font-display:swap}
+@font-face{font-family:"Transducer Extended";src:url("./assets/share/TransducerExtended-Regular.otf") format("opentype");font-style:normal;font-weight:400;font-display:swap}
+@font-face{font-family:"Transducer Extended";src:url("./assets/share/TransducerExtended-Medium.otf") format("opentype");font-style:normal;font-weight:500;font-display:swap}
+@font-face{font-family:"Transducer Extended";src:url("./assets/share/TransducerExtended-Bold.otf") format("opentype");font-style:normal;font-weight:700;font-display:swap}
+@font-face{font-family:"Transducer Extended";src:url("./assets/share/TransducerExtended-Black.otf") format("opentype");font-style:normal;font-weight:900;font-display:swap}
+@font-face{font-family:"Transducer Extended";src:url("./assets/share/TransducerExtReg-Italic.otf") format("opentype");font-style:italic;font-weight:400;font-display:swap}
+@font-face{font-family:"Transducer Extended";src:url("./assets/share/TransducerExt-MediumItalic.otf") format("opentype");font-style:italic;font-weight:500;font-display:swap}
+@font-face{font-family:"Transducer Extended";src:url("./assets/share/TransducerExtended-BoldItalic.otf") format("opentype");font-style:italic;font-weight:700;font-display:swap}
+@font-face{font-family:"Transducer Extended";src:url("./assets/share/TransducerExt-BlackItalic.otf") format("opentype");font-style:italic;font-weight:900;font-display:swap}
 :root{
-  --font-body:"Open Sans",ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-  --font-heading:"Montserrat","Open Sans",ui-sans-serif,system-ui,sans-serif;
+  --font-body:"Transducer",ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --font-heading:"Transducer Extended","Transducer",ui-sans-serif,system-ui,sans-serif;
   --weight-regular:400;
   --weight-medium:500;
   --weight-semibold:600;
@@ -20,7 +36,7 @@ h1,h2,h3,h4,h5,h6{font-family:var(--font-heading);font-weight:var(--weight-bold)
 h1{font-weight:var(--weight-black)}
 h2{font-weight:var(--weight-extrabold)}
 h3,h4{font-weight:var(--weight-bold)}
-h5,h6{font-weight:var(--weight-semibold)}
+h5,h6{font-weight:var(--weight-medium)}
 strong,b{font-weight:var(--weight-bold)}
 .eyebrow{font-family:var(--font-heading);font-weight:var(--weight-extrabold)}
 img,svg{max-width:100%}

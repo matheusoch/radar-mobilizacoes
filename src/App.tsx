@@ -2,7 +2,7 @@ import {useEffect,useMemo,useState} from 'react';
 import type {ChangeEvent,FormEvent,ReactNode} from 'react';
 import React from 'react';
 import {Link,Navigate,Route,Routes,useLocation,useNavigate,useParams} from 'react-router-dom';
-import {CalendarDays,CalendarPlus,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search,BarChart3,Eye,KeyRound,Users,ChevronLeft,ChevronRight,Share2,Star,Bell} from 'lucide-react';
+import {CalendarDays,CalendarPlus,ExternalLink,Info,MapPinned,Menu,X,CheckCircle2,MessageCircle,Send,Paperclip,ShieldCheck,LogIn,UserPlus,Image as ImageIcon,Check,Trash2,Flag,RefreshCw,Search,BarChart3,Eye,KeyRound,Users,ChevronLeft,ChevronRight,Share2,Star,Bell,Copy} from 'lucide-react';
 import './App.css';
 // Tema único: o aplicativo mantém a aparência clara padrão.
 import EventCard from './components/EventCard';
@@ -18,6 +18,8 @@ import PosterImporter from './components/PosterImporter';
 import {normalizeEventType,normalizePtSentence,normalizePtTitle,type PosterCandidate} from './lib/posterOcr';
 import ShareBuilder from './components/ShareBuilder';
 import ShareSection from './components/ShareSection';
+import {extractClockTime,formatTimeText} from './utils/formatTime';
+import {StatusBadge} from './components/Badge';
 import {getEvents,getAdminEvents,getSources,resolveImageUrl,mapDbEvent,getAttendanceStatus,toggleEventAttendance,recordPageView} from './lib/data';
 import {supabase} from './lib/supabase';
 import type {EventSource,MobilizationEvent} from './types';
@@ -239,7 +241,7 @@ function Layout({children}:{children:ReactNode}){
       </div>
     </header>
     <main>{children}</main>
-    <footer className="footer"><div className="container footer-inner"><span>Projeto independente de organização e divulgação de mobilizações.</span></div></footer>
+    <footer className="footer"><div className="container footer-inner"><span>Projeto independente de organização e divulgação de mobilizações.</span><a href="/feed.xml" type="application/rss+xml" title="Assinar o feed RSS com as próximas mobilizações">Assinar atualizações (RSS)</a></div></footer>
   </div>
 }
 
@@ -318,7 +320,7 @@ function foldIcsLine(value:string){
 
 function buildEventIcs(event:MobilizationEvent,eventUrl:string){
   const date=event.date.replace(/-/g,'');
-  const time=event.time||event.time_label?.match(/\d{1,2}:\d{2}/)?.[0];
+  const time=event.time||extractClockTime(event.time_label);
   const [year,month,day]=event.date.split('-').map(Number);
   const nextDate=new Date(Date.UTC(year,month-1,day+1)).toISOString().slice(0,10).replace(/-/g,'');
   const lines=[
@@ -392,7 +394,7 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
     const defaultDescription='Agenda pública e rastreável de mobilizações no Brasil.';
     const defaultImage=window.location.origin+'/agenda-fist.svg';
     const nextTitle=event.title+' · '+event.city+(event.state?', '+event.state:'')+' | Agenda de Mobilizações';
-    const nextDescription=event.title+' · '+event.city+(event.state?', '+event.state:'')+'. '+(event.time_label||event.time||'Horário não informado')+' · '+event.venue+'.';
+    const nextDescription=event.title+' · '+event.city+(event.state?', '+event.state:'')+'. '+formatTimeText(event.time_label||event.time||'Horário não informado')+' · '+event.venue+'.';
     const nextImage=event.image_url||defaultImage;
     const canonicalUrl=window.location.href.split('#')[0];
     const metaDefinitions=[
@@ -437,10 +439,9 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
       '@context':'https://schema.org',
       '@type':'Event',
       name:event.title,
-      startDate:event.date+'T'+(event.time||'00:00'),
-      eventStatus:'https://schema.org/EventScheduled',
-      eventAttendanceMode:'https://schema.org/OfflineEventAttendanceMode',
-      location:{'@type':'Place',name:event.venue,address:[event.address,event.city,event.state,'Brasil'].filter(Boolean).join(', ')},
+      ...(event.time&&/^\d{2}:\d{2}$/.test(event.time)?{startDate:event.date+'T'+event.time}:{}),
+      ...(deriveEventModality(event)==='Virtual'?{eventAttendanceMode:'https://schema.org/OnlineEventAttendanceMode'}:deriveEventModality(event)==='Híbrido'?{eventAttendanceMode:'https://schema.org/MixedEventAttendanceMode'}:deriveEventModality(event)==='Presencial'?{eventAttendanceMode:'https://schema.org/OfflineEventAttendanceMode'}:{}),
+      ...(concreteEventLocation?{location:{'@type':'Place',name:event.venue||event.address||event.city,address:{'@type':'PostalAddress',streetAddress:event.address||undefined,addressLocality:event.city||undefined,addressRegion:event.state||undefined,addressCountry:'BR'}}}:{}),
       url:canonicalUrl,
       image:event.image_url||defaultImage,
       description:nextDescription,
@@ -461,6 +462,17 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
   },[event]);
 
   const handleShare=async()=>{const url=window.location.href;const shareText=(event?.title||'Mobilização')+' · '+(event?.city||'')+(event?.state?', '+event.state:'');try{if(navigator.share){await navigator.share({title:event?.title||'Agenda de Mobilizações',text:shareText,url});return}if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(url);setShareFeedback('Link copiado.');window.setTimeout(()=>setShareFeedback(''),2200);return}setShareFeedback('Copie o endereço desta página para compartilhar.')}catch(error){if(error instanceof DOMException&&error.name==='AbortError')return;setShareFeedback('Não foi possível compartilhar automaticamente.')}};
+
+  const copyEventLink=async()=>{
+    const eventUrl=new URL('/evento/'+encodeURIComponent(event?.id||''),window.location.origin).href;
+    try{
+      if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(eventUrl);}
+      else{
+        const field=document.createElement('textarea');field.value=eventUrl;field.setAttribute('readonly','');field.style.position='fixed';field.style.opacity='0';document.body.appendChild(field);field.select();const copied=document.execCommand('copy');field.remove();if(!copied)throw new Error('Cópia não suportada neste navegador.');
+      }
+      setShareFeedback('Link do evento copiado.');
+    }catch{setShareFeedback('Não foi possível copiar automaticamente. Copie o endereço desta página.');}
+  };
 
   const handleAttendance=async()=>{
     if(!event?.db_id||attendanceBusy)return;
@@ -526,16 +538,17 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
     <div className="detail-grid">
       <div className="detail-main">
         <div className="detail-state-head">
-          <div><div className="eyebrow">{event.type} · {event.state||'Brasil'}</div><p className="detail-location">{event.city}{event.state?', '+event.state:''}</p></div>
+          <div><div className="eyebrow">{event.type} · {event.state||'Brasil'}</div><p className="detail-location">{event.city}{event.state?', '+event.state:''}</p><div className="detail-status"><StatusBadge status={event.status}/></div></div>
         </div>
         <h1>{event.title}</h1>
         <div className="detail-meta">
           <div>📅 {fmtDate(event.date)}</div>
-          <div>🕐 {event.time_label||event.time||'Horário não informado'}</div>
+          <div>🕐 {formatTimeText(event.time_label||event.time)||'Horário não informado'}</div>
           <div>📍 {concreteEventLocation?(event.venue||event.address||'Local geolocalizado'):'Local específico a confirmar'}</div>
           {event.address&&<div>⌖ {event.address}</div>}
         </div>
         {event.description&&<p>{event.description}</p>}
+        {event.updated_at&&<p className="detail-updated">Última atualização na agenda: {new Date(event.updated_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}.</p>}
         {!concreteEventLocation&&<p className="community-explainer">O ponto exato ainda não está confirmado. O mapa pesquisa a cidade, não um endereço específico.</p>}
         <div className="detail-attendance">
           <div className="detail-participants">
@@ -555,8 +568,9 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
         {ss.length?<div className="source-list">{ss.map(s=><a className="source-item" key={s.id} href={s.url} target="_blank" rel="noreferrer"><div><strong>{s.account_name}</strong><small>{s.account_handle??s.platform}</small></div><ExternalLink size={17}/></a>)}</div>:<div className="empty-source">As fontes deste evento ainda não foram carregadas.</div>}
       </div>
       <aside className="detail-side">
-        <div className="share-card quick-share-card"><strong>Compartilhe este evento</strong><p>Envie a página diretamente para WhatsApp, Telegram ou outro aplicativo do seu celular.</p><button type="button" className="button primary" onClick={handleShare}><Share2 size={17}/>Compartilhar evento</button>{shareFeedback&&<small className="share-feedback" aria-live="polite">{shareFeedback}</small>}</div>
+        <div className="share-card quick-share-card"><strong>Compartilhe este evento</strong><p>Envie a página diretamente para WhatsApp, Telegram ou outro aplicativo do seu celular.</p><button type="button" className="button primary" onClick={handleShare}><Share2 size={17}/>Compartilhar evento</button><button type="button" className="button ghost" onClick={()=>void copyEventLink()}><Copy size={17}/>Copiar link</button>{shareFeedback&&<small className="share-feedback" aria-live="polite">{shareFeedback}</small>}</div>
         <div className="status-card"><div className="status-icon"><CheckCircle2/></div><h3>Rastreabilidade</h3><p>O evento foi incluído com base em publicações e materiais de origem identificados na pesquisa editorial.</p></div>
+        <div className="share-card"><strong>Acompanhe novas mobilizações nesta cidade</strong><p>Assine o feed RSS da cidade{event.state?' e do estado':''} em um leitor de feeds. Ele será atualizado quando novos eventos forem publicados, sem cadastrar e-mail.</p><a className="button ghost" href={'/feed.xml?cidade='+encodeURIComponent(event.city)+(event.state?'&uf='+encodeURIComponent(event.state):'')} type="application/rss+xml">Assinar atualizações locais</a></div>
         <div className="share-card"><strong>Encontrou alguma atualização?</strong><p>Avise no chat. Um administrador revisará a sugestão antes de ela alterar o radar público.</p><Link className="button primary" to="/chat"><MessageCircle size={17}/>Enviar atualização</Link></div>
       </aside>
     </div>
@@ -618,7 +632,7 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
       <div className="day-events">
         {items.sort((a,b)=>(a.time||'99:99').localeCompare(b.time||'99:99')).map(e=>
           <Link className="calendar-item" to={'/evento/'+e.id} key={e.id}>
-            <div className="calendar-time">{e.time_label||e.time||'—'}</div>
+            <div className="calendar-time">{formatTimeText(e.time_label||e.time)||'—'}</div>
             <div><strong>{e.city} · {e.state||'—'}</strong><span>{e.venue}</span></div>
             <span className="calendar-type">{e.type}</span>
           </Link>
@@ -1221,7 +1235,7 @@ const blank=():MobilizationEvent=>({
 <label className="check full"><input type="checkbox" checked={editing.public} onChange={e=>setEditing({...editing,public:e.target.checked})}/> Publicar no radar</label></div>
 <div className="edit-footer"><button className="button primary" disabled={saving} onClick={save}>{saving?'Salvando…':'Salvar evento'}</button><button className="button ghost" onClick={()=>setEditing(null)}>Cancelar</button></div></div>}
     <section className="admin-section admin-event-filter"><div className="section-head compact"><div><div className="eyebrow">EVENTOS</div><h2>Filtrar cadastro</h2></div><div className="admin-filter-summary"><span className="analytics-note">{filteredAdminEvents.length} de {events.length} registros</span><span className="analytics-note">{events.filter(e=>!e.image_url?.trim()).length} sem mídia no total</span></div></div><div className="admin-filter-row"><input value={adminQuery} onChange={e=>setAdminQuery(e.target.value)} placeholder="Buscar por título, cidade, UF ou local…"/><input type="date" value={adminDate} onChange={e=>setAdminDate(e.target.value)} aria-label="Filtrar por data"/><select value={adminStatus} onChange={e=>setAdminStatus(e.target.value)} aria-label="Filtrar por status"><option value="">Todos os status</option><option value="confirmed">Confirmado</option><option value="updated">Atualizado</option><option value="warning">Alerta</option><option value="pending">Pendente</option></select><select value={adminMedia} onChange={e=>setAdminMedia(e.target.value as 'all'|'missing'|'attached')} aria-label="Filtrar por mídia"><option value="all">Com e sem mídia</option><option value="missing">Sem foto/pôster</option><option value="attached">Com foto/pôster</option></select><select value={adminSort} onChange={e=>setAdminSort(e.target.value as 'recent'|'city'|'state')} aria-label="Ordenar cadastro por"><option value="recent">Adicionados recentemente</option><option value="city">Cidade (A–Z)</option><option value="state">Estado (A–Z)</option></select>{(adminQuery||adminDate||adminStatus||adminMedia!=='all')&&<button className="clear-btn" onClick={()=>{setAdminQuery('');setAdminDate('');setAdminStatus('');setAdminMedia('all')}}><X size={15}/> Limpar filtros</button>}</div></section>
-    <div className="admin-table">{filteredAdminEvents.map(e=><div className="admin-row" key={e.id}><span><strong>{e.city}</strong><small>{e.title}</small></span><span>{fmtShortDate(e.date)} · {e.time_label||e.time||'—'}</span><span className="admin-status">{e.status}<span className={e.image_url?.trim()?'admin-media-status has-media':'admin-media-status missing-media'} title={e.image_url?.trim()?'Foto/pôster associado':'Nenhuma foto/pôster associado'}>{e.image_url?.trim()?<><ImageIcon size={14}/> Com mídia</>:<><ImageIcon size={14}/> Sem mídia</>}</span><button onClick={()=>editFrom(e)}>Editar</button>{e.db_id&&<button onClick={()=>remove(e)} title="Excluir"><Trash2 size={13}/></button>}</span></div>)}</div></div>
+    <div className="admin-table">{filteredAdminEvents.map(e=><div className="admin-row" key={e.id}><span><strong>{e.city}</strong><small>{e.title}</small></span><span>{fmtShortDate(e.date)} · {formatTimeText(e.time_label||e.time)||'—'}</span><span className="admin-status">{e.status}<span className={e.image_url?.trim()?'admin-media-status has-media':'admin-media-status missing-media'} title={e.image_url?.trim()?'Foto/pôster associado':'Nenhuma foto/pôster associado'}>{e.image_url?.trim()?<><ImageIcon size={14}/> Com mídia</>:<><ImageIcon size={14}/> Sem mídia</>}</span><button onClick={()=>editFrom(e)}>Editar</button>{e.db_id&&<button onClick={()=>remove(e)} title="Excluir"><Trash2 size={13}/></button>}</span></div>)}</div></div>
 }
 
 export default function App(){

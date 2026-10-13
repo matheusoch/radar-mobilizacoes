@@ -15,8 +15,7 @@ const FALLBACK_SOURCE_UUIDS: Record<string, string> = {
   adufpi: '89701c60-3238-5cc0-94bb-c85cd28abac8',
 };
 
-function normalizeTime(time?: string | null, timeLabel?: string | null) {
-  if (timeLabel) return timeLabel;
+function normalizeTime(time?: string | null) {
   if (!time) return undefined;
   return time.slice(0, 5);
 }
@@ -35,7 +34,7 @@ export function mapDbEvent(e: any): MobilizationEvent {
     id: e.slug,
     db_id: e.id,
     public: e.is_public,
-    time: normalizeTime(e.time, e.time_label),
+    time: normalizeTime(e.time),
     time_label: e.time_label,
     image_url: resolveImageUrl(e.image_url),
     source_ids: (e.event_sources ?? []).map((x: any) => x.source_id),

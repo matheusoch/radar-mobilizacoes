@@ -46,7 +46,9 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   const assets=useShareCardAssets();
 
   const candidates=useMemo(()=>{
-    const today=new Date().toISOString().slice(0,10);
+    const dateParts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+    const dateValues=Object.fromEntries(dateParts.map(part=>[part.type,part.value]));
+    const today=dateValues.year+'-'+dateValues.month+'-'+dateValues.day;
     const q=query.trim().toLowerCase();
     return groupSort(events.filter(event=>{
       if(!event.public||event.date<today)return false;

@@ -128,6 +128,7 @@ function matchesAgendaFilters(event:MobilizationEvent,filters:FiltersState,today
   if(skip!=='city'&&filters.city&&!ignorePhysicalLocation&&!physicalCitiesForEvent(event,modality).includes(filters.city))return false;
   if(skip!=='type'&&filters.type&&event.type!==filters.type)return false;
   if(filters.search&&!`${event.title} ${event.city} ${event.state} ${event.venue} ${event.type}`.toLowerCase().includes(filters.search.trim().toLowerCase()))return false;
+  if(filters.date&&event.date!==filters.date)return false;
   if(filters.period==='today'&&event.date!==today)return false;
   if(filters.period==='7days'&&(event.date<today||event.date>lastDay))return false;
   if(filters.period==='upcoming'&&event.date<today)return false;
@@ -251,12 +252,24 @@ function Home({events}:{events:MobilizationEvent[]}){
   const lastDate=new Date();
   lastDate.setDate(lastDate.getDate()+7);
   const lastDay=localDateKey(lastDate);
-  const[filters,setFilters]=useState<FiltersState>({search:'',state:'',city:'',type:'',period:'upcoming',modality:''});
+  const[filters,setFilters]=useState<FiltersState>({search:'',state:'',city:'',type:'',period:'upcoming',modality:'',date:''});
   const[sortBy,setSortBy]=useState<AgendaSort>('chronological');
   const states=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'state'),[events,filters,today,lastDay]);
   const cities=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'city'),[events,filters,today,lastDay]);
   const types=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'type'),[events,filters,today,lastDay]);
   const modalities:AgendaModality[]=['Presencial','Virtual','Híbrido'];
+  const dayShortcuts=useMemo(()=>Array.from({length:8},(_,offset)=>{
+    const date=new Date(`${today}T12:00:00`);
+    date.setDate(date.getDate()+offset);
+    const key=localDateKey(date);
+    return {
+      key,
+      weekday:offset===0?'Hoje':date.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.',''),
+      day:String(date.getDate()).padStart(2,'0'),
+      month:date.toLocaleDateString('pt-BR',{month:'short'}).replace('.',''),
+      count:events.filter(event=>event.public&&event.date===key).length,
+    };
+  }),[events,today]);
   const filtered=useMemo(()=>events.filter(event=>matchesAgendaFilters(event,filters,today,lastDay)),[events,filters,today,lastDay]);
   const[attendance,setAttendance]=useState<Record<string,{count:number;attending:boolean}>>({});
   const orderedEvents=useMemo(()=>{
@@ -292,7 +305,21 @@ function Home({events}:{events:MobilizationEvent[]}){
       else alert(message);
     }
   };
-  return <><section className="hero"><div className="container hero-grid"><div><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> AGENDA DE MOBILIZAÇÕES</div><h1>Eventos e mobilizações pelo Brasil.</h1><p>Agenda de atos, manifestações, plenárias e encontros em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, organizados por data e cidade e acompanhados de fontes para conferência.</p><div className="hero-actions"><Link to="/chat?novo=1" className="button primary"><CalendarPlus size={18}/>Adicionar evento</Link><Link to="/calendario" className="button ghost"><CalendarDays size={18}/>Ver calendário</Link><Link to="/divulgar" className="button ghost"><ImageIcon size={18}/>Criar divulgação</Link><Link to="/chat" className="button ghost"><MessageCircle size={18}/>Enviar atualização</Link></div></div><div className="hero-card"><div className="hero-stat"><strong>{events.length}</strong><span>eventos públicos</span></div><div className="hero-stat"><strong>{states.length}</strong><span>estados representados</span></div><div className="hero-stat"><strong>{events.filter(e=>e.status!=='warning').length}</strong><span>sem alerta de divergência</span></div></div></div></section><ShareSection events={events}/><section className="container section"><Filters value={filters} onChange={setFilters} states={states} cities={cities} types={types} modalities={modalities}/><div className="section-head"><div><div className="eyebrow">AGENDA</div><h2>{filtered.length} evento{filtered.length===1?'':'s'}</h2></div><div className="section-tools"><div className="legend">Informação rastreável</div><div className="agenda-sort"><label htmlFor="agenda-sort">Ordenar por</label><select id="agenda-sort" aria-label="Ordenar eventos por" title="Ordem cronológica: data e horário crescentes." value={sortBy} onChange={event=>setSortBy(event.target.value as AgendaSort)}><option value="chronological">Ordem cronológica</option><option value="relevance">Mais relevantes</option><option value="city">Cidade (A–Z)</option><option value="state">Estado (A–Z)</option><option value="recent">Adicionados recentemente</option></select></div></div></div><div className="event-grid">{orderedEvents.map(e=><EventCard key={e.id} event={e} attendance={e.db_id?attendance[e.db_id]:undefined} onAttendance={()=>handleAttendance(e)}/>)}</div>{!filtered.length&&<div className="empty"><Info/><h3>Nenhum evento encontrado</h3><p>Tente outro termo ou remova alguns filtros.</p></div>}</section></>
+  return <><section className="hero"><div className="container hero-grid"><div><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> AGENDA DE MOBILIZAÇÕES</div><h1>Eventos e mobilizações pelo Brasil.</h1><p>Agenda de atos, manifestações, plenárias e encontros em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, organizados por data e cidade e acompanhados de fontes para conferência.</p><div className="hero-actions"><Link to="/chat?novo=1" className="button primary"><CalendarPlus size={18}/>Adicionar evento</Link><Link to="/calendario" className="button ghost"><CalendarDays size={18}/>Ver calendário</Link><Link to="/divulgar" className="button ghost"><ImageIcon size={18}/>Criar divulgação</Link><Link to="/chat" className="button ghost"><MessageCircle size={18}/>Enviar atualização</Link></div></div><div className="hero-card"><div className="hero-stat"><strong>{events.length}</strong><span>eventos públicos</span></div><div className="hero-stat"><strong>{states.length}</strong><span>estados representados</span></div><div className="hero-stat"><strong>{events.filter(e=>e.status!=='warning').length}</strong><span>sem alerta de divergência</span></div></div></div></section><ShareSection events={events}/><section className="container section">
+    <div className="date-shortcuts">
+      <div className="date-shortcuts-heading">
+        <div><div className="eyebrow">POR DATA</div><h2>Mobilizações nos próximos dias</h2></div>
+        <button type="button" className="date-shortcut-reset" onClick={()=>setFilters(current=>({...current,date:'',period:'upcoming'}))}>Todos os próximos</button>
+      </div>
+      <div className="date-chip-list" role="group" aria-label="Filtrar mobilizações por dia">
+        {dayShortcuts.map(day=><button type="button" key={day.key} className="date-chip" aria-pressed={filters.date===day.key} onClick={()=>setFilters(current=>({...current,date:day.key,period:day.key===today?'today':'upcoming'}))}>
+          <span className="date-chip-weekday">{day.weekday}</span>
+          <span className="date-chip-date"><strong>{day.day}</strong><small>{day.month}</small></span>
+          <span className="date-chip-count">{day.count} evento{day.count===1?'':'s'}</span>
+        </button>)}
+      </div>
+    </div>
+    <Filters value={filters} onChange={setFilters} states={states} cities={cities} types={types} modalities={modalities}/><div className="section-head"><div><div className="eyebrow">AGENDA</div><h2>{filtered.length} evento{filtered.length===1?'':'s'}</h2></div><div className="section-tools"><div className="legend">Informação rastreável</div><div className="agenda-sort"><label htmlFor="agenda-sort">Ordenar por</label><select id="agenda-sort" aria-label="Ordenar eventos por" title="Ordem cronológica: data e horário crescentes." value={sortBy} onChange={event=>setSortBy(event.target.value as AgendaSort)}><option value="chronological">Ordem cronológica</option><option value="relevance">Mais relevantes</option><option value="city">Cidade (A–Z)</option><option value="state">Estado (A–Z)</option><option value="recent">Adicionados recentemente</option></select></div></div></div><div className="event-grid">{orderedEvents.map(e=><EventCard key={e.id} event={e} attendance={e.db_id?attendance[e.db_id]:undefined} onAttendance={()=>handleAttendance(e)}/>)}</div>{!filtered.length&&<div className="empty"><Info/><h3>Nenhum evento encontrado</h3><p>Tente outro termo ou remova alguns filtros.</p></div>}</section></>
 }
 
 function escapeIcsText(value:string){

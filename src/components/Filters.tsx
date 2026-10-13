@@ -7,6 +7,7 @@ export interface FiltersState{
   type:string;
   period:string;
   modality:string;
+  date:string;
 }
 
 export default function Filters({value,onChange,states,cities,types,modalities}:{
@@ -17,9 +18,9 @@ export default function Filters({value,onChange,states,cities,types,modalities}:
   types:string[];
   modalities:string[];
 }){
-  const set=(key:keyof FiltersState,nextValue:string)=>onChange({...value,[key]:nextValue});
-  const clear=()=>onChange({search:'',state:'',city:'',type:'',period:'upcoming',modality:''});
-  const hasFilters=Boolean(value.search.trim()||value.state||value.city||value.type||value.modality||value.period!=='upcoming');
+  const set=(key:keyof FiltersState,nextValue:string)=>onChange({...value,[key]:nextValue,...(key==='period'?{date:''}:{})});
+  const clear=()=>onChange({search:'',state:'',city:'',type:'',period:'upcoming',modality:'',date:''});
+  const hasFilters=Boolean(value.search.trim()||value.state||value.city||value.type||value.modality||value.date||value.period!=='upcoming');
   const modalityLabel=(modality:string)=>({
     Presencial:'📍 Presencial',
     Virtual:'🌐 Virtual',

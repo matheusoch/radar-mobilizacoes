@@ -161,6 +161,17 @@ function getAnalyticsVisitorId(){
   }
 }
 
+export type EventAction='share'|'copy_link'|'calendar_download'|'google_calendar'|'directions';
+
+export async function recordEventAction(eventId:string|undefined|null,action:EventAction){
+  if(!supabase||!eventId)return;
+  try{
+    await supabase.from('event_actions').insert({event_id:eventId,action});
+  }catch{
+    // Analytics must never interrupt navigation.
+  }
+}
+
 export async function recordPageView(path:string,eventId?:string|null){
   if(!supabase||!path)return;
   const visitorId=getAnalyticsVisitorId();

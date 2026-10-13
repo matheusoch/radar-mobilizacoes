@@ -20,7 +20,7 @@ import ShareBuilder from './components/ShareBuilder';
 import ShareSection from './components/ShareSection';
 import {extractClockTime,formatTimeText} from './utils/formatTime';
 import {StatusBadge} from './components/Badge';
-import {getEvents,getAdminEvents,getSources,resolveImageUrl,mapDbEvent,getAttendanceStatus,toggleEventAttendance,recordPageView} from './lib/data';
+import {getEvents,getAdminEvents,getSources,resolveImageUrl,mapDbEvent,getAttendanceStatus,toggleEventAttendance,recordPageView,recordEventAction} from './lib/data';
 import {supabase} from './lib/supabase';
 import type {EventSource,MobilizationEvent} from './types';
 
@@ -37,6 +37,7 @@ type ChatMessageParent={id:string;display_name:string;content:string;author_role
 type ChatMessage={id:string;user_id:string;display_name:string;author_role?:'user'|'admin'|null;content:string;attachment_path:string|null;status:string;created_at:string;reviewed_at:string|null;reviewed_by:string|null;parent_message_id?:string|null;parent_message?:ChatMessageParent|null};
 function chatAuthorName(message:{display_name:string;author_role?:'user'|'admin'|null}){return message.author_role==='admin'?'Admin':message.display_name||'Participante';}
 type PageViewRow={path:string;event_id:string|null;visitor_id:string;created_at:string};
+type EventActionRow={event_id:string;action:'share'|'copy_link'|'calendar_download'|'google_calendar'|'directions';created_at:string};
 
 class AppErrorBoundary extends React.Component<{children:ReactNode},{error:Error|null}>{
   state={error:null as Error|null};
@@ -461,7 +462,7 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
     };
   },[event]);
 
-  const handleShare=async()=>{const url=window.location.href;const shareText=(event?.title||'Mobilização')+' · '+(event?.city||'')+(event?.state?', '+event.state:'');try{if(navigator.share){await navigator.share({title:event?.title||'Agenda de Mobilizações',text:shareText,url});return}if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(url);setShareFeedback('Link copiado.');window.setTimeout(()=>setShareFeedback(''),2200);return}setShareFeedback('Copie o endereço desta página para compartilhar.')}catch(error){if(error instanceof DOMException&&error.name==='AbortError')return;setShareFeedback('Não foi possível compartilhar automaticamente.')}};
+  const handleShare=async()=>{const url=new URL('/evento/'+encodeURIComponent(event?.id||''),window.location.origin).href;const shareText=(event?.title||'Mobilização')+' · '+(event?.city||'')+(event?.state?', '+event.state:'');try{if(navigator.share){await navigator.share({title:event?.title||'Agenda de Mobilizações',text:shareText,url});void recordEventAction(event?.db_id,'share');return}if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(url);void recordEventAction(event?.db_id,'copy_link');setShareFeedback('Link copiado.');window.setTimeout(()=>setShareFeedback(''),2200);return}setShareFeedback('Copie o endereço desta página para compartilhar.')}catch(error){if(error instanceof DOMException&&error.name==='AbortError')return;setShareFeedback('Não foi possível compartilhar automaticamente.')}};
 
   const copyEventLink=async()=>{
     const eventUrl=new URL('/evento/'+encodeURIComponent(event?.id||''),window.location.origin).href;
@@ -470,6 +471,7 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
       else{
         const field=document.createElement('textarea');field.value=eventUrl;field.setAttribute('readonly','');field.style.position='fixed';field.style.opacity='0';document.body.appendChild(field);field.select();const copied=document.execCommand('copy');field.remove();if(!copied)throw new Error('Cópia não suportada neste navegador.');
       }
+      void recordEventAction(event?.db_id,'copy_link');
       setShareFeedback('Link do evento copiado.');
     }catch{setShareFeedback('Não foi possível copiar automaticamente. Copie o endereço desta página.');}
   };
@@ -530,6 +532,7 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
     link.href=objectUrl;
     link.download='mobilizacao-'+event.id.replace(/[^a-zA-Z0-9_-]+/g,'-')+'.ics';
     link.click();
+    void recordEventAction(event.db_id,'calendar_download');
     window.setTimeout(()=>URL.revokeObjectURL(objectUrl),1000);
   };
 
@@ -560,7 +563,7 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
           </button>
         </div>
         {attendanceError&&<div className="callout warning"><Info size={18}/><span>{attendanceError}</span></div>}
-        <div className="event-action-row"><a className="button ghost directions-button" href={directionsUrl} target="_blank" rel="noreferrer"><MapPinned size={17}/>{concreteEventLocation?'Como chegar':'Localizar cidade no Maps'}</a><button type="button" className="button ghost" onClick={downloadIcs}><CalendarPlus size={17}/>Adicionar ao calendário</button><a className="button primary reminder-button" href={calendarUrl} target="_blank" rel="noreferrer"><CalendarDays size={17}/>Definir lembrete</a><Link className="button ghost" to={'/divulgar?eventos='+encodeURIComponent(event.id)}><ImageIcon size={17}/>Divulgar</Link></div>
+        <div className="event-action-row"><a className="button ghost directions-button" href={directionsUrl} onClick={()=>void recordEventAction(event.db_id,'directions')} target="_blank" rel="noreferrer"><MapPinned size={17}/>{concreteEventLocation?'Como chegar':'Localizar cidade no Maps'}</a><button type="button" className="button ghost" onClick={downloadIcs}><CalendarPlus size={17}/>Adicionar ao calendário</button><a className="button primary reminder-button" href={calendarUrl} onClick={()=>void recordEventAction(event.db_id,'google_calendar')} target="_blank" rel="noreferrer"><CalendarDays size={17}/>Definir lembrete</a><Link className="button ghost" to={'/divulgar?eventos='+encodeURIComponent(event.id)}><ImageIcon size={17}/>Divulgar</Link></div>
         {event.notes&&<div className={event.status==='warning'?'callout warning':'callout info'}><Info size={20}/><span>{event.notes}</span></div>}
         <EventCommunity eventSlug={event.id}/>
         <PosterActions event={event}/>
@@ -773,7 +776,7 @@ function ChatPage(){
 function AdminPage(){
   const db=supabase!;
   const[subLoadError,setSubLoadError]=useState('');
-  const[user,setUser]=useState<any>(null);const[loading,setLoading]=useState(true);const[authorized,setAuthorized]=useState(false);const[events,setEvents]=useState<MobilizationEvent[]>([]);const[sources,setSources]=useState<EventSource[]>([]);const[submissions,setSubmissions]=useState<Submission[]>([]);const[chatPending,setChatPending]=useState<ChatMessage[]>([]);const[chatApproved,setChatApproved]=useState<ChatMessage[]>([]);const[editing,setEditing]=useState<MobilizationEvent|null>(null);const[posterFile,setPosterFile]=useState<File|null>(null);const[posterPreview,setPosterPreview]=useState<string|null>(null);const[indexingPosters,setIndexingPosters]=useState(false);const[posterIndexProgress,setPosterIndexProgress]=useState('');const[message,setMessage]=useState('');const[saving,setSaving]=useState(false);const[submitting,setSubmitting]=useState<string|null>(null);const[subPosterUrls,setSubPosterUrls]=useState<Record<string,string>>({});const[adminQuery,setAdminQuery]=useState('');const[adminDate,setAdminDate]=useState('');const[adminStatus,setAdminStatus]=useState('');const[adminMedia,setAdminMedia]=useState<'all'|'missing'|'attached'>('all');const[adminSort,setAdminSort]=useState<'recent'|'city'|'state'>('recent');const[analyticsRows,setAnalyticsRows]=useState<PageViewRow[]>([]);const[geoBusy,setGeoBusy]=useState(false);const[geoOptions,setGeoOptions]=useState<any[]>([]);
+  const[user,setUser]=useState<any>(null);const[loading,setLoading]=useState(true);const[authorized,setAuthorized]=useState(false);const[events,setEvents]=useState<MobilizationEvent[]>([]);const[sources,setSources]=useState<EventSource[]>([]);const[submissions,setSubmissions]=useState<Submission[]>([]);const[chatPending,setChatPending]=useState<ChatMessage[]>([]);const[chatApproved,setChatApproved]=useState<ChatMessage[]>([]);const[editing,setEditing]=useState<MobilizationEvent|null>(null);const[posterFile,setPosterFile]=useState<File|null>(null);const[posterPreview,setPosterPreview]=useState<string|null>(null);const[indexingPosters,setIndexingPosters]=useState(false);const[posterIndexProgress,setPosterIndexProgress]=useState('');const[message,setMessage]=useState('');const[saving,setSaving]=useState(false);const[submitting,setSubmitting]=useState<string|null>(null);const[subPosterUrls,setSubPosterUrls]=useState<Record<string,string>>({});const[adminQuery,setAdminQuery]=useState('');const[adminDate,setAdminDate]=useState('');const[adminStatus,setAdminStatus]=useState('');const[adminMedia,setAdminMedia]=useState<'all'|'missing'|'attached'>('all');const[adminSort,setAdminSort]=useState<'recent'|'city'|'state'>('recent');const[analyticsRows,setAnalyticsRows]=useState<PageViewRow[]>([]);const[analyticsActionRows,setAnalyticsActionRows]=useState<EventActionRow[]>([]);const[geoBusy,setGeoBusy]=useState(false);const[geoOptions,setGeoOptions]=useState<any[]>([]);
   const[showNewSource,setShowNewSource]=useState(false);const[savingSource,setSavingSource]=useState(false);const[newSource,setNewSource]=useState({url:'',platform:'',account_name:'',account_handle:'',note:''});
 const blank=():MobilizationEvent=>({
   id:'',
@@ -852,6 +855,12 @@ const blank=():MobilizationEvent=>({
         analyticsOffset+=batch.length;
       }
       setAnalyticsRows(analyticsRowsAll);
+      const{data:actionData,error:actionError}=await db.from('event_actions')
+        .select('event_id,action,created_at')
+        .gte('created_at',cutoff)
+        .order('created_at',{ascending:false})
+        .limit(5000);
+      if(!actionError)setAnalyticsActionRows((actionData||[]) as EventActionRow[]);
       for(const item of (subData||[]) as Submission[]){
         if(item.poster_path&&!subPosterUrls[item.id]){
           const{data}=await db.storage.from(SUBMISSION_STORAGE_BUCKET).createSignedUrl(item.poster_path,3600);
@@ -905,6 +914,12 @@ const blank=():MobilizationEvent=>({
     return {eventId,count,title:event?.title||'Evento removido',city:event?.city||''};
   });
   const analyticsSummary={today:today.length,last7:last7.length,uniqueVisitors:visitors.size,topPages,topEvents};
+  const actionRowsLast7=analyticsActionRows.filter(row=>new Date(row.created_at).getTime()>=Date.now()-7*864e5);
+  const analyticsActionSummary={
+    shares:actionRowsLast7.filter(row=>row.action==='share'||row.action==='copy_link').length,
+    calendar:actionRowsLast7.filter(row=>row.action==='calendar_download'||row.action==='google_calendar').length,
+    directions:actionRowsLast7.filter(row=>row.action==='directions').length,
+  };
   const dailyAnalytics=Array.from({length:7},(_,offset)=>{
     const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-(6-offset));
     const next=new Date(d);next.setDate(next.getDate()+1);
@@ -1204,7 +1219,7 @@ const blank=():MobilizationEvent=>({
       setPosterIndexProgress('');
     }
   };
-  return <div className="container page"><div className="admin-top"><div><div className="eyebrow">ADMIN</div><h1>Painel editorial</h1><p className="page-lead">Cadastre, revise, publique, anexe pôsteres e faça a triagem de envios.</p></div><div className="admin-actions"><button className="button primary" onClick={newEvent}>＋ Adicionar evento</button><button className="button ghost" disabled={indexingPosters} onClick={indexExistingPosters}>{indexingPosters?'Indexando pôsteres…':'Indexar pôsteres antigos'}{indexingPosters&&posterIndexProgress?' (' + posterIndexProgress + ')':''}</button><button className="button ghost" onClick={()=>db.auth.signOut()}>Sair</button></div></div>{message&&<div className="callout info"><Info/><span>{message}</span></div>}<section className="admin-section analytics-panel"><div className="section-head compact"><div><div className="eyebrow">ANALYTICS</div><h2>Visão da Agenda</h2></div><span className="analytics-note">últimos 7 dias · sem IP ou conta de usuário</span></div><div className="analytics-stats"><div className="analytics-stat"><Eye size={18}/><strong>{analyticsSummary.today}</strong><span>visualizações hoje</span></div><div className="analytics-stat"><Eye size={18}/><strong>{analyticsSummary.last7}</strong><span>visualizações em 7 dias</span></div><div className="analytics-stat"><BarChart3 size={18}/><strong>{analyticsSummary.uniqueVisitors}</strong><span>visitantes em 7 dias</span></div></div><div className="analytics-trend"><h3>Ritmo de acessos</h3><div className="analytics-bars" aria-label="Visualizações por dia nos últimos sete dias">{dailyAnalytics.map(day=><div className="analytics-bar-col" key={day.date}><div className="analytics-bar-track"><div className="analytics-bar" style={{height:Math.max(8,(day.count/maxDaily)*100)+'%'}} title={day.count+' visualizações'}/></div><strong>{day.count}</strong><span>{day.label}<br/>{day.date}</span></div>)}</div></div><div className="analytics-columns"><div><h3>Páginas mais acessadas</h3><div className="analytics-list">{analyticsSummary.topPages.length?analyticsSummary.topPages.map(([path,count])=><div key={path}><span>{path}</span><strong>{count}</strong></div>):<p>Nenhum acesso registrado ainda.</p>}</div></div><div><h3>Eventos mais acessados</h3><div className="analytics-list">{analyticsSummary.topEvents.length?analyticsSummary.topEvents.map(item=><div key={item.eventId}><span>{item.title}{item.city?' · '+item.city:''}</span><strong>{item.count}</strong></div>):<p>Nenhum evento acessado ainda.</p>}</div></div></div></section>
+  return <div className="container page"><div className="admin-top"><div><div className="eyebrow">ADMIN</div><h1>Painel editorial</h1><p className="page-lead">Cadastre, revise, publique, anexe pôsteres e faça a triagem de envios.</p></div><div className="admin-actions"><button className="button primary" onClick={newEvent}>＋ Adicionar evento</button><button className="button ghost" disabled={indexingPosters} onClick={indexExistingPosters}>{indexingPosters?'Indexando pôsteres…':'Indexar pôsteres antigos'}{indexingPosters&&posterIndexProgress?' (' + posterIndexProgress + ')':''}</button><button className="button ghost" onClick={()=>db.auth.signOut()}>Sair</button></div></div>{message&&<div className="callout info"><Info/><span>{message}</span></div>}<section className="admin-section analytics-panel"><div className="section-head compact"><div><div className="eyebrow">ANALYTICS</div><h2>Visão da Agenda</h2></div><span className="analytics-note">últimos 7 dias · sem IP ou conta de usuário</span></div><div className="analytics-stats"><div className="analytics-stat"><Eye size={18}/><strong>{analyticsSummary.today}</strong><span>visualizações hoje</span></div><div className="analytics-stat"><Eye size={18}/><strong>{analyticsSummary.last7}</strong><span>visualizações em 7 dias</span></div><div className="analytics-stat"><BarChart3 size={18}/><strong>{analyticsSummary.uniqueVisitors}</strong><span>visitantes em 7 dias</span></div><div className="analytics-stat"><Share2 size={18}/><strong>{analyticsActionSummary.shares}</strong><span>compartilhamentos e links copiados em 7 dias</span></div><div className="analytics-stat"><CalendarPlus size={18}/><strong>{analyticsActionSummary.calendar}</strong><span>ações de calendário em 7 dias</span></div><div className="analytics-stat"><MapPinned size={18}/><strong>{analyticsActionSummary.directions}</strong><span>cliques em como chegar em 7 dias</span></div></div><div className="analytics-trend"><h3>Ritmo de acessos</h3><div className="analytics-bars" aria-label="Visualizações por dia nos últimos sete dias">{dailyAnalytics.map(day=><div className="analytics-bar-col" key={day.date}><div className="analytics-bar-track"><div className="analytics-bar" style={{height:Math.max(8,(day.count/maxDaily)*100)+'%'}} title={day.count+' visualizações'}/></div><strong>{day.count}</strong><span>{day.label}<br/>{day.date}</span></div>)}</div></div><div className="analytics-columns"><div><h3>Páginas mais acessadas</h3><div className="analytics-list">{analyticsSummary.topPages.length?analyticsSummary.topPages.map(([path,count])=><div key={path}><span>{path}</span><strong>{count}</strong></div>):<p>Nenhum acesso registrado ainda.</p>}</div></div><div><h3>Eventos mais acessados</h3><div className="analytics-list">{analyticsSummary.topEvents.length?analyticsSummary.topEvents.map(item=><div key={item.eventId}><span>{item.title}{item.city?' · '+item.city:''}</span><strong>{item.count}</strong></div>):<p>Nenhum evento acessado ainda.</p>}</div></div></div></section>
     <BulkPosterImporter db={db} onComplete={loadAdmin}/>
     <PosterReviewPanel db={db} userId={user?.id} onChanged={loadAdmin}/>
     <SubmissionsPanel db={db} submissions={submissions} loadError={subLoadError} loading={loading} busyId={submitting} onRefresh={loadAdmin} onCreateDraft={createFromSubmission} onReview={reviewSubmission} onReopen={reopenSubmission} onOpenEvent={openSubmissionEvent}/>

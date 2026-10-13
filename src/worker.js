@@ -947,7 +947,7 @@ async function fetchPublicEventsBySlug(env,slugs){
  const endpoint=new URL(String(env.SUPABASE_URL).replace(/\/+$/,"")+"/rest/v1/events");
  endpoint.searchParams.set("select","slug,title,type,date,time,time_label,city,state,venue,address,description,image_url");
  endpoint.searchParams.set("is_public","eq.true");
- endpoint.searchParams.set("slug","in.("+list.join(",")+")");
+ endpoint.searchParams.set("slug",list.length===1?"eq."+list[0]:"in.("+list.join(",")+")");
  endpoint.searchParams.set("order","date.asc,time.asc");
  try{
   const cacheKey=new Request(endpoint.toString(),{method:"GET"});

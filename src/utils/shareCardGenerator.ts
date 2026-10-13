@@ -497,6 +497,16 @@ function imageNode(image: CardImage, x: number, y: number): string {
   return `<image x="${round(x)}" y="${round(y)}" width="${image.width}" height="${image.height}" xlink:href="${image.href}"/>`;
 }
 
+/**
+ * Fills the extra Story canvas by stretching only the template's top pixel row.
+ * The template art itself remains at its native size; this avoids a repeating
+ * 1px pattern across the canvas and keeps the outer red background seamless.
+ */
+function templateEdgeStrip(image: CardImage, x: number, y: number, width: number, height: number): string {
+  if (height <= 0 || !IMAGE_DATA_URL_PATTERN.test(image.href)) return '';
+  return `<svg x="${round(x)}" y="${round(y)}" width="${round(width)}" height="${round(height)}" viewBox="0 0 ${image.width} 1" preserveAspectRatio="none" overflow="hidden">${imageNode(image, 0, 0)}</svg>`;
+}
+
 function getFontStyles(fonts: readonly CardFontFace[]): string {
   const faces = fonts
     .filter(font => FONT_DATA_URL_PATTERN.test(font.dataUrl))
@@ -693,8 +703,8 @@ export function generateShareCard(events: readonly MobilizationEvent[], options:
       `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="card-title">` +
       `<title id="card-title">${escapeXml(label)}</title>` +
       style +
-      `<defs><pattern id="card-bg-strip" patternUnits="userSpaceOnUse" width="${width}" height="1"><image x="0" y="-10" width="${assets.background.width}" height="${assets.background.height}" xlink:href="${assets.background.href}"/></pattern></defs>` +
-      `<rect x="0" y="0" width="${width}" height="${height}" fill="url(#card-bg-strip)"/>` +
+      templateEdgeStrip(assets.background, 0, 0, width, shiftY) +
+      templateEdgeStrip(assets.background, 0, shiftY + assets.background.height, width, height - shiftY - assets.background.height) +
       `<g font-family="'${FONT_FAMILY}', 'Arial Black', sans-serif">` +
       imageNode(assets.background, 0, shiftY) +
       body +

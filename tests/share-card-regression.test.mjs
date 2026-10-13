@@ -128,9 +128,12 @@ test('uses the Photoshop template as the exact base for Feed and centered Story 
   const feed = generateShareCard([event()], { format: 'feed', assets });
   const story = generateShareCard([event()], { format: 'story', assets });
 
-  assert.match(feed.svg, /patternUnits="userSpaceOnUse" width="1080" height="1"/);
+  assert.doesNotMatch(feed.svg, /patternUnits="userSpaceOnUse"/);
+  assert.doesNotMatch(story.svg, /card-bg-strip|url\(#card-bg-strip\)/);
   assert.match(feed.svg, /<image x="0" y="0" width="1080" height="1350" xlink:href="data:image\/png;base64,AA=="/);
+  assert.match(story.svg, /<svg x="0" y="0" width="1080" height="285" viewBox="0 0 1080 1" preserveAspectRatio="none" overflow="hidden"/);
   assert.match(story.svg, /<image x="0" y="285" width="1080" height="1350" xlink:href="data:image\/png;base64,AA=="/);
+  assert.match(story.svg, /<svg x="0" y="1635" width="1080" height="285" viewBox="0 0 1080 1" preserveAspectRatio="none" overflow="hidden"/);
   assert.match(feed.svg, /<rect x="136" y="463" width="394" height="49" fill="#FFC301"/);
   assert.doesNotMatch(feed.svg, /<rect x="0" y="0" width="1080" height="14" fill="#FFC301"[/]>/);
 });

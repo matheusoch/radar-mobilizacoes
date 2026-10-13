@@ -127,7 +127,7 @@ function matchesAgendaFilters(event:MobilizationEvent,filters:FiltersState,today
   if(skip!=='state'&&filters.state&&!ignorePhysicalLocation&&((modality!=='Presencial'&&modality!=='Híbrido')||event.state!==filters.state))return false;
   if(skip!=='city'&&filters.city&&!ignorePhysicalLocation&&!physicalCitiesForEvent(event,modality).includes(filters.city))return false;
   if(skip!=='type'&&filters.type&&event.type!==filters.type)return false;
-  if(filters.search&&!`${event.title} ${event.city} ${event.state} ${event.venue} ${event.type}`.toLowerCase().includes(filters.search.trim().toLowerCase()))return false;
+  if(filters.search&&!normalizedSearchText(`${event.title} ${event.city} ${event.state} ${event.venue} ${event.address||''} ${event.type}`).includes(normalizedSearchText(filters.search.trim())))return false;
   if(filters.date&&event.date!==filters.date)return false;
   if(filters.period==='today'&&event.date!==today)return false;
   if(filters.period==='7days'&&(event.date<today||event.date>lastDay))return false;

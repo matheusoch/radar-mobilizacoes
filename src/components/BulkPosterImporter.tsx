@@ -128,6 +128,13 @@ export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promis
     let work=[...rows];
     try{
       const posters=manifest.posters||[];
+      const {data:authData,error:authError}=await db.auth.getSession();
+      if(authError)throw new Error('Não foi possível validar a sessão de administrador: '+authError.message);
+      const accessToken=authData.session?.access_token;
+      const apiUrl=String(db.supabaseUrl||'').replace(/\/+$/,'');
+      const apiKey=String(db.supabaseKey||'');
+      if(!accessToken)throw new Error('Sua sessão expirou. Entre novamente no painel administrativo antes de importar.');
+      if(!apiUrl||!apiKey)throw new Error('Configuração do Supabase incompleta no painel.');
       const filePaths=[...new Set(posters.map(r=>r.file))],urlByFile=new Map<string,string>(),badFiles=new Set<string>();
       for(let i=0;i<filePaths.length;i+=4){
         setProgress('Enviando catálogo completo de pôsteres '+Math.min(i+4,filePaths.length)+'/'+filePaths.length+'…');
@@ -135,11 +142,14 @@ export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promis
           try{
             const poster=posters.find(x=>x.file===path)!;const blob=files.get(path)!;const ext=(path.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
             const object='reconciled/'+poster.sha256+'.'+ext;
-            // Preserve the true image MIME type in the multipart body. ZIP extraction yields Blobs with an empty type, which the Storage bucket rejects.
-            const uploadFile=new File([blob],path.split('/').pop()||('poster.'+ext),{type:mime(path)});
-            const{error}=await db.storage.from('event_posters').upload(object,uploadFile,{upsert:true,contentType:mime(path)});
-            if(error)throw new Error(error.message||JSON.stringify(error));
-            return {path,url:db.storage.from('event_posters').getPublicUrl(object).data.publicUrl,object};
+            const publicUrl=db.storage.from('event_posters').getPublicUrl(object).data.publicUrl;
+            // Reuse a previously completed upload when retrying; never send x-upsert.
+            try{const probe=await fetch(publicUrl,{method:'HEAD',cache:'no-store'});if(probe.ok)return {path,url:publicUrl,object};}catch{/* Attempt a fresh upload below. */}
+            // Work around Storage's current multipart/x-upsert failures: send raw bytes and an explicit MIME type.
+            const endpoint=apiUrl+'/storage/v1/object/event_posters/'+object.split('/').map(encodeURIComponent).join('/');
+            const response=await fetch(endpoint,{method:'POST',headers:{apikey:apiKey,Authorization:'Bearer '+accessToken,'Content-Type':mime(path),'cache-control':'max-age=3600'},body:blob});
+            if(!response.ok){const detail=await response.text().catch(()=> '');throw new Error('HTTP '+response.status+' ao enviar '+path+': '+(detail||response.statusText));}
+            return {path,url:publicUrl,object};
           }catch(e){return {path,url:null,object:null,error:e instanceof Error?e.message:'Falha no upload'};}
         }));
         for(const r of res){if(r.url)urlByFile.set(r.path,r.url);else badFiles.add(r.path);}

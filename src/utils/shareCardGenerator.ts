@@ -26,10 +26,11 @@ export interface CardFontFace {
 
 export interface ShareCardAssets {
   fonts: readonly CardFontFace[];
-  /** Nome da família efetivamente embutida. */
+  /** Nome da família efetivamente embutida (Transducer quando os arquivos existem em src/assets/fonts). */
   fontLabel: string;
-  /** Template original completo; os eventos são renderizados como vetores sobre ele. */
-  background: CardImage;
+  title: CardImage;
+  intro: CardImage;
+  box: CardImage;
 }
 
 export interface ShareCardOptions {
@@ -87,10 +88,14 @@ const COLORS = {
 } as const;
 
 const GRID = {
-  // Two columns inset evenly inside the rounded panel of agenda-template.png.
-  columnX: [136, 550] as const,
-  columnWidth: 394,
+  columnX: [57, 565] as const,
+  columnWidth: 459,
+  barHeight: 14,
+  titleY: 65,
+  introY: 209,
+  boxY: 277,
   areaTop: 463,
+  leftX: 57,
   dayHeight: 49,
   dayToLine: 74,
   cityHeight: 40,
@@ -117,10 +122,8 @@ const GRID = {
 } as const;
 
 const FORMAT_OFFSETS: Record<CardFormatKey, {shiftY: number; bottom: number}> = {
-  // Feed uses the Photoshop template at its native 1080×1350 size.
-  feed: {shiftY: 0, bottom: 1180},
-  // Story centers that same unscaled template in the 1080×1920 canvas.
-  story: {shiftY: 285, bottom: 1465},
+  feed: {shiftY: 0, bottom: 1300},
+  story: {shiftY: 185, bottom: 1670},
 };
 
 export function escapeXml(value: string): string {
@@ -497,16 +500,6 @@ function imageNode(image: CardImage, x: number, y: number): string {
   return `<image x="${round(x)}" y="${round(y)}" width="${image.width}" height="${image.height}" xlink:href="${image.href}"/>`;
 }
 
-/**
- * Fills the extra Story canvas by stretching only the template's top pixel row.
- * The template art itself remains at its native size; this avoids a repeating
- * 1px pattern across the canvas and keeps the outer red background seamless.
- */
-function templateEdgeStrip(image: CardImage, x: number, y: number, width: number, height: number): string {
-  if (height <= 0 || !IMAGE_DATA_URL_PATTERN.test(image.href)) return '';
-  return `<svg x="${round(x)}" y="${round(y)}" width="${round(width)}" height="${round(height)}" viewBox="0 0 ${image.width} 1" preserveAspectRatio="none" overflow="hidden">${imageNode(image, 0, 0)}</svg>`;
-}
-
 function getFontStyles(fonts: readonly CardFontFace[]): string {
   const faces = fonts
     .filter(font => FONT_DATA_URL_PATTERN.test(font.dataUrl))
@@ -692,7 +685,7 @@ export function generateShareCard(events: readonly MobilizationEvent[], options:
         });
     const counter =
       total > 1
-        ? textNode(`CARD ${index + 1} DE ${total}`, width / 2, bottom + 120, 15, COLORS.white, {
+        ? textNode(`CARD ${index + 1} DE ${total}`, width / 2, bottom + 40, 15, COLORS.white, {
             anchor: 'middle',
             weight: WEIGHTS.ui,
             letterSpacing: 2,
@@ -703,10 +696,12 @@ export function generateShareCard(events: readonly MobilizationEvent[], options:
       `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="card-title">` +
       `<title id="card-title">${escapeXml(label)}</title>` +
       style +
-      templateEdgeStrip(assets.background, 0, 0, width, shiftY) +
-      templateEdgeStrip(assets.background, 0, shiftY + assets.background.height, width, height - shiftY - assets.background.height) +
       `<g font-family="'${FONT_FAMILY}', 'Arial Black', sans-serif">` +
-      imageNode(assets.background, 0, shiftY) +
+      rect(0, 0, width, height, COLORS.background) +
+      rect(0, 0, width, GRID.barHeight, COLORS.bar) +
+      imageNode(assets.title, GRID.leftX, GRID.titleY + shiftY) +
+      imageNode(assets.intro, GRID.leftX, GRID.introY + shiftY) +
+      imageNode(assets.box, GRID.leftX, GRID.boxY + shiftY) +
       body +
       counter +
       `</g></svg>`;
@@ -770,12 +765,14 @@ let assetsPromise: Promise<ShareCardAssets> | null = null;
 export function loadShareCardAssets(): Promise<ShareCardAssets> {
   if (!assetsPromise) {
     assetsPromise = (async () => {
-      const [{fonts, fontLabel}, background] = await Promise.all([
+      const [{fonts, fontLabel}, title, intro, box] = await Promise.all([
         loadFonts(),
-        toCardImage(import('../assets/share/agenda-template.png?inline')),
+        toCardImage(import('../assets/share/titulo.png?inline')),
+        toCardImage(import('../assets/share/texto-apresentacao.png?inline')),
+        toCardImage(import('../assets/share/retangulo-apresentacao.png?inline')),
       ]);
       await registerFonts(fonts);
-      return {fonts, fontLabel, background};
+      return {fonts, fontLabel, title, intro, box};
     })().catch(error => {
       assetsPromise = null;
       throw error;

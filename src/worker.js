@@ -942,7 +942,15 @@ const escapeHtml=value=>String(value).replace(/&/g,"&amp;").replace(/</g,"&lt;")
 const truncateText=(value,max)=>value.length>max?value.slice(0,max-1).trimEnd()+"…":value;
 
 async function fetchPublicEventsBySlug(env,slugs){
- const list=[...new Set(slugs)].filter(slug=>SLUG_PATTERN.test(slug)).slice(0,MAX_SHARE_EVENTS);
+ const normalizedSlugs=slugs.map(value=>{
+  if(typeof value!=="string")return "";
+  let slug=value;
+  for(let pass=0;pass<2&&slug.includes("%");pass++){
+   try{slug=decodeURIComponent(slug)}catch{break}
+  }
+  return slug.normalize("NFC");
+ });
+ const list=[...new Set(normalizedSlugs)].filter(slug=>SLUG_PATTERN.test(slug)).slice(0,MAX_SHARE_EVENTS);
  if(!list.length||!env.SUPABASE_URL||!env.SUPABASE_PUBLISHABLE_KEY)return [];
  const endpoint=new URL(String(env.SUPABASE_URL).replace(/\/+$/,"")+"/rest/v1/events");
  endpoint.searchParams.set("select","slug,title,type,date,time,time_label,city,state,venue,address,description,image_url");

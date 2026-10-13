@@ -1,7 +1,9 @@
 -- The single-argument overload already handles calls without a visitor ID.
--- Remove the optional default from the two-argument overload so PostgREST can
--- resolve each RPC signature unambiguously.
-CREATE OR REPLACE FUNCTION public.get_event_attendance(
+-- Recreate the two-argument overload without a default to make PostgREST
+-- resolve both signatures unambiguously.
+DROP FUNCTION public.get_event_attendance(uuid[], uuid);
+
+CREATE FUNCTION public.get_event_attendance(
   p_event_ids uuid[],
   p_visitor_id uuid
 )
@@ -33,3 +35,7 @@ AS $function$
   where e.id = any(p_event_ids)
     and e.is_public = true;
 $function$;
+
+-- Preserve the existing allowlist; do not restore the default PUBLIC grant.
+REVOKE EXECUTE ON FUNCTION public.get_event_attendance(uuid[], uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_event_attendance(uuid[], uuid) TO anon, authenticated, service_role;

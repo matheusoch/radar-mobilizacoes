@@ -135,8 +135,10 @@ export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promis
           try{
             const poster=posters.find(x=>x.file===path)!;const blob=files.get(path)!;const ext=(path.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
             const object='reconciled/'+poster.sha256+'.'+ext;
-            const{error}=await db.storage.from('event_posters').upload(object,blob,{upsert:true,contentType:mime(path)});
-            if(error)throw error;
+            // Preserve the true image MIME type in the multipart body. ZIP extraction yields Blobs with an empty type, which the Storage bucket rejects.
+            const uploadFile=new File([blob],path.split('/').pop()||('poster.'+ext),{type:mime(path)});
+            const{error}=await db.storage.from('event_posters').upload(object,uploadFile,{upsert:true,contentType:mime(path)});
+            if(error)throw new Error(error.message||JSON.stringify(error));
             return {path,url:db.storage.from('event_posters').getPublicUrl(object).data.publicUrl,object};
           }catch(e){return {path,url:null,object:null,error:e instanceof Error?e.message:'Falha no upload'};}
         }));

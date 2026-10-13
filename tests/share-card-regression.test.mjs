@@ -112,9 +112,10 @@ test('unbroken long titles and venue names wrap within the SVG text column', () 
   const venue = 'Y'.repeat(180);
   const result = generateShareCard([event({ title, venue })], { format: 'feed', assets });
 
-  const titleLines = [...result.svg.matchAll(/<text\\b[^>]*font-size="([\\d.]+)"[^>]*>(X+)<\\/text>/g)]
+  // Character-class delimiters avoid slash escapes inside these regex literals.
+  const titleLines = [...result.svg.matchAll(/<text[^>]*font-size="([0-9.]+)"[^>]*>(X+)<[/]text>/g)]
     .map(match => ({ text: match[2], size: Number(match[1]) }));
-  const venueLines = [...result.svg.matchAll(/<text\\b[^>]*font-size="([\\d.]+)"[^>]*>(Y+)<\\/text>/g)]
+  const venueLines = [...result.svg.matchAll(/<text[^>]*font-size="([0-9.]+)"[^>]*>(Y+)<[/]text>/g)]
     .map(match => ({ text: match[2], size: Number(match[1]) }));
 
   assert.ok(titleLines.length > 1, 'long title should be split across lines');

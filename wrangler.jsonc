@@ -9,7 +9,9 @@
     "run_worker_first": [
       "/api/*",
       "/evento/*",
-      "/divulgar"
+      "/divulgar",
+      "/sitemap.xml",
+      "/robots.txt"
     ],
     "not_found_handling": "single-page-application"
   },

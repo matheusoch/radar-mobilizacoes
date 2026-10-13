@@ -945,7 +945,7 @@ async function fetchPublicEventsBySlug(env,slugs){
  const list=[...new Set(slugs)].filter(slug=>SLUG_PATTERN.test(slug)).slice(0,MAX_SHARE_EVENTS);
  if(!list.length||!env.SUPABASE_URL||!env.SUPABASE_PUBLISHABLE_KEY)return [];
  const endpoint=new URL(String(env.SUPABASE_URL).replace(/\/+$/,"")+"/rest/v1/events");
- endpoint.searchParams.set("select","slug,title,type,date,time,time_label,city,state,venue,image_url");
+ endpoint.searchParams.set("select","slug,title,type,date,time,time_label,city,state,venue,address,description,image_url");
  endpoint.searchParams.set("is_public","eq.true");
  endpoint.searchParams.set("slug","in.("+list.join(",")+")");
  endpoint.searchParams.set("order","date.asc,time.asc");
@@ -955,6 +955,42 @@ async function fetchPublicEventsBySlug(env,slugs){
   const rows=await response.json();
   return Array.isArray(rows)?rows:[];
  }catch{return []}
+}
+
+async function fetchPublicSitemapEvents(env){
+ if(!env.SUPABASE_URL||!env.SUPABASE_PUBLISHABLE_KEY)return null;
+ const endpoint=new URL(String(env.SUPABASE_URL).replace(/\/+$/,"")+"/rest/v1/events");
+ endpoint.searchParams.set("select","slug,date");
+ endpoint.searchParams.set("is_public","eq.true");
+ endpoint.searchParams.set("slug","not.is.null");
+ endpoint.searchParams.set("order","date.asc,slug.asc");
+ endpoint.searchParams.set("limit","1000");
+ const events=[];
+ try{
+  for(let offset=0;offset<50000;offset+=1000){
+   endpoint.searchParams.set("offset",String(offset));
+   const response=await fetch(endpoint,{headers:{apikey:env.SUPABASE_PUBLISHABLE_KEY,accept:"application/json"},signal:AbortSignal.timeout(4000)});
+   if(!response.ok)return null;
+   const rows=await response.json();
+   if(!Array.isArray(rows))return null;
+   events.push(...rows.filter(row=>typeof row.slug==="string"&&SLUG_PATTERN.test(row.slug)));
+   if(rows.length<1000)break;
+  }
+  return events;
+ }catch{return null}
+}
+
+function sitemapResponse(request,url,events){
+ const xmlEscape=value=>String(value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;");
+ const staticPaths=["/","/calendario","/mapa","/sobre"];
+ const locations=[...staticPaths.map(path=>url.origin+path),...events.map(event=>url.origin+"/evento/"+encodeURIComponent(event.slug))];
+ const xml='<?xml version="1.0" encoding="UTF-8"?>\n'+'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+locations.map(location=>"  <url><loc>"+xmlEscape(location)+"</loc></url>").join("\n")+"\n</urlset>\n";
+ return new Response(request.method==="HEAD"?null:xml,{status:200,headers:{"content-type":"application/xml; charset=utf-8","cache-control":"public, max-age=900"}});
+}
+
+function robotsResponse(request,url){
+ const body="User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /entrar\nDisallow: /api/\n\nSitemap: "+url.origin+"/sitemap.xml\n";
+ return new Response(request.method==="HEAD"?null:body,{status:200,headers:{"content-type":"text/plain; charset=utf-8","cache-control":"public, max-age=3600"}});
 }
 
 function formatLongDate(date){
@@ -1008,7 +1044,33 @@ function shareMeta(events,origin,pageUrl){
  };
 }
 
-function applySocialMeta(response,meta){
+function eventStructuredData(event,origin,pageUrl){
+ const time=typeof event.time==="string"&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(event.time)?event.time:"";
+ const startDate=clean(event.date)+(time?"T"+time+":00-03:00":"");
+ const image=absoluteUrl(event.image_url,origin)||origin+DEFAULT_OG_IMAGE_PATH;
+ const data={
+  "@context":"https://schema.org",
+  "@type":"Event",
+  name:clean(event.title)||"Mobilização",
+  url:pageUrl,
+  startDate,
+  image:[image],
+  inLanguage:"pt-BR",
+  description:truncateText(clean(event.description)||[clean(event.title),placeLabel(event),timeLabel(event)].filter(Boolean).join(" · "),500)
+ };
+ if(event.venue||event.address){
+  const postalAddress={"@type":"PostalAddress","addressCountry":"BR"};
+  if(event.address)postalAddress.streetAddress=clean(event.address);
+  if(event.city)postalAddress.addressLocality=clean(event.city);
+  if(event.state)postalAddress.addressRegion=clean(event.state);
+  data.location={"@type":"Place","name":clean(event.venue)||clean(event.address)||placeLabel(event),"address":postalAddress};
+  data.eventAttendanceMode="https://schema.org/OfflineEventAttendanceMode";
+ }
+ data.eventStatus="https://schema.org/EventScheduled";
+ return '<script type="application/ld+json" data-agenda-event-schema>'+JSON.stringify(data).replace(/</g,"\\u003c")+'</script>';
+}
+
+function applySocialMeta(response,meta,structuredData=""){
  const setContent=value=>({element(element){element.setAttribute("content",value)}});
  const extraTags=[
   ["property","og:url",meta.url],
@@ -1016,7 +1078,7 @@ function applySocialMeta(response,meta){
   ["property","og:locale","pt_BR"],
   ["property","og:image:alt",meta.imageAlt],
   ["name","twitter:image:alt",meta.imageAlt]
- ].map(([attr,key,value])=>'<meta '+attr+'="'+key+'" content="'+escapeHtml(value)+'"/>').join("");
+ ].map(([attr,key,value])=>'<meta '+attr+'="'+key+'" content="'+escapeHtml(value)+'"/>').join("")+structuredData;
  return new HTMLRewriter()
   .on("title",{element(element){element.setInnerContent(meta.title)}})
   .on('meta[name="description"]',setContent(meta.description))
@@ -1047,18 +1109,23 @@ async function socialPreviewHandler(request,env,url){
 
  const origin=url.origin;
  let meta=defaultMeta(origin);
+ let structuredData="";
  if(eventRoute){
   let slug="";
   try{slug=decodeURIComponent(eventRoute[1])}catch{}
   const [event]=await fetchPublicEventsBySlug(env,[slug]);
-  if(event)meta=eventMeta(event,origin,origin+"/evento/"+encodeURIComponent(event.slug||slug));
+  if(event){
+   const pageUrl=origin+"/evento/"+encodeURIComponent(event.slug||slug);
+   meta=eventMeta(event,origin,pageUrl);
+   structuredData=eventStructuredData(event,origin,pageUrl);
+  }
  }else{
   const slugs=(url.searchParams.get("eventos")||"").split(",").map(item=>item.trim()).filter(Boolean).slice(0,MAX_SHARE_EVENTS);
   const events=slugs.length?await fetchPublicEventsBySlug(env,slugs):[];
   meta=shareMeta(events,origin,origin+"/divulgar"+(events.length?"?eventos="+events.map(event=>encodeURIComponent(event.slug)).join(","):""));
  }
- const rewritten=applySocialMeta(response,meta);
+ const rewritten=applySocialMeta(response,meta,structuredData);
  rewritten.headers.set("cache-control","public, max-age=300");
  return rewritten;
 }
-export default {async fetch(request,env){const url=new URL(request.url);if(url.pathname==="/api/interpret-events")return handler(request,env);if(url.pathname==="/api/research-events")return researchHandler(request,env);if(url.pathname==="/api/resolve-location")return resolveLocationHandler(request,env);const preview=await socialPreviewHandler(request,env,url);if(preview)return preview;return env.ASSETS.fetch(request)}};
+export default {async fetch(request,env){const url=new URL(request.url);if(url.pathname==="/api/interpret-events")return handler(request,env);if(url.pathname==="/api/research-events")return researchHandler(request,env);if(url.pathname==="/api/resolve-location")return resolveLocationHandler(request,env);if((url.pathname==="/sitemap.xml"||url.pathname==="/robots.txt")&&(request.method==="GET"||request.method==="HEAD")){if(url.pathname==="/robots.txt")return robotsResponse(request,url);const events=await fetchPublicSitemapEvents(env);if(events)return sitemapResponse(request,url,events);return env.ASSETS.fetch(request)}const preview=await socialPreviewHandler(request,env,url);if(preview)return preview;return env.ASSETS.fetch(request)}};

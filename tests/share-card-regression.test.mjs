@@ -105,3 +105,20 @@ test('text sanitizer and XML escaping preserve safe Portuguese content', () => {
   assert.equal(sanitizeText('ato do PT e da UNE'), 'ATO DO PT E DA UNE');
   assert.equal(escapeXml('A&B <C> "D"'), 'A&amp;B &lt;C&gt; &quot;D&quot;');
 });
+
+
+test('unbroken long titles and venue names wrap within the SVG text column', () => {
+  const title = 'X'.repeat(240);
+  const venue = 'Y'.repeat(180);
+  const result = generateShareCard([event({ title, venue })], { format: 'feed', assets });
+
+  const titleLines = [...result.svg.matchAll(/<text\\b[^>]*>(X+)<\\/text>/g)].map(match => match[1]);
+  const venueLines = [...result.svg.matchAll(/<text\\b[^>]*>(Y+)<\\/text>/g)].map(match => match[1]);
+
+  assert.ok(titleLines.length > 1, 'long title should be split across lines');
+  assert.ok(venueLines.length > 1, 'long venue should be split across lines');
+  assert.ok(titleLines.every(line => line.length <= 27), 'each title line should fit the estimated SVG column width');
+  assert.ok(venueLines.every(line => line.length <= 27), 'each venue line should fit the estimated SVG column width');
+  assert.equal(titleLines.join(''), title);
+  assert.equal(venueLines.join(''), venue);
+});

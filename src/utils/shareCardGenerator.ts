@@ -231,11 +231,44 @@ interface FittedText {
   size: number;
 }
 
+function splitLongWord(word: string, maxWidth: number, size: number, weight: Weight, measure: Measure): string[] {
+  const chunks: string[] = [];
+  let current = '';
+
+  // A single unbroken token (URL-like text, an identifier, or a very long place name)
+  // must not escape the SVG column. Split by Unicode code point without changing its text.
+  for (const character of Array.from(word)) {
+    const candidate = current + character;
+    if (current && measure(candidate, size, weight) > maxWidth) {
+      chunks.push(current);
+      current = character;
+    } else {
+      current = candidate;
+    }
+  }
+
+  if (current) chunks.push(current);
+  return chunks.length ? chunks : [word];
+}
+
 function wrapWords(text: string, maxWidth: number, size: number, weight: Weight, measure: Measure): string[] {
   const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let current = '';
+
   for (const word of words) {
+    if (measure(word, size, weight) > maxWidth) {
+      if (current) {
+        lines.push(current);
+        current = '';
+      }
+
+      const chunks = splitLongWord(word, maxWidth, size, weight, measure);
+      lines.push(...chunks.slice(0, -1));
+      current = chunks[chunks.length - 1] ?? '';
+      continue;
+    }
+
     const next = current ? `${current} ${word}` : word;
     if (!current || measure(next, size, weight) <= maxWidth) {
       current = next;
@@ -244,6 +277,7 @@ function wrapWords(text: string, maxWidth: number, size: number, weight: Weight,
       current = word;
     }
   }
+
   if (current) lines.push(current);
   return lines.length ? lines : [''];
 }

@@ -11,7 +11,8 @@
       "/evento/*",
       "/divulgar",
       "/sitemap.xml",
-      "/robots.txt"
+      "/robots.txt",
+      "/feed.xml"
     ],
     "not_found_handling": "single-page-application"
   },

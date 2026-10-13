@@ -1001,6 +1001,58 @@ async function fetchPublicSitemapEvents(env){
  }catch{return null}
 }
 
+function currentBrazilDateKey(){
+ const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+ const values=Object.fromEntries(parts.map(part=>[part.type,part.value]));
+ return values.year+"-"+values.month+"-"+values.day;
+}
+
+async function fetchPublicFeedEvents(env,url){
+ if(!env.SUPABASE_URL||!env.SUPABASE_PUBLISHABLE_KEY)return null;
+ const state=clean(url.searchParams.get("uf")).toUpperCase();
+ if(state&&!VALID_STATE_CODES.has(state))return {error:"Informe uma UF válida, como MG ou SP.",status:400};
+ const rawCity=clean(url.searchParams.get("cidade"));
+ const city=rawCity.replace(/[(),]/g," ").replace(/\s+/g," ").trim().slice(0,80);
+ const endpoint=new URL(String(env.SUPABASE_URL).replace(/\/+$/,"")+"/rest/v1/events");
+ endpoint.searchParams.set("select","slug,title,type,date,time,time_label,city,state,venue,address,description,image_url,updated_at");
+ endpoint.searchParams.set("is_public","eq.true");
+ endpoint.searchParams.set("slug","not.is.null");
+ endpoint.searchParams.set("date","gte."+currentBrazilDateKey());
+ endpoint.searchParams.set("order","date.asc,time.asc");
+ endpoint.searchParams.set("limit","500");
+ if(state)endpoint.searchParams.set("state","eq."+state);
+ if(city)endpoint.searchParams.set("city","eq."+city);
+ try{
+  const response=await fetch(endpoint,{headers:{apikey:env.SUPABASE_PUBLISHABLE_KEY,accept:"application/json"},signal:AbortSignal.timeout(5000)});
+  if(!response.ok)return null;
+  const events=await response.json();
+  if(!Array.isArray(events))return null;
+  return {events,city,state};
+ }catch{return null}
+}
+
+function rssFeedResponse(request,url,feed){
+ const escape=value=>String(value??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;");
+ const title=feed.city?"Agenda de Mobilizações em "+feed.city+(feed.state?" - "+feed.state:""):feed.state?"Agenda de Mobilizações em "+feed.state:"Agenda de Mobilizações";
+ const selfUrl=url.origin+url.pathname+url.search;
+ const homeUrl=url.origin+"/";
+ const items=feed.events.map(event=>{
+  const eventUrl=url.origin+"/evento/"+encodeURIComponent(event.slug);
+  const where=[event.venue,event.city,event.state].filter(Boolean).join(", ");
+  const when=[formatLongDate(event.date),timeLabel(event)].filter(Boolean).join(" às ");
+  const description=[when,where,clean(event.description)].filter(Boolean).join(" · ");
+  const updated=event.updated_at?new Date(event.updated_at):new Date(String(event.date)+"T12:00:00-03:00");
+  const pubDate=(Number.isNaN(updated.getTime())?new Date():updated).toUTCString();
+  return "  <item><title>"+escape(event.title||"Mobilização")+"</title><link>"+escape(eventUrl)+"</link><guid isPermaLink=\"true\">"+escape(eventUrl)+"</guid><pubDate>"+escape(pubDate)+"</pubDate><description>"+escape(description)+"</description><category>"+escape(event.type||"Mobilização")+"</category></item>";
+ }).join("\n");
+ const xml='<?xml version="1.0" encoding="UTF-8"?>\n'
+  +'<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel>'
+  +"<title>"+escape(title)+"</title><link>"+escape(homeUrl)+"</link><description>"+escape("Próximas mobilizações publicadas na Agenda. O feed atualiza automaticamente; sem cadastro de e-mail.")+"</description><language>pt-br</language><atom:link href=\""+escape(selfUrl)+"\" rel=\"self\" type=\"application/rss+xml\"/><lastBuildDate>"+new Date().toUTCString()+"</lastBuildDate><ttl>15</ttl>"
+  +(items?"\n"+items+"\n":"")
+  +"</channel></rss>";
+ return new Response(request.method==="HEAD"?null:xml,{status:200,headers:{"content-type":"application/rss+xml; charset=utf-8","cache-control":"public, max-age=300"}});
+}
+
 function sitemapResponse(request,url,events){
  const xmlEscape=value=>String(value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;");
  const staticPaths=["/","/calendario","/mapa","/sobre"];
@@ -1025,7 +1077,8 @@ function formatShortDate(date){
  return parsed.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",timeZone:"UTC"});
 }
 const placeLabel=event=>[event.city,event.state].filter(Boolean).join(" - ");
-const timeLabel=event=>{const raw=clean(event.time_label)||clean(event.time).slice(0,5);return raw};
+const formatTimeForDisplay=value=>String(value||"").replace(/\b([01]?\d|2[0-3])\s*(?::\s*([0-5]\d)(?::[0-5]\d)?|[hH]\s*([0-5]\d)?)\b/g,(_match,h,colonMinutes,hMinutes)=>{const hours=String(Number(h));const minutes=colonMinutes===undefined?hMinutes:colonMinutes;return minutes&&minutes!=="00"?hours+"h"+minutes:hours+"h"});
+const timeLabel=event=>formatTimeForDisplay(clean(event.time_label)||clean(event.time).slice(0,5));
 function absoluteUrl(value,origin){
  if(typeof value!=="string"||!value.trim())return "";
  try{return new URL(value.trim(),origin).toString()}catch{return ""}
@@ -1153,4 +1206,4 @@ async function socialPreviewHandler(request,env,url){
  rewritten.headers.set("cache-control","public, max-age=300");
  return rewritten;
 }
-export default {async fetch(request,env){const url=new URL(request.url);if(url.pathname==="/api/interpret-events")return handler(request,env);if(url.pathname==="/api/research-events")return researchHandler(request,env);if(url.pathname==="/api/resolve-location")return resolveLocationHandler(request,env);if((url.pathname==="/sitemap.xml"||url.pathname==="/robots.txt")&&(request.method==="GET"||request.method==="HEAD")){if(url.pathname==="/robots.txt")return robotsResponse(request,url);const events=await fetchPublicSitemapEvents(env);if(events)return sitemapResponse(request,url,events);return env.ASSETS.fetch(request)}const preview=await socialPreviewHandler(request,env,url);if(preview)return preview;return env.ASSETS.fetch(request)}};
+export default {async fetch(request,env){const url=new URL(request.url);if(url.pathname==="/api/interpret-events")return handler(request,env);if(url.pathname==="/api/research-events")return researchHandler(request,env);if(url.pathname==="/api/resolve-location")return resolveLocationHandler(request,env);if((url.pathname==="/sitemap.xml"||url.pathname==="/robots.txt")&&(request.method==="GET"||request.method==="HEAD")){if(url.pathname==="/robots.txt")return robotsResponse(request,url);const events=await fetchPublicSitemapEvents(env);if(events)return sitemapResponse(request,url,events);return env.ASSETS.fetch(request)}if(url.pathname==="/feed.xml"&&(request.method==="GET"||request.method==="HEAD")){const feed=await fetchPublicFeedEvents(env,url);if(feed?.status)return new Response(feed.error,{status:feed.status,headers:{"content-type":"text/plain; charset=utf-8"}});if(feed)return rssFeedResponse(request,url,feed);return new Response("Feed temporariamente indisponível.",{status:503,headers:{"content-type":"text/plain; charset=utf-8","retry-after":"60"}})}const preview=await socialPreviewHandler(request,env,url);if(preview)return preview;return env.ASSETS.fetch(request)}};

@@ -112,8 +112,8 @@ test('unbroken long titles and venue names wrap within the SVG text column', () 
   const venue = 'Y'.repeat(180);
   const result = generateShareCard([event({ title, venue })], { format: 'feed', assets });
 
-  const titleLines = [...result.svg.matchAll(/<text\\b[^>]*>(X+)<\\/text>/g)].map(match => match[1]);
-  const venueLines = [...result.svg.matchAll(/<text\\b[^>]*>(Y+)<\\/text>/g)].map(match => match[1]);
+  const titleLines = [...result.svg.matchAll(/<text\b[^>]*>(X+)<\/text>/g)].map(match => match[1]);
+  const venueLines = [...result.svg.matchAll(/<text\b[^>]*>(Y+)<\/text>/g)].map(match => match[1]);
 
   assert.ok(titleLines.length > 1, 'long title should be split across lines');
   assert.ok(venueLines.length > 1, 'long venue should be split across lines');

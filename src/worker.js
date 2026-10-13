@@ -956,14 +956,14 @@ async function fetchPublicEventsBySlug(env,slugs){
     const cached=await caches.default.match(cacheKey);
     if(cached){
      const rows=await cached.json();
-     if(Array.isArray(rows))return rows;
+     if(Array.isArray(rows)&&rows.length>0)return rows;
     }
    }catch{}
   }
   const response=await fetch(endpoint,{headers:{apikey:env.SUPABASE_PUBLISHABLE_KEY,accept:"application/json"},signal:AbortSignal.timeout(2500)});
   if(!response.ok)return [];
   const rows=await response.json();
-  if(Array.isArray(rows)&&typeof caches!=="undefined"&&caches.default){
+  if(Array.isArray(rows)&&rows.length>0&&typeof caches!=="undefined"&&caches.default){
    try{await caches.default.put(cacheKey,new Response(JSON.stringify(rows),{headers:{"content-type":"application/json; charset=utf-8","cache-control":"public, max-age=300"}}))}catch{}
   }
   return Array.isArray(rows)?rows:[];

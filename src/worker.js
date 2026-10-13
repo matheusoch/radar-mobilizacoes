@@ -1058,15 +1058,19 @@ function eventStructuredData(event,origin,pageUrl){
   inLanguage:"pt-BR",
   description:truncateText(clean(event.description)||[clean(event.title),placeLabel(event),timeLabel(event)].filter(Boolean).join(" · "),500)
  };
- if(event.venue||event.address){
+ const eventText=[event.title,event.type,event.venue,event.address,event.description].map(clean).join(" ").normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLowerCase();
+ const looksOnline=/\\b(online|virtual|remoto|remota|zoom|google meet|microsoft teams|webex|jitsi)\\b/.test(eventText);
+ const hasPhysicalLocation=Boolean(clean(event.venue)||clean(event.address));
+ if(hasPhysicalLocation){
   const postalAddress={"@type":"PostalAddress","addressCountry":"BR"};
   if(event.address)postalAddress.streetAddress=clean(event.address);
   if(event.city)postalAddress.addressLocality=clean(event.city);
   if(event.state)postalAddress.addressRegion=clean(event.state);
   data.location={"@type":"Place","name":clean(event.venue)||clean(event.address)||placeLabel(event),"address":postalAddress};
-  data.eventAttendanceMode="https://schema.org/OfflineEventAttendanceMode";
  }
- data.eventStatus="https://schema.org/EventScheduled";
+ if(looksOnline&&hasPhysicalLocation)data.eventAttendanceMode="https://schema.org/MixedEventAttendanceMode";
+ else if(looksOnline)data.eventAttendanceMode="https://schema.org/OnlineEventAttendanceMode";
+ else if(hasPhysicalLocation)data.eventAttendanceMode="https://schema.org/OfflineEventAttendanceMode";
  return '<script type="application/ld+json" data-agenda-event-schema>'+JSON.stringify(data).replace(/</g,"\\u003c")+'</script>';
 }
 

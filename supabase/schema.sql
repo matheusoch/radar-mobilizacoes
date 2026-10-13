@@ -23,6 +23,14 @@ create table if not exists public.events(
   updated_at timestamptz not null default now()
 );
 
+-- Anonymous interactions with published event pages
+create table if not exists public.event_actions(
+  id bigint generated always as identity primary key,
+  event_id uuid not null references public.events(id) on delete cascade,
+  action text not null check(action in('share','copy_link','calendar_download','google_calendar','directions')),
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.sources(
   id uuid primary key default gen_random_uuid(),
   platform text not null,
@@ -74,6 +82,7 @@ alter table public.sources enable row level security;
 alter table public.event_sources enable row level security;
 alter table public.event_updates enable row level security;
 alter table public.admin_users enable row level security;
+alter table public.event_actions enable row level security;
 
 drop policy if exists "public read published events" on public.events;
 create policy "public read published events" on public.events
@@ -130,6 +139,22 @@ with check(exists(select 1 from public.admin_users a where a.user_id=auth.uid())
 drop policy if exists "read own admin membership" on public.admin_users;
 create policy "read own admin membership" on public.admin_users
 for select to authenticated using(user_id=auth.uid());
+
+drop policy if exists "public can record actions for public events" on public.event_actions;
+create policy "public can record actions for public events" on public.event_actions
+for insert to anon,authenticated
+with check(
+  action in('share','copy_link','calendar_download','google_calendar','directions')
+  and exists(select 1 from public.events e where e.id=event_id and e.is_public=true)
+);
+
+drop policy if exists "admins can read event action analytics" on public.event_actions;
+create policy "admins can read event action analytics" on public.event_actions
+for select to authenticated
+using(exists(select 1 from public.admin_users a where a.user_id=auth.uid()));
+
+create index if not exists event_actions_created_at_idx on public.event_actions(created_at desc);
+create index if not exists event_actions_event_id_created_at_idx on public.event_actions(event_id,created_at desc);
 
 -- Moderated community chat
 create table if not exists public.chat_messages(

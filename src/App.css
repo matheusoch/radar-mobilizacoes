@@ -815,7 +815,12 @@ body{background:var(--page);color:var(--ink)}
 .date-chip-date{display:flex;align-items:baseline;gap:5px;line-height:1}
 .date-chip-date strong{font-family:var(--font-heading);font-size:25px;font-weight:900;letter-spacing:-.04em}
 .date-chip-date small{font-size:11px;text-transform:lowercase;color:var(--muted)}
-.date-chip[aria-pressed=true] .date-chip-date small{color:#e5e5e5}
+.date-chip[aria-pressed=true] .date-chip-date small{color:#383016}
 .date-chip-count{font-size:11px;color:var(--muted);margin-top:5px;white-space:nowrap}
 @media(max-width:640px){.date-shortcuts{padding:14px;border-radius:16px}.date-shortcuts-heading{align-items:flex-start}.date-shortcuts-heading h2{max-width:220px}.date-shortcut-reset{padding:7px 9px;font-size:11px}.date-chip{flex:0 0 104px;padding:10px}.date-chip-date strong{font-size:23px}}
 @media(max-width:370px){.date-shortcuts-heading{flex-direction:column;align-items:stretch}.date-shortcuts-heading h2{max-width:none}.date-shortcut-reset{align-self:flex-start}}
+
+
+/* Descoberta de eventos: acesso direto ao mapa sem interferir nos cards. */
+.agenda-discovery-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:26px 0 12px}.agenda-discovery-head>div{min-width:0}.agenda-discovery-head p{margin:5px 0 0;color:var(--muted);font-size:13px;line-height:1.5}.agenda-discovery-head .button{flex:none;min-height:40px;padding:9px 13px}.map-filters select{min-width:0;max-width:100%}
+@media(max-width:700px){.agenda-discovery-head{align-items:flex-start;flex-direction:column;gap:10px}.agenda-discovery-head .button{width:100%}.filter-row select,.filter-row .clear-btn{flex:1 1 100%;width:100%;min-width:0}.filters-wrap{padding:14px}.searchbox{padding:11px 12px}.map-filters{display:grid;grid-template-columns:1fr;gap:9px}.map-search,.map-filters select{width:100%;min-width:0;box-sizing:border-box}.map-count{flex-wrap:wrap}}

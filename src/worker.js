@@ -950,9 +950,22 @@ async function fetchPublicEventsBySlug(env,slugs){
  endpoint.searchParams.set("slug","in.("+list.join(",")+")");
  endpoint.searchParams.set("order","date.asc,time.asc");
  try{
+  const cacheKey=new Request(endpoint.toString(),{method:"GET"});
+  if(typeof caches!=="undefined"&&caches.default){
+   try{
+    const cached=await caches.default.match(cacheKey);
+    if(cached){
+     const rows=await cached.json();
+     if(Array.isArray(rows))return rows;
+    }
+   }catch{}
+  }
   const response=await fetch(endpoint,{headers:{apikey:env.SUPABASE_PUBLISHABLE_KEY,accept:"application/json"},signal:AbortSignal.timeout(2500)});
   if(!response.ok)return [];
   const rows=await response.json();
+  if(Array.isArray(rows)&&typeof caches!=="undefined"&&caches.default){
+   try{await caches.default.put(cacheKey,new Response(JSON.stringify(rows),{headers:{"content-type":"application/json; charset=utf-8","cache-control":"public, max-age=300"}}))}catch{}
+  }
   return Array.isArray(rows)?rows:[];
  }catch{return []}
 }
@@ -1109,7 +1122,8 @@ async function socialPreviewHandler(request,env,url){
  const response=new Response(asset.body,asset);
  response.headers.append("vary","User-Agent");
  const isHtml=(response.headers.get("content-type")||"").includes("text/html");
- if(!response.ok||!isHtml||!isSocialBot(request))return response;
+ const isEventPage=Boolean(eventRoute);
+ if(!response.ok||!isHtml||(!isEventPage&&!isSocialBot(request)))return response;
 
  const origin=url.origin;
  let meta=defaultMeta(origin);
@@ -1118,11 +1132,10 @@ async function socialPreviewHandler(request,env,url){
   let slug="";
   try{slug=decodeURIComponent(eventRoute[1])}catch{}
   const [event]=await fetchPublicEventsBySlug(env,[slug]);
-  if(event){
-   const pageUrl=origin+"/evento/"+encodeURIComponent(event.slug||slug);
-   meta=eventMeta(event,origin,pageUrl);
-   structuredData=eventStructuredData(event,origin,pageUrl);
-  }
+  if(!event)return response;
+  const pageUrl=origin+"/evento/"+encodeURIComponent(event.slug||slug);
+  meta=eventMeta(event,origin,pageUrl);
+  structuredData=eventStructuredData(event,origin,pageUrl);
  }else{
   const slugs=(url.searchParams.get("eventos")||"").split(",").map(item=>item.trim()).filter(Boolean).slice(0,MAX_SHARE_EVENTS);
   const events=slugs.length?await fetchPublicEventsBySlug(env,slugs):[];

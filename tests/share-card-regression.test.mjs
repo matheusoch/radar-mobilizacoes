@@ -137,3 +137,32 @@ test('uses the Photoshop template as the exact base for Feed and centered Story 
   assert.match(feed.svg, /<rect x="136" y="463" width="394" height="49" fill="#FFC301"/);
   assert.doesNotMatch(feed.svg, /<rect x="0" y="0" width="1080" height="14" fill="#FFC301"[/]>/);
 });
+test('30 events across dates and cities paginate safely in both formats', () => {
+  const cities = [
+    { city: 'Belo Horizonte', state: 'MG' },
+    { city: 'Curitiba', state: 'PR' },
+    { city: 'Recife', state: 'PE' },
+    { city: 'São Luís', state: 'MA' },
+    { city: 'Porto Alegre', state: 'RS' },
+  ];
+  const events = Array.from({ length: 30 }, (_, index) => ({
+    ...event({
+      id: 'event-' + index,
+      title: 'Mobilização regional ' + (index + 1),
+      date: '2026-10-' + String(18 + Math.floor(index / 10)).padStart(2, '0'),
+      ...cities[index % cities.length],
+      venue: 'Praça central ' + (index + 1),
+    }),
+  }));
+
+  for (const format of ['feed', 'story']) {
+    const result = generateShareCard(events, { format, assets });
+    assert.equal(result.width, 1080);
+    assert.equal(result.height, format === 'feed' ? 1350 : 1920);
+    assert.equal(result.shownEvents, 30);
+    assert.equal(result.pages.reduce((sum, page) => sum + page.shownEvents, 0), 30);
+    assert.ok(result.pages.every(page => page.shownEvents > 0 && page.shownEvents <= 15));
+    assert.ok(result.pages.every(page => page.width === result.width && page.height === result.height));
+    assert.ok(result.pages.every(page => /BELO HORIZONTE|CURITIBA|RECIFE|SÃO LUÍS|PORTO ALEGRE/.test(page.svg)));
+  }
+});

@@ -808,9 +808,10 @@ body{background:var(--page);color:var(--ink)}
 .date-chip-list{display:flex;gap:8px;overflow-x:auto;padding:2px 1px 8px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
 .date-chip{display:flex;flex:1 0 118px;min-width:0;flex-direction:column;align-items:flex-start;gap:4px;padding:11px 12px;border:1px solid var(--line);border-radius:13px;background:#fff;color:var(--ink);text-align:left;font:inherit;cursor:pointer;scroll-snap-align:start;transition:background .15s ease,border-color .15s ease,color .15s ease}
 .date-chip:hover{border-color:var(--accent)}
-.date-chip[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:#fff}
+.date-chip[aria-pressed=true]{background:#ffcc00;border-color:#ffcc00;color:#171717}
 .date-chip-weekday{font-size:11px;line-height:1.2;color:var(--muted);text-transform:capitalize}
-.date-chip[aria-pressed=true] .date-chip-weekday,.date-chip[aria-pressed=true] .date-chip-count{color:#e5e5e5}
+.date-chip[aria-pressed=true] .date-chip-weekday,.date-chip[aria-pressed=true] .date-chip-count{color:#383016}
+.date-chip:focus-visible{outline:3px solid rgba(162,29,53,.45);outline-offset:3px}
 .date-chip-date{display:flex;align-items:baseline;gap:5px;line-height:1}
 .date-chip-date strong{font-family:var(--font-heading);font-size:25px;font-weight:900;letter-spacing:-.04em}
 .date-chip-date small{font-size:11px;text-transform:lowercase;color:var(--muted)}

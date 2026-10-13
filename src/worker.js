@@ -945,7 +945,7 @@ async function fetchPublicEventsBySlug(env,slugs){
  const normalizedSlugs=slugs.map(value=>{
   if(typeof value!=="string")return "";
   let slug=value;
-  for(let pass=0;pass<2&&slug.includes("%");pass++){
+  for(let pass=0;pass<4&&slug.includes("%");pass++){
    try{slug=decodeURIComponent(slug)}catch{break}
   }
   return slug.normalize("NFC");

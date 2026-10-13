@@ -112,13 +112,15 @@ test('unbroken long titles and venue names wrap within the SVG text column', () 
   const venue = 'Y'.repeat(180);
   const result = generateShareCard([event({ title, venue })], { format: 'feed', assets });
 
-  const titleLines = [...result.svg.matchAll(/<text\b[^>]*>(X+)<\/text>/g)].map(match => match[1]);
-  const venueLines = [...result.svg.matchAll(/<text\b[^>]*>(Y+)<\/text>/g)].map(match => match[1]);
+  const titleLines = [...result.svg.matchAll(/<text\\b[^>]*font-size="([\\d.]+)"[^>]*>(X+)<\\/text>/g)]
+    .map(match => ({ text: match[2], size: Number(match[1]) }));
+  const venueLines = [...result.svg.matchAll(/<text\\b[^>]*font-size="([\\d.]+)"[^>]*>(Y+)<\\/text>/g)]
+    .map(match => ({ text: match[2], size: Number(match[1]) }));
 
   assert.ok(titleLines.length > 1, 'long title should be split across lines');
   assert.ok(venueLines.length > 1, 'long venue should be split across lines');
-  assert.ok(titleLines.every(line => line.length <= 27), 'each title line should fit the estimated SVG column width');
-  assert.ok(venueLines.every(line => line.length <= 32), 'each venue line should fit the estimated SVG column width; lengths=' + venueLines.map(line => line.length).join(','));
-  assert.equal(titleLines.join(''), title);
-  assert.equal(venueLines.join(''), venue);
+  assert.ok(titleLines.every(line => line.text.length * line.size * 0.9 <= 377), 'each title line should fit the estimated SVG column width');
+  assert.ok(venueLines.every(line => line.text.length * line.size * 0.9 <= 377), 'each venue line should fit the estimated SVG column width');
+  assert.equal(titleLines.map(line => line.text).join(''), title);
+  assert.equal(venueLines.map(line => line.text).join(''), venue);
 });

@@ -934,7 +934,7 @@ async function handler(request,env){
 // Open Graph dinâmico para bots de redes sociais (/evento/:slug e /divulgar)
 // ---------------------------------------------------------------------------
 const SOCIAL_BOT_PATTERN=/facebookexternalhit|facebot|meta-externalagent|meta-externalfetcher|twitterbot|whatsapp|telegrambot|slackbot|slack-imgproxy|linkedinbot|discordbot|bluesky|cardyb|mastodon|skypeuripreview|pinterest|redditbot|embedly|iframely|vkshare|signal|googlebot|bingbot|applebot|threads/i;
-const SLUG_PATTERN=/^[\\p{L}\\p{N}._~-]{1,120}$/u;
+const SLUG_PATTERN=/^[\p{L}\p{N}._~-]{1,120}$/u;
 const MAX_SHARE_EVENTS=5;
 
 const isSocialBot=request=>SOCIAL_BOT_PATTERN.test(request.headers.get("user-agent")||"");

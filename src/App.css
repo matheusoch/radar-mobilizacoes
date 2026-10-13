@@ -824,3 +824,5 @@ body{background:var(--page);color:var(--ink)}
 /* Descoberta de eventos: acesso direto ao mapa sem interferir nos cards. */
 .agenda-discovery-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:26px 0 12px}.agenda-discovery-head>div{min-width:0}.agenda-discovery-head p{margin:5px 0 0;color:var(--muted);font-size:13px;line-height:1.5}.agenda-discovery-head .button{flex:none;min-height:40px;padding:9px 13px}.map-filters select{min-width:0;max-width:100%}
 @media(max-width:700px){.agenda-discovery-head{align-items:flex-start;flex-direction:column;gap:10px}.agenda-discovery-head .button{width:100%}.filter-row select,.filter-row .clear-btn{flex:1 1 100%;width:100%;min-width:0}.filters-wrap{padding:14px}.searchbox{padding:11px 12px}.map-filters{display:grid;grid-template-columns:1fr;gap:9px}.map-search,.map-filters select{width:100%;min-width:0;box-sizing:border-box}.map-count{flex-wrap:wrap}}
+
+@media(max-width:700px){.map-filters .clear-btn{width:100%;justify-content:center}}

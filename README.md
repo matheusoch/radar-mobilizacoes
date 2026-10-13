@@ -4,7 +4,7 @@ Agenda pública de atos, manifestações, plenárias, reuniões e outras mobiliz
 
 ## Rodar localmente
 
-Crie um arquivo `.env` na raiz do projeto com as mesmas credenciais públicas configuradas no Netlify:
+Para desenvolvimento local, crie um arquivo `.env` na raiz do projeto. O site de produção usa Cloudflare Workers; as variáveis públicas de produção ficam em `wrangler.jsonc`:
 
 ```env
 VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
@@ -24,17 +24,9 @@ Sem `.env`, o desenvolvimento entra no catálogo local de demonstração: os eve
 
 ## Supabase
 
-Para uma instalação nova, rode `supabase/schema.sql`, depois `supabase/migrations/20261008090000_event_community.sql` e, por fim, o seed editorial disponível em `supabase/seed_full.sql`. O schema base já inclui a migration de analytics anterior. Crie uma conta em `Authentication > Users` e vincule o UUID dessa conta à tabela `public.admin_users`.
+Para uma instalação nova, aplique `supabase/schema.sql`, depois as migrations em `supabase/migrations/` em ordem cronológica (incluindo `20261008090000_event_community.sql` e `20261013000000_event_actions.sql`) e, por fim, o seed editorial em `supabase/seed_full.sql`. Crie uma conta em `Authentication > Users` e vincule o UUID dessa conta à tabela `public.admin_users`.
 
-O banco atual já está provisionado no projeto `radar-mobilizacoes` com:
-
-- 112 eventos
-- 109 eventos públicos
-- 3 registros ocultos para revisão
-- 10 fontes
-- 125 vínculos evento/fonte
-- 7 atualizações editoriais
-- 85 eventos com pôster associado
+**Snapshot editorial de 13/10/2026** (os números mudam com novas cargas): 402 eventos cadastrados, 392 públicos, 33 fontes e 157 vínculos evento/fonte. A auditoria dessa data encontrou 309 imagens no catálogo e 78 eventos públicos sem pôster; ausência de pôster não significa, por si só, erro editorial. Refaça as contagens antes de usar estes números em relatórios ou publicações.
 
 As políticas de RLS separam leitura pública, administração e moderação. O Storage tem dois buckets: `event_posters` (público para leitura) e `submission_posters` (privado).
 
@@ -92,10 +84,8 @@ A validação de cidade pelo IBGE funciona sem chave Google. Para pesquisar loca
 
 Sem esse segredo, o painel deve mostrar que o Maps não está configurado; não deve inventar um endereço ou coordenadas. O uso da Places API pode gerar cobranças conforme os campos e as consultas solicitados.
 
-## Netlify
+## Deploy
 
-Build command: `npm run build`
+A produção atual é servida pelo **Cloudflare Workers**, com os arquivos estáticos gerados em `dist` e as rotas de API gerenciadas por `src/worker.js`. As variáveis públicas `SUPABASE_URL` e `SUPABASE_PUBLISHABLE_KEY` estão declaradas em `wrangler.jsonc`; segredos como `GOOGLE_MAPS_API_KEY` devem ficar no painel do Cloudflare, nunca no repositório.
 
-Publish directory: `dist`
-
-Configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` nas Environment Variables do Netlify. O `netlify.toml` já contém o fallback de SPA.
+O projeto também mantém `netlify.toml` para um deploy alternativo: `npm run build`, publicação da pasta `dist` e configuração de `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` nas variáveis de ambiente do Netlify.

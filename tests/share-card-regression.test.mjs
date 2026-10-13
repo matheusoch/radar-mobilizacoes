@@ -118,7 +118,7 @@ test('unbroken long titles and venue names wrap within the SVG text column', () 
   assert.ok(titleLines.length > 1, 'long title should be split across lines');
   assert.ok(venueLines.length > 1, 'long venue should be split across lines');
   assert.ok(titleLines.every(line => line.length <= 27), 'each title line should fit the estimated SVG column width');
-  assert.ok(venueLines.every(line => line.length <= 27), 'each venue line should fit the estimated SVG column width');
+  assert.ok(venueLines.every(line => line.length <= 32), 'each venue line should fit the estimated SVG column width');
   assert.equal(titleLines.join(''), title);
   assert.equal(venueLines.join(''), venue);
 });

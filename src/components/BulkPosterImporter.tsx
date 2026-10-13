@@ -160,8 +160,32 @@ export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promis
         return {sha256:p.sha256,source_filename:p.source_filename,source_filenames:p.source_filenames?.length?p.source_filenames:[p.source_filename],source_indices:p.source_indices?.length?p.source_indices:[p.source_index],storage_path:object,image_url:urlByFile.get(p.file)!,file_bytes:p.bytes||null,width:p.width||null,height:p.height||null,duplicate_count:(p.source_indices?.length||p.duplicate_indices?.length||1),matched_event_ids:matchingEventIds,indexed_at:new Date().toISOString()};
       });
       for(let i=0;i<catalogRows.length;i+=100){
-        setProgress('Salvando índice pesquisável '+Math.min(i+100,catalogRows.length)+'/'+catalogRows.length+'…');
-        const{error}=await db.from('poster_index').upsert(catalogRows.slice(i,i+100),{onConflict:'sha256'});
+        const batch=catalogRows.slice(i,i+100);
+        setProgress('Mesclando índice pesquisável '+Math.min(i+batch.length,catalogRows.length)+'/'+catalogRows.length+'…');
+        const{data:existingRows,error:readError}=await db.from('poster_index')
+          .select('sha256,source_filenames,source_indices,matched_event_ids,duplicate_count,image_url,storage_path')
+          .in('sha256',batch.map(row=>row.sha256));
+        if(readError)throw new Error('As imagens foram enviadas, mas falhou a leitura do índice existente: '+readError.message);
+        const bySha=new Map((existingRows||[]).map((row:any)=>[row.sha256,row]));
+        const merged=batch.map(row=>{
+          const old:any=bySha.get(row.sha256);
+          const source_filenames=[...new Set([...(old?.source_filenames||[]),...(row.source_filenames||[])])];
+          const source_indices=[...new Set([...(old?.source_indices||[]),...(row.source_indices||[])])];
+          const matched_event_ids=[...new Set([...(old?.matched_event_ids||[]),...(row.matched_event_ids||[])])];
+          return {
+            ...row,
+            source_filenames,
+            source_indices,
+            matched_event_ids,
+            duplicate_count:Math.max(old?.duplicate_count||1,row.duplicate_count||1,source_filenames.length),
+            image_url:old?.image_url||row.image_url,
+            storage_path:old?.storage_path||row.storage_path,
+            width:old?.width||row.width,
+            height:old?.height||row.height,
+            file_bytes:old?.file_bytes||row.file_bytes
+          };
+        });
+        const{error}=await db.from('poster_index').upsert(merged,{onConflict:'sha256'});
         if(error)throw new Error('As imagens foram enviadas, mas falhou ao gravar o índice: '+error.message);
       }
       work=work.map(r=>r.result==='ready'&&badFiles.has(r.file)?{...r,result:'failed',detail:'Falha ao enviar imagem.'}:r);

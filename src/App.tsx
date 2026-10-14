@@ -690,7 +690,7 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
           const weekdayLabel=date.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
           return <button type="button" key={key} className={'calendar-day'+(selectedDate===key&&!showAllDates?' selected':'')+(key===today?' is-today':'')+(count?' has-events':'')} aria-pressed={selectedDate===key&&!showAllDates} aria-label={weekdayLabel+'. '+count+' evento'+(count===1?'':'s')} onClick={()=>{setSelectedDate(key);setVisibleMonth(key.slice(0,7)+'-01');setShowAllDates(false)}}>
             <span className="calendar-day-number">{day}</span>
-            {count>0&&<small>{count} evento{count===1?'':'s'}</small>}
+            {count>0&&<small><span>{count}</span><span className="calendar-day-count-word"> evento{count===1?'':'s'}</span></small>}
           </button>;
         })}
       </div>

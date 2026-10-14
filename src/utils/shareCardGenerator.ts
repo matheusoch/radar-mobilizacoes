@@ -353,8 +353,8 @@ function groupEvents(events: readonly MobilizationEvent[]): DayGroup[] {
 }
 
 type Item =
-  | {kind: 'day'; x: number; y: number; label: string}
-  | {kind: 'city'; x: number; y: number; city: string; state: string}
+  | {kind: 'day'; x: number; y: number; width: number; label: string}
+  | {kind: 'city'; x: number; y: number; width: number; city: string; state: string}
   | {
       kind: 'row';
       x: number;
@@ -385,16 +385,21 @@ function rowContentHeight(title: FittedText, place: FittedText | null): number {
   return placeBaseline(title, place, place.lines.length - 1) + 4;
 }
 
-function planPages(events: readonly MobilizationEvent[], columnHeight: number, measure: Measure): PageDraft[] {
+function planPages(events: readonly MobilizationEvent[], columnHeight: number, measure: Measure, singleDayLayout: boolean, pageWidth: number): PageDraft[] {
   const pages: PageDraft[] = [];
   let page: PageDraft = {items: [], events: 0};
   let column = 0;
   let y = 0;
   let last: 'day' | 'city' | 'row' | null = null;
-  const textWidth = GRID.columnWidth - GRID.textInset;
+  const columnWidth = singleDayLayout ? pageWidth - GRID.leftX * 2 : GRID.columnWidth;
+  const textWidth = columnWidth - GRID.textInset;
 
   const startNextColumn = (forcePage: boolean) => {
-    if (column === 0 && !forcePage) {
+    if (singleDayLayout) {
+      if (page.events > 0) pages.push(page);
+      page = {items: [], events: 0};
+      column = 0;
+    } else if (column === 0 && !forcePage) {
       column = 1;
     } else {
       pages.push(page);
@@ -441,18 +446,18 @@ function planPages(events: readonly MobilizationEvent[], columnHeight: number, m
           cityShown = false;
         }
 
-        const x = GRID.columnX[column] ?? GRID.columnX[0];
+        const x = singleDayLayout ? GRID.leftX : (GRID.columnX[column] ?? GRID.columnX[0]);
 
         if (!dayShown) {
           y += last === null ? 0 : GRID.dayAfterRow;
-          page.items.push({kind: 'day', x, y, label: formatCardDateLabel(day.date)});
+          page.items.push({kind: 'day', x, y, width: columnWidth, label: formatCardDateLabel(day.date)});
           y += GRID.dayToLine;
           last = 'day';
           dayShown = true;
         }
         if (!cityShown) {
           y += last === 'day' ? GRID.cityAfterDay : GRID.cityAfterRow;
-          page.items.push({kind: 'city', x, y, city: sanitizeText(group.city), state: sanitizeText(group.state)});
+          page.items.push({kind: 'city', x, y, width: columnWidth, city: sanitizeText(group.city), state: sanitizeText(group.state)});
           y += GRID.cityHeight;
           last = 'city';
           cityShown = true;
@@ -519,10 +524,10 @@ function renderItem(item: Item, top: number, measure: Measure): string {
   const y = top + item.y;
 
   if (item.kind === 'day') {
-    const centerX = item.x + GRID.columnWidth / 2;
+    const centerX = item.x + item.width / 2;
     // Full-column yellow header with square corners and a fine red outline.
     const dateBackground =
-      `<rect x="${round(item.x)}" y="${round(y)}" width="${round(GRID.columnWidth)}" height="${round(GRID.dayHeight)}" fill="${COLORS.yellow}" stroke="${COLORS.red}" stroke-width="1"/>`;
+      `<rect x="${round(item.x)}" y="${round(y)}" width="${round(item.width)}" height="${round(GRID.dayHeight)}" fill="${COLORS.yellow}" stroke="${COLORS.red}" stroke-width="1"/>`;
 
     // The baseline offset optically centers the glyphs vertically in the header.
     const baseline = y + GRID.dayHeight / 2 + GRID.daySize * 0.36;
@@ -550,7 +555,7 @@ function renderItem(item: Item, top: number, measure: Measure): string {
 
     const citySize = fitSingleLine(
       sanitizeText(item.city.toUpperCase()),
-      GRID.columnWidth - stateWidth,
+      item.width - stateWidth,
       GRID.citySize,
       GRID.cityMinSize,
       900,
@@ -593,7 +598,7 @@ function renderItem(item: Item, top: number, measure: Measure): string {
     // Thin white separator immediately beneath every city heading.
     const dividerY = y + GRID.cityHeight - 2;
     const cityDivider =
-      `<line x1="${round(item.x)}" y1="${round(dividerY)}" x2="${round(item.x + GRID.columnWidth)}" y2="${round(dividerY)}" stroke="${COLORS.white}" stroke-opacity="0.85" stroke-width="1"/>`;
+      `<line x1="${round(item.x)}" y1="${round(dividerY)}" x2="${round(item.x + item.width)}" y2="${round(dividerY)}" stroke="${COLORS.white}" stroke-opacity="0.85" stroke-width="1"/>`;
 
     return cityMarkup + stateMarkup + cityDivider;
   }
@@ -671,7 +676,8 @@ export function generateShareCard(events: readonly MobilizationEvent[], options:
   const measure = createMeasure();
 
   const areaTop = GRID.areaTop + shiftY;
-  const drafts = planPages(events, bottom - areaTop, measure);
+  const singleDayLayout = new Set(events.map(event => event.date)).size === 1;
+  const drafts = planPages(events, bottom - areaTop, measure, singleDayLayout, width);
   const style = getFontStyles(assets.fonts);
   const total = drafts.length;
 

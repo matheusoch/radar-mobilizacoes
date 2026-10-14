@@ -77,7 +77,12 @@ test('SVG card escapes hostile text and embeds the expected Transducer font face
 
 test('card pagination keeps all selected events when the 15-event limit is crossed', () => {
   const events = Array.from({ length: 16 }, (_, index) =>
-    event({ id: 'event-' + index, title: 'Mobilização ' + (index + 1), time: '11:00' }),
+    event({
+      id: 'event-' + index,
+      title: 'Mobilização ' + (index + 1),
+      date: index < 15 ? '2026-10-18' : '2026-10-19',
+      time: '11:00',
+    }),
   );
   const result = generateShareCard(events, { format: 'feed', assets });
 
@@ -120,11 +125,25 @@ test('unbroken long titles and venue names wrap within the SVG text column', () 
 
   assert.ok(titleLines.length > 1, 'long title should be split across lines');
   assert.ok(venueLines.length > 1, 'long venue should be split across lines');
-  assert.ok(titleLines.every(line => line.text.length * line.size * 0.9 <= 377), 'each title line should fit the estimated SVG column width');
-  assert.ok(venueLines.every(line => line.text.length * line.size * 0.9 <= 377), 'each venue line should fit the estimated SVG column width');
+  assert.ok(titleLines.every(line => line.text.length * line.size * 0.9 <= 884), 'each title line should fit the full-width single-day content area');
+  assert.ok(venueLines.every(line => line.text.length * line.size * 0.9 <= 884), 'each venue line should fit the full-width single-day content area');
   assert.equal(titleLines.map(line => line.text).join(''), title);
   assert.equal(venueLines.map(line => line.text).join(''), venue);
 });
+
+
+test('single-day selection uses one full-width centered date header instead of split-column headers', () => {
+  const events = Array.from({ length: 4 }, (_, index) =>
+    event({ id: 'same-day-' + index, title: 'Mobilização ' + (index + 1), date: '2026-10-18' }),
+  );
+  const result = generateShareCard(events, { format: 'feed', assets });
+  assert.equal(result.pages.length, 1);
+  assert.equal(result.pages[0].shownEvents, 4);
+  const headers = result.pages[0].svg.match(/<rect x="57" y="[^"]+" width="966" height="49" fill="#FFC301" stroke="#D81B1F"/g) || [];
+  assert.equal(headers.length, 1, 'one yellow date rectangle should span the single-day card');
+  assert.match(result.pages[0].svg, /<text x="540" y="[^"]+" font-size="21" font-weight="900" font-family="Transducer Extended" fill="#D81B1F" text-anchor="middle"[^>]*>DOMINGO - 18\/10<\/text>/);
+});
+
 test('30 events across dates and cities paginate safely in both formats', () => {
   const cities = [
     { city: 'Belo Horizonte', state: 'MG' },

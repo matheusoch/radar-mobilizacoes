@@ -54,7 +54,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   const cities=useMemo(()=>[...new Set(upcomingEvents.filter(event=>(!dateFilter||event.date===dateFilter)&&(!stateFilter||event.state===stateFilter)).map(event=>event.city).filter(city=>city&&city.trim()))].sort((a,b)=>a.localeCompare(b,'pt-BR')),[upcomingEvents,dateFilter,stateFilter]);
 
   const candidates=useMemo(()=>{
-    const normalize=(value:string)=>value.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim();
+    const normalize=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
     const q=normalize(query);
     return groupSort(upcomingEvents.filter(event=>{
       if(dateFilter&&event.date!==dateFilter)return false;

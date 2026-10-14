@@ -383,9 +383,16 @@ function Home({events}:{events:MobilizationEvent[]}){
   const lastDay=localDateKey(lastDate);
   const[filters,setFilters]=useState<FiltersState>({search:'',state:'',city:'',type:'',period:'upcoming',modality:'',date:''});
   const[sortBy,setSortBy]=useState<AgendaSort>('chronological');
-  const states=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'state'),[events,filters,today,lastDay]);
-  const cities=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'city'),[events,filters,today,lastDay]);
-  const types=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'type'),[events,filters,today,lastDay]);
+  const cityProfile=useCityPreference();
+  const[showMyCityOnly,setShowMyCityOnly]=useState(false);
+  const preferenceCity=cityProfile.preference?.city||'';
+  const preferenceState=cityProfile.preference?.state||'';
+  const filtersForResults=showMyCityOnly&&preferenceCity&&preferenceState
+    ?{...filters,city:preferenceCity,state:preferenceState}
+    :filters;
+  const states=useMemo(()=>agendaFilterOptions(events,filtersForResults,today,lastDay,'state'),[events,filtersForResults,today,lastDay]);
+  const cities=useMemo(()=>agendaFilterOptions(events,filtersForResults,today,lastDay,'city'),[events,filtersForResults,today,lastDay]);
+  const types=useMemo(()=>agendaFilterOptions(events,filtersForResults,today,lastDay,'type'),[events,filtersForResults,today,lastDay]);
   const modalities:AgendaModality[]=['Presencial','Virtual','Híbrido'];
   const dayShortcuts=useMemo(()=>{
     const availableDates=[...new Set(events
@@ -403,7 +410,7 @@ function Home({events}:{events:MobilizationEvent[]}){
       };
     });
   },[events,today]);
-  const filtered=useMemo(()=>events.filter(event=>matchesAgendaFilters(event,filters,today,lastDay)),[events,filters,today,lastDay]);
+  const filtered=useMemo(()=>events.filter(event=>matchesAgendaFilters(event,filtersForResults,today,lastDay)),[events,filtersForResults,today,lastDay]);
   const[attendance,setAttendance]=useState<Record<string,{count:number;attending:boolean}>>({});
   const orderedEvents=useMemo(()=>{
     const copy=[...filtered];
@@ -452,7 +459,7 @@ function Home({events}:{events:MobilizationEvent[]}){
         </button>)}
       </div>
     </div>
-    <div className="agenda-discovery-head"><div><div className="eyebrow">ENCONTRE POR LOCALIZAÇÃO</div><p>Use os filtros para encontrar mobilizações por estado, cidade, tipo ou modalidade.</p></div><Link to="/mapa" className="button ghost"><MapPinned size={17}/>Explorar mapa</Link></div><Filters value={filters} onChange={setFilters} states={states} cities={cities} types={types} modalities={modalities}/><div className="section-head"><div><div className="eyebrow">AGENDA</div><h2>{filtered.length} evento{filtered.length===1?'':'s'}</h2></div><div className="section-tools"><div className="legend">Informação rastreável</div><div className="agenda-sort"><label htmlFor="agenda-sort">Ordenar por</label><select id="agenda-sort" aria-label="Ordenar eventos por" title="Ordem cronológica: data e horário crescentes." value={sortBy} onChange={event=>setSortBy(event.target.value as AgendaSort)}><option value="chronological">Ordem cronológica</option><option value="relevance">Mais relevantes</option><option value="city">Cidade (A–Z)</option><option value="state">Estado (A–Z)</option><option value="recent">Adicionados recentemente</option></select></div></div></div><div className="event-grid">{orderedEvents.map(e=><EventCard key={e.id} event={e} attendance={e.db_id?attendance[e.db_id]:undefined} onAttendance={()=>handleAttendance(e)}/>)}</div>{!filtered.length&&<div className="empty"><Info/><h3>Nenhum evento encontrado</h3><p>Tente outro termo ou remova alguns filtros.</p></div>}</section></>
+    <div className="agenda-discovery-head"><div><div className="eyebrow">ENCONTRE POR LOCALIZAÇÃO</div><p>Use os filtros para encontrar mobilizações por estado, cidade, tipo ou modalidade.</p></div><div className="section-tools">{cityProfile.user&&preferenceCity&&preferenceState&&<button type="button" className="button ghost" aria-pressed={showMyCityOnly} onClick={()=>setShowMyCityOnly(value=>!value)}>{showMyCityOnly?'Mostrar outros locais':('Ver minha cidade: '+preferenceCity+'/'+preferenceState)}</button>}{cityProfile.user&&(!preferenceCity||!preferenceState)&&<Link to="/preferencias-alertas" className="button ghost">Cadastrar minha cidade</Link>}<Link to="/mapa" className="button ghost"><MapPinned size={17}/>Explorar mapa</Link></div></div><Filters value={filtersForResults} onChange={next=>{setShowMyCityOnly(false);setFilters(next)}} states={states} cities={cities} types={types} modalities={modalities}/><div className="section-head"><div><div className="eyebrow">AGENDA</div><h2>{filtered.length} evento{filtered.length===1?'':'s'}</h2></div><div className="section-tools"><div className="legend">Informação rastreável</div><div className="agenda-sort"><label htmlFor="agenda-sort">Ordenar por</label><select id="agenda-sort" aria-label="Ordenar eventos por" title="Ordem cronológica: data e horário crescentes." value={sortBy} onChange={event=>setSortBy(event.target.value as AgendaSort)}><option value="chronological">Ordem cronológica</option><option value="relevance">Mais relevantes</option><option value="city">Cidade (A–Z)</option><option value="state">Estado (A–Z)</option><option value="recent">Adicionados recentemente</option></select></div></div></div><div className="event-grid">{orderedEvents.map(e=><EventCard key={e.id} event={e} attendance={e.db_id?attendance[e.db_id]:undefined} onAttendance={()=>handleAttendance(e)}/>)}</div>{!filtered.length&&<div className="empty"><Info/><h3>Nenhum evento encontrado</h3><p>Tente outro termo ou remova alguns filtros.</p></div>}</section></>
 }
 
 function escapeIcsText(value:string){

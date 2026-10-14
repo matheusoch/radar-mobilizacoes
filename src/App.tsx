@@ -1398,6 +1398,34 @@ const blank=():MobilizationEvent=>({
             if(!ids.length)throw new Error('Nenhum evento associado');
             const{error}=await db.from('events').update({poster_sha256:hash}).in('id',ids);
             if(error)throw error;
+            const{data:oldIndex,error:readIndexError}=await db.from('poster_index')
+              .select('source_filenames,source_indices,matched_event_ids,duplicate_count,storage_path,image_url,file_bytes,width,height')
+              .eq('sha256',hash).maybeSingle();
+            if(readIndexError)throw readIndexError;
+            const imagePath=new URL(url).pathname;
+            const bucketMarker='/storage/v1/object/public/event_posters/';
+            const bucketPosition=imagePath.indexOf(bucketMarker);
+            const storagePath=bucketPosition>=0?decodeURIComponent(imagePath.slice(bucketPosition+bucketMarker.length)):imagePath;
+            const sourceName=decodeURIComponent(storagePath.split('/').pop()||('poster-'+hash.slice(0,12)));
+            let width:number|null=null,height:number|null=null;
+            try{const bitmap=await createImageBitmap(blob);width=bitmap.width;height=bitmap.height;bitmap.close();}catch{/* Dimensions are optional for legacy images. */}
+            const sourceFilenames=[...new Set([...(oldIndex?.source_filenames||[]),sourceName])];
+            const matchedEventIds=[...new Set([...(oldIndex?.matched_event_ids||[]),...ids])];
+            const{error:indexError}=await db.from('poster_index').upsert({
+              sha256:hash,
+              source_filename:oldIndex?.source_filenames?.[0]||sourceName,
+              source_filenames:sourceFilenames,
+              source_indices:oldIndex?.source_indices||[],
+              storage_path:oldIndex?.storage_path||storagePath,
+              image_url:oldIndex?.image_url||url,
+              file_bytes:oldIndex?.file_bytes||blob.size,
+              width:oldIndex?.width||width,
+              height:oldIndex?.height||height,
+              duplicate_count:Math.max(oldIndex?.duplicate_count||1,sourceFilenames.length),
+              matched_event_ids:matchedEventIds,
+              indexed_at:new Date().toISOString()
+            },{onConflict:'sha256'});
+            if(indexError)throw indexError;
             indexedEvents+=ids.length;
           }catch{
             failed++;

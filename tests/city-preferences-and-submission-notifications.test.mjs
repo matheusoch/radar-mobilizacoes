@@ -38,7 +38,7 @@ test('registered city preference is independent of opt-in and powers homepage, c
   assert.match(app, /cityProfile\.user/);
   assert.match(app, /MapView events=\{filteredEvents\}/);
   assert.match(app, /city_in_app_opt_in:cityInAppOptIn/);
-  assert.match(preferences, /Salvar sua localização preferida/);
+  assert.match(preferences, /Salve sua cidade e estado preferidos/);
   assert.match(preferences, /p_in_app_enabled:settings\.in_app_enabled/);
   assert.match(preferences, /p_email_enabled:settings\.enabled/);
 });

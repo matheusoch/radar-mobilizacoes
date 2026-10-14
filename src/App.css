@@ -973,3 +973,47 @@ body{background:var(--page);color:var(--ink)}
   .date-chip,.calendar-day{transition:none!important}
   .date-chip:hover,.calendar-day:hover{transform:none}
 }
+
+
+/* Preferências de alertas por cidade: opt-in explícito, legibilidade e largura responsiva. */
+.city-digest-page{max-width:850px}
+.city-digest-panel{display:grid;gap:16px;margin-top:22px;padding:20px;border:1px solid var(--line);border-radius:18px;background:var(--paper);box-shadow:var(--shadow);min-width:0}
+.city-digest-field{display:grid;gap:6px;min-width:0;color:var(--ink);font-size:13px;font-weight:800}
+.city-digest-field>span{display:flex;align-items:center;gap:6px}
+.city-digest-field input,.city-digest-field select{width:100%;min-width:0;min-height:44px;box-sizing:border-box;border:1px solid var(--line);border-radius:11px;padding:11px 12px;background:#fff;color:var(--ink);font:inherit;font-weight:500}
+.city-digest-field input:focus-visible,.city-digest-field select:focus-visible{outline:3px solid rgba(162,29,53,.3);outline-offset:2px}
+.city-digest-format,.auth-digest-format{display:grid;gap:9px;min-width:0;margin:0;padding:13px;border:1px solid var(--line);border-radius:12px}
+.city-digest-format legend,.auth-digest-format legend{padding:0 5px;font-size:12px;font-weight:850}
+.city-digest-format label,.auth-digest-format label{display:flex;gap:8px;align-items:center;min-width:0;font-size:13px;color:var(--ink)}
+.city-digest-format input,.auth-digest-format input{accent-color:var(--accent);flex:none}
+.city-digest-consent,.auth-digest-consent{display:flex;gap:11px;align-items:flex-start;min-width:0;padding:14px;border:1px solid #e3bdc4;border-radius:12px;background:#fff7f8;cursor:pointer}
+.city-digest-consent>input,.auth-digest-consent>input{width:18px;height:18px;flex:none;margin:2px 0 0;accent-color:var(--accent)}
+.city-digest-consent>span,.auth-digest-consent>span{display:grid;gap:5px;min-width:0}
+.city-digest-consent strong,.auth-digest-consent strong{font-size:13px;line-height:1.4}
+.city-digest-consent small,.auth-digest-consent small{color:var(--muted);font-size:12px;line-height:1.55;overflow-wrap:anywhere}
+.city-digest-consent a,.auth-digest-consent a,.city-digest-privacy a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.city-digest-privacy,.city-digest-meta,.city-digest-policy-note{margin:0;color:var(--muted);font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.city-digest-status{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:10px;background:#f5f2ec;color:var(--ink);font-size:12px;line-height:1.5}
+.city-digest-status svg{flex:none;color:var(--accent)}
+.city-digest-actions{display:flex;flex-wrap:wrap;gap:9px;align-items:center}
+.city-digest-actions .button{min-width:0}
+.city-digest-policy{display:grid;gap:12px;margin:24px 0}
+.city-digest-policy section{padding:16px;border:1px solid var(--line);border-radius:13px;background:var(--paper)}
+.city-digest-policy h2{display:flex;align-items:center;gap:8px;margin:0 0 7px;font-size:16px}
+.city-digest-policy h2 svg{color:var(--accent);flex:none}
+.city-digest-policy p{margin:0;color:var(--muted);font-size:13px;line-height:1.65;overflow-wrap:anywhere}
+.city-digest-policy-note{margin-top:12px;padding:13px;border-left:3px solid var(--accent);background:#faf5f5}
+.auth-field{display:grid;gap:6px;min-width:0;color:var(--ink);font-size:12px;font-weight:800}
+.auth-field>input,.auth-field>select{width:100%;min-width:0;box-sizing:border-box;border:1px solid var(--line);border-radius:11px;padding:12px;background:#fff;color:var(--ink);font:inherit;font-weight:500}
+.auth-field>input:focus-visible,.auth-field>select:focus-visible{outline:3px solid rgba(162,29,53,.3);outline-offset:2px}
+.auth-digest-fields{display:grid;gap:13px;margin-top:4px;padding:16px;border:1px solid var(--line);border-radius:14px;background:#fbfaf7;min-width:0}
+.auth-digest-fields h2{font-size:19px;letter-spacing:-.025em;margin:5px 0}
+.auth-digest-fields p{margin:0;color:var(--muted);font-size:12px;line-height:1.55}
+.auth-digest-consent{margin-top:2px}
+@media(max-width:560px){
+  .city-digest-panel{padding:14px;border-radius:14px}
+  .city-digest-actions{display:grid;grid-template-columns:minmax(0,1fr)}
+  .city-digest-actions .button{width:100%}
+  .auth-digest-fields{padding:12px}
+  .city-digest-policy section{padding:13px}
+}

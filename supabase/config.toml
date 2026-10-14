@@ -1,0 +1,10 @@
+project_id = "yyyqwiauonyonnqvoozu"
+
+# These public endpoints are safe to call only because they implement their own
+# authentication: the sender checks DIGEST_CRON_SECRET, and unsubscribe checks
+# a signed HMAC token. Do not disable JWT verification on unrelated functions.
+[functions.send-city-email-digest]
+verify_jwt = false
+
+[functions.unsubscribe-city-email-digest]
+verify_jwt = false

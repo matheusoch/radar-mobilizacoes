@@ -18,6 +18,9 @@ import PosterImporter from './components/PosterImporter';
 import {normalizeEventType,normalizePtSentence,normalizePtTitle,type PosterCandidate} from './lib/posterOcr';
 import ShareBuilder from './components/ShareBuilder';
 import ShareSection from './components/ShareSection';
+import CityEmailDigestPreferences from './components/CityEmailDigestPreferences';
+import EmailPrivacyPage from './components/EmailPrivacyPage';
+import {BRAZILIAN_STATES} from './lib/brazilianStates';
 import {extractClockTime,formatTimeText} from './utils/formatTime';
 import {StatusBadge} from './components/Badge';
 import {getEvents,getAdminEvents,getSources,resolveImageUrl,mapDbEvent,getAttendanceStatus,toggleEventAttendance,recordPageView,recordEventAction} from './lib/data';
@@ -27,6 +30,7 @@ import type {EventSource,MobilizationEvent} from './types';
 const ADMIN_SOURCE_FALLBACK='0bb24d8c-4c25-5d74-90c1-f86fc42a9958';
 const ADMIN_STORAGE_BUCKET='event_posters';
 const SUBMISSION_STORAGE_BUCKET='submission_posters';
+const EMAIL_DIGEST_ENABLED=import.meta.env.VITE_EMAIL_DIGEST_ENABLED==='true';
 
 type Submission={
   id:string; user_id:string; display_name:string; title:string; date:string|null; time:string|null; time_label:string|null;
@@ -309,7 +313,7 @@ function Home({events}:{events:MobilizationEvent[]}){
       else alert(message);
     }
   };
-  return <><section className="hero"><div className="container hero-grid"><div><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> AGENDA DE MOBILIZAÇÕES</div><h1>Eventos e mobilizações pelo Brasil.</h1><p>Agenda de atos, manifestações, plenárias e encontros em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, organizados por data e cidade e acompanhados de fontes para conferência.</p><div className="hero-actions"><Link to="/chat?novo=1" className="button primary"><CalendarPlus size={18}/>Adicionar evento</Link><Link to="/calendario" className="button ghost"><CalendarDays size={18}/>Ver calendário</Link><Link to="/divulgar" className="button ghost"><ImageIcon size={18}/>Criar divulgação</Link><Link to="/chat" className="button ghost"><MessageCircle size={18}/>Enviar atualização</Link></div></div><div className="hero-card"><div className="hero-stat"><strong>{events.length}</strong><span>eventos públicos</span></div><div className="hero-stat"><strong>{states.length}</strong><span>estados representados</span></div><div className="hero-stat"><strong>{events.filter(e=>e.status!=='warning').length}</strong><span>sem alerta de divergência</span></div></div></div></section><ShareSection events={events}/><section className="container section">
+  return <><section className="hero"><div className="container hero-grid"><div><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> AGENDA DE MOBILIZAÇÕES</div><h1>Eventos e mobilizações pelo Brasil.</h1><p>Agenda de atos, manifestações, plenárias e encontros em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, organizados por data e cidade e acompanhados de fontes para conferência.</p><div className="hero-actions"><Link to="/chat?novo=1" className="button primary"><CalendarPlus size={18}/>Adicionar evento</Link><Link to="/calendario" className="button ghost"><CalendarDays size={18}/>Ver calendário</Link><Link to="/divulgar" className="button ghost"><ImageIcon size={18}/>Criar divulgação</Link><Link to="/chat" className="button ghost"><MessageCircle size={18}/>Enviar atualização</Link><Link to="/preferencias-alertas" className="button ghost"><Bell size={18}/>{EMAIL_DIGEST_ENABLED?'Alertas por cidade':'Alertas por cidade — em breve'}</Link></div></div><div className="hero-card"><div className="hero-stat"><strong>{events.length}</strong><span>eventos públicos</span></div><div className="hero-stat"><strong>{states.length}</strong><span>estados representados</span></div><div className="hero-stat"><strong>{events.filter(e=>e.status!=='warning').length}</strong><span>sem alerta de divergência</span></div></div></div></section><ShareSection events={events}/><section className="container section">
     <div className="date-shortcuts">
       <div className="date-shortcuts-heading">
         <div><div className="eyebrow">POR DATA</div><h2>Mobilizações nos próximos dias</h2></div>
@@ -738,21 +742,27 @@ function MapPage({events}:{events:MobilizationEvent[]}){return <div className="c
 function AboutPage(){return <div className="container page narrow"><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> SOBRE A AGENDA</div><h1>Uma agenda pública de mobilizações eleitorais.</h1><p className="page-lead">A Agenda reúne eventos e mobilizações em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, transformando informações espalhadas em uma agenda navegável, fácil de conferir e de atualizar.</p><div className="about-grid"><div><h2>Como funciona</h2><p>Cada evento tem data, horário, cidade, local, tipo e links para as fontes usadas na conferência.</p></div><div><h2>O que “verificado” significa</h2><p>Os campos essenciais foram comparados com uma ou mais publicações ou fontes identificáveis. Isso não substitui a checagem no dia do evento.</p></div><div><h2>Independente</h2><p>Este projeto não é oficial de campanha, partido, governo ou organização.</p></div><div><h2>Base editorial</h2><p>A primeira carga foi montada a partir das threads, pôsteres e fontes complementares identificadas na pesquisa.</p></div></div></div>}
 
 function AuthPage(){
-  const[mode,setMode]=useState<'login'|'signup'|'recover'|'reset'>('login');
+  const location=useLocation();
+  const params=new URLSearchParams(location.search);
+  const next=params.get('next')||'/chat';
+  const digestSignup=EMAIL_DIGEST_ENABLED&&params.get('digest')==='1';
+  const[mode,setMode]=useState<'login'|'signup'|'recover'|'reset'>(()=>params.get('mode')==='signup'?'signup':'login');
   const[email,setEmail]=useState('');
   const[password,setPassword]=useState('');
   const[confirmPassword,setConfirmPassword]=useState('');
   const[displayName,setDisplayName]=useState('');
+  const[digestCity,setDigestCity]=useState('');
+  const[digestState,setDigestState]=useState('');
+  const[digestOptIn,setDigestOptIn]=useState(false);
+  const[digestFormat,setDigestFormat]=useState<'resumo'|'cards'|'ambos'>('ambos');
   const[msg,setMsg]=useState('');
   const[busy,setBusy]=useState(false);
   const navigate=useNavigate();
-  const location=useLocation();
-  const next=new URLSearchParams(location.search).get('next')||'/chat';
 
   useEffect(()=>{
-    const params=new URLSearchParams(location.search);
-    const hashParams=new URLSearchParams(window.location.hash.replace(/^#/,''));
-    if(params.get('mode')==='reset'||hashParams.get('type')==='recovery')setMode('reset');
+    const currentParams=new URLSearchParams(location.search);
+    const hashParams=new URLSearchParams(window.location.hash.replace(/^#/,'')); 
+    if(currentParams.get('mode')==='reset'||hashParams.get('type')==='recovery')setMode('reset');
     if(!supabase)return;
     const{data}=supabase.auth.onAuthStateChange((event)=>{
       if(event==='PASSWORD_RECOVERY')setMode('reset');
@@ -784,20 +794,73 @@ function AuthPage(){
         if(error)setMsg(error.message);
         else navigate(next);
       }else{
-        const{data,error}=await db.auth.signUp({email,password,options:{emailRedirectTo:window.location.origin+next,data:{display_name:displayName||safeName(email)}}});
+        if(digestSignup&&digestOptIn&&(!digestCity.trim()||!digestState)){
+          setMsg('Para receber os alertas, informe sua cidade e estado. Você também pode criar a conta sem aderir aos e-mails.');
+          return;
+        }
+        const{data,error}=await db.auth.signUp({
+          email,
+          password,
+          options:{
+            emailRedirectTo:window.location.origin+next,
+            data:{
+              display_name:displayName||safeName(email),
+              ...(digestSignup?{
+                digest_city:digestCity.trim(),
+                digest_state:digestState,
+                email_digest_opt_in:digestOptIn,
+                email_digest_format:digestFormat,
+                email_digest_consent_version:'city-digest-v1-2026-10',
+              }:{}),
+            },
+          },
+        });
         if(error)setMsg(error.message);
         else if(data.session)navigate(next);
-        else setMsg('Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre no chat.');
+        else setMsg(digestSignup&&digestOptIn
+          ?'Conta criada. Confirme seu e-mail; depois abra as preferências de alertas para salvar sua adesão.'
+          :'Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre na Agenda.');
       }
+    }catch(error){
+      setMsg(error instanceof Error?error.message:'Não foi possível concluir a operação. Tente novamente.');
     }finally{
       setBusy(false);
     }
   };
 
   const title=mode==='login'?'Entre para participar.':mode==='signup'?'Crie sua conta.':mode==='recover'?'Recupere sua senha.':'Defina uma nova senha.';
-  const lead=mode==='reset'?'Use uma senha nova para voltar à Agenda.':'O chat exige login para reduzir spam e manter as sugestões sob moderação.';
+  const lead=mode==='reset'?'Use uma senha nova para voltar à Agenda.':digestSignup&&mode==='signup'
+    ?'Crie sua conta e, se desejar, ative um resumo diário de mobilizações da sua cidade. A adesão é opcional.'
+    :'O chat exige login para reduzir spam e manter as sugestões sob moderação.';
 
-  return <div className="container page narrow"><div className="eyebrow">{mode==='login'?'ENTRAR':mode==='signup'?'CRIAR CONTA':mode==='recover'?'RECUPERAÇÃO':'NOVA SENHA'}</div><h1>{title}</h1><p className="page-lead">{lead}</p><form className="auth-form" onSubmit={submit}>{mode==='signup'&&<input placeholder="Como quer aparecer no chat?" value={displayName} onChange={e=>setDisplayName(e.target.value)} autoComplete="name"/>}{mode!=='reset'&&<input type="email" placeholder="E-mail" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete={mode==='recover'?'email':'username'}/>} {(mode==='login'||mode==='signup'||mode==='reset')&&<input type="password" placeholder="Senha" value={password} onChange={e=>setPassword(e.target.value)} minLength={6} required autoComplete={mode==='reset'?'new-password':mode==='login'?'current-password':'new-password'}/>} {mode==='reset'&&<input type="password" placeholder="Confirme a nova senha" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} minLength={6} required autoComplete="new-password"/>}<button className="button primary" disabled={busy}>{busy?'Aguarde…':mode==='login'?'Entrar':mode==='signup'?'Criar conta':mode==='recover'?'Enviar link de recuperação':'Salvar nova senha'}</button>{msg&&<div className="callout info"><Info size={18}/><span>{msg}</span></div>}</form>{mode==='login'&&<button className="auth-forgot" onClick={()=>{setMode('recover');setMsg('')}}><KeyRound size={16}/>Esqueci minha senha</button>}{mode==='login'&&<button className="mode-switch" onClick={()=>{setMode('signup');setMsg('')}}><UserPlus size={16}/>Criar uma conta</button>}{mode==='signup'&&<button className="mode-switch" onClick={()=>{setMode('login');setMsg('')}}><LogIn size={16}/>Já tenho uma conta</button>}{(mode==='recover'||mode==='reset')&&<button className="mode-switch" onClick={()=>{setMode('login');setMsg('')}}><LogIn size={16}/>Voltar para entrar</button>}</div>
+  return <div className="container page narrow">
+    <div className="eyebrow">{mode==='login'?'ENTRAR':mode==='signup'?'CRIAR CONTA':mode==='recover'?'RECUPERAÇÃO':'NOVA SENHA'}</div>
+    <h1>{title}</h1>
+    <p className="page-lead">{lead}</p>
+    <form className="auth-form" onSubmit={submit}>
+      {mode==='signup'&&<label className="auth-field"><span>Como quer aparecer no chat? (opcional)</span><input placeholder="Nome de exibição" value={displayName} onChange={e=>setDisplayName(e.target.value)} autoComplete="name"/></label>}
+      {mode!=='reset'&&<label className="auth-field"><span>E-mail</span><input type="email" placeholder="voce@exemplo.com" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete={mode==='recover'?'email':'username'}/></label>}
+      {(mode==='login'||mode==='signup'||mode==='reset')&&<label className="auth-field"><span>Senha</span><input type="password" placeholder="Pelo menos 6 caracteres" value={password} onChange={e=>setPassword(e.target.value)} minLength={6} required autoComplete={mode==='reset'?'new-password':mode==='login'?'current-password':'new-password'}/></label>}
+      {mode==='reset'&&<label className="auth-field"><span>Confirme a nova senha</span><input type="password" placeholder="Repita sua nova senha" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} minLength={6} required autoComplete="new-password"/></label>}
+      {digestSignup&&mode==='signup'&&<section className="auth-digest-fields" aria-labelledby="auth-digest-title">
+        <div><div className="eyebrow">OPCIONAL</div><h2 id="auth-digest-title">Alertas da sua cidade</h2><p>Receba às 8h, no horário de Brasília, um resumo dos eventos de hoje e dos próximos sete dias na região informada.</p></div>
+        <label className="auth-field"><span>Cidade</span><input value={digestCity} onChange={e=>setDigestCity(e.target.value)} maxLength={100} autoComplete="address-level2" placeholder="Ex.: Fortaleza" required={digestOptIn} disabled={busy}/></label>
+        <label className="auth-field"><span>Estado</span><select value={digestState} onChange={e=>setDigestState(e.target.value)} autoComplete="address-level1" required={digestOptIn} disabled={busy}><option value="">Selecione a UF</option>{BRAZILIAN_STATES.map(state=><option key={state.code} value={state.code}>{state.name} ({state.code})</option>)}</select></label>
+        <fieldset className="auth-digest-format"><legend>Formato do e-mail</legend>
+          <label><input type="radio" name="signup-digest-format" value="resumo" checked={digestFormat==='resumo'} onChange={()=>setDigestFormat('resumo')} disabled={busy}/>Resumo de texto</label>
+          <label><input type="radio" name="signup-digest-format" value="cards" checked={digestFormat==='cards'} onChange={()=>setDigestFormat('cards')} disabled={busy}/>Cards por evento</label>
+          <label><input type="radio" name="signup-digest-format" value="ambos" checked={digestFormat==='ambos'} onChange={()=>setDigestFormat('ambos')} disabled={busy}/>Resumo + cards</label>
+        </fieldset>
+        <label className="auth-digest-consent"><input type="checkbox" checked={digestOptIn} onChange={e=>setDigestOptIn(e.target.checked)} disabled={busy}/><span><strong>Quero receber os alertas diários por e-mail.</strong><small>Esta autorização é opcional e separada da conta. Só ativará o envio depois que você confirmar o e-mail e salvar a preferência. É possível cancelar quando quiser. <Link to="/privacidade" target="_blank" rel="noreferrer">Saiba como os dados serão usados.</Link></small></span></label>
+      </section>}
+      <button className="button primary" disabled={busy}>{busy?'Aguarde…':mode==='login'?'Entrar':mode==='signup'?'Criar conta':mode==='recover'?'Enviar link de recuperação':'Salvar nova senha'}</button>
+      {msg&&<div className="callout info" role="status"><Info size={18}/><span>{msg}</span></div>}
+    </form>
+    {mode==='login'&&<button className="auth-forgot" onClick={()=>{setMode('recover');setMsg('')}}><KeyRound size={16}/>Esqueci minha senha</button>}
+    {mode==='login'&&<button className="mode-switch" onClick={()=>{setMode('signup');setMsg('')}}><UserPlus size={16}/>Criar uma conta</button>}
+    {mode==='signup'&&<button className="mode-switch" onClick={()=>{setMode('login');setMsg('')}}><LogIn size={16}/>Já tenho uma conta</button>}
+    {(mode==='recover'||mode==='reset')&&<button className="mode-switch" onClick={()=>{setMode('login');setMsg('')}}><LogIn size={16}/>Voltar para entrar</button>}
+  </div>;
 }
 
 function ChatPage(){
@@ -1367,5 +1430,5 @@ export default function App(){
 
   if(loadError)return <div className="loading"><div className="empty"><Info/><h3>Não foi possível carregar os dados</h3><p>{loadError}</p><button className="button primary" onClick={()=>{setLoading(true);reload()}}><RefreshCw size={16}/>Tentar novamente</button></div></div>;
 
-  return <AppErrorBoundary><Layout><Routes><Route path="/" element={<Home events={events}/>}/><Route path="/evento/:id" element={<EventPage events={events} sources={sources}/>}/><Route path="/calendario" element={<CalendarPage events={events}/>}/><Route path="/mapa" element={<MapPage events={events}/>}/><Route path="/divulgar" element={<ShareBuilder events={events}/>}/><Route path="/sobre" element={<AboutPage/>}/><Route path="/chat" element={<ChatPage/>}/><Route path="/entrar" element={<AuthPage/>}/><Route path="/admin" element={<AdminPage/>}/><Route path="/admin/moderacao" element={<EventModerationPage/>}/></Routes></Layout></AppErrorBoundary>
+  return <AppErrorBoundary><Layout><Routes><Route path="/" element={<Home events={events}/>}/><Route path="/evento/:id" element={<EventPage events={events} sources={sources}/>}/><Route path="/calendario" element={<CalendarPage events={events}/>}/><Route path="/mapa" element={<MapPage events={events}/>}/><Route path="/divulgar" element={<ShareBuilder events={events}/>}/><Route path="/sobre" element={<AboutPage/>}/><Route path="/chat" element={<ChatPage/>}/><Route path="/entrar" element={<AuthPage/>}/><Route path="/preferencias-alertas" element={<CityEmailDigestPreferences/>}/><Route path="/privacidade" element={<EmailPrivacyPage/>}/><Route path="/admin" element={<AdminPage/>}/><Route path="/admin/moderacao" element={<EventModerationPage/>}/></Routes></Layout></AppErrorBoundary>
 }

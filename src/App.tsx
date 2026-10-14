@@ -154,6 +154,82 @@ function agendaFilterOptions(events:MobilizationEvent[],filters:FiltersState,tod
   return selected&&!options.includes(selected)?[selected,...options]:options;
 }
 
+
+type CityPreference={
+  city:string;
+  state:string;
+  inAppEnabled:boolean;
+  emailEnabled:boolean;
+  hasSavedPreference:boolean;
+};
+
+function useCityPreference(){
+  const[user,setUser]=useState<any>(null);
+  const[authLoading,setAuthLoading]=useState(true);
+  const[preference,setPreference]=useState<CityPreference|null>(null);
+  const[preferenceLoading,setPreferenceLoading]=useState(true);
+
+  useEffect(()=>{
+    if(!supabase){setAuthLoading(false);setPreferenceLoading(false);return}
+    let active=true;
+    supabase.auth.getUser().then(({data})=>{
+      if(active)setUser(data.user);
+    }).catch(()=>{
+      if(active)setUser(null);
+    }).finally(()=>{
+      if(active)setAuthLoading(false);
+    });
+    const{data:listener}=supabase.auth.onAuthStateChange((_event,session)=>{
+      if(active)setUser(session?.user??null);
+    });
+    return()=>{
+      active=false;
+      listener.subscription.unsubscribe();
+    };
+  },[]);
+
+  useEffect(()=>{
+    if(authLoading)return;
+    if(!supabase||!user?.id){
+      setPreference(null);
+      setPreferenceLoading(false);
+      return;
+    }
+    let active=true;
+    setPreferenceLoading(true);
+    (async()=>{
+      const{data,error}=await supabase
+        .from('city_email_digest_subscriptions')
+        .select('city,state,in_app_enabled,enabled')
+        .eq('user_id',user.id)
+        .maybeSingle();
+      if(!active)return;
+      const metadata=(user.user_metadata||{}) as Record<string,unknown>;
+      const city=(!error&&typeof data?.city==='string'&&data.city.trim())
+        ?data.city.trim()
+        :(typeof metadata.digest_city==='string'?metadata.digest_city.trim():'');
+      const state=(!error&&typeof data?.state==='string'&&data.state.trim())
+        ?data.state.trim().toUpperCase()
+        :(typeof metadata.digest_state==='string'?metadata.digest_state.trim().toUpperCase():'');
+      const hasSavedPreference=!error&&Boolean(data?.city?.trim()&&data?.state?.trim());
+      setPreference({
+        city,
+        state,
+        inAppEnabled:!error&&Boolean(data?.in_app_enabled),
+        emailEnabled:!error&&Boolean(data?.enabled),
+        hasSavedPreference,
+      });
+    })().catch(()=>{
+      if(active)setPreference({city:'',state:'',inAppEnabled:false,emailEnabled:false,hasSavedPreference:false});
+    }).finally(()=>{
+      if(active)setPreferenceLoading(false);
+    });
+    return()=>{active=false};
+  },[user?.id,authLoading]);
+
+  return {user,preference,loading:authLoading||preferenceLoading};
+}
+
 type AppNotification={
   id:string;
   type:'chat_reply'|'city_event';

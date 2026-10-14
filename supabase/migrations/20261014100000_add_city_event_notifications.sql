@@ -15,7 +15,8 @@ create index if not exists city_event_notifications_user_unread_idx
 
 alter table public.city_event_notifications enable row level security;
 revoke all on public.city_event_notifications from public, anon;
-grant select, update on public.city_event_notifications to authenticated;
+grant select on public.city_event_notifications to authenticated;
+grant update (read_at) on public.city_event_notifications to authenticated;
 
 drop policy if exists "users read own city event notifications" on public.city_event_notifications;
 create policy "users read own city event notifications"

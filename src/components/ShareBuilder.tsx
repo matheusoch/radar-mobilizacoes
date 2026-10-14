@@ -8,7 +8,6 @@ import {SHARE_SHORT_URL,buildCardShareText,type ShareContent} from '../utils/soc
 import ShareCardActions from './ShareCardActions';
 import {formatTimeText} from '../utils/formatTime';
 
-const MAX_EVENTS=MAX_EVENTS_PER_CARD*2;
 const HASHTAGS=['AgendaDeMobilizacoes'] as const;
 
 function getTimeInfo(event:MobilizationEvent){
@@ -41,32 +40,36 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   const initialIds=(params.get('eventos')||'').split(',').map(decodeURIComponent).filter(Boolean);
   const[query,setQuery]=useState('');
   const[dateFilter,setDateFilter]=useState('');
-  const[selected,setSelected]=useState<string[]>(initialIds.slice(0,MAX_EVENTS));
+  const[stateFilter,setStateFilter]=useState('');
+  const[cityFilter,setCityFilter]=useState('');
+  const[selected,setSelected]=useState<string[]>(initialIds);
   const[format,setFormat]=useState<CardFormatKey>('feed');
   const assets=useShareCardAssets();
 
-  const candidates=useMemo(()=>{
-    const dateParts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
-    const dateValues=Object.fromEntries(dateParts.map(part=>[part.type,part.value]));
-    const today=dateValues.year+'-'+dateValues.month+'-'+dateValues.day;
-    const q=query.trim().toLowerCase();
-    return groupSort(events.filter(event=>{
-      if(!event.public||event.date<today)return false;
-      if(dateFilter&&event.date!==dateFilter)return false;
-      if(!q)return true;
-      return [event.title,event.city,event.state,event.venue,event.type]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(q);
-    }));
-  },[events,query,dateFilter]);
+  const dateParts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const dateValues=Object.fromEntries(dateParts.map(part=>[part.type,part.value]));
+  const today=dateValues.year+'-'+dateValues.month+'-'+dateValues.day;
+  const upcomingEvents=useMemo(()=>events.filter(event=>event.public&&event.date>=today),[events,today]);
+  const states=useMemo(()=>[...new Set(upcomingEvents.filter(event=>!dateFilter||event.date===dateFilter).map(event=>event.state).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR')),[upcomingEvents,dateFilter]);
+  const cities=useMemo(()=>[...new Set(upcomingEvents.filter(event=>(!dateFilter||event.date===dateFilter)&&(!stateFilter||event.state===stateFilter)).map(event=>event.city).filter(city=>city&&city.trim()))].sort((a,b)=>a.localeCompare(b,'pt-BR')),[upcomingEvents,dateFilter,stateFilter]);
 
-  const chosen=useMemo(()=>groupSort(
-    selected
-      .map(id=>events.find(event=>event.id===id))
-      .filter((event):event is MobilizationEvent=>Boolean(event))
-  ),[events,selected]);
+  const candidates=useMemo(()=>{
+    const normalize=(value:string)=>value.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim();
+    const q=normalize(query);
+    return groupSort(upcomingEvents.filter(event=>{
+      if(dateFilter&&event.date!==dateFilter)return false;
+      if(stateFilter&&event.state!==stateFilter)return false;
+      if(cityFilter&&normalize(event.city)!==normalize(cityFilter))return false;
+      if(!q)return true;
+      return normalize([event.title,event.city,event.state,event.venue,event.type].filter(Boolean).join(' ')).includes(q);
+    }));
+  },[upcomingEvents,query,dateFilter,stateFilter,cityFilter]);
+
+  const chosen=useMemo(()=>groupSort(selected.map(id=>events.find(event=>event.id===id)).filter((event):event is MobilizationEvent=>Boolean(event))),[events,selected]);
+  const allVisibleSelected=candidates.length>0&&candidates.every(event=>selected.includes(event.id));
+  const selectVisible=()=>setSelected(current=>[...new Set([...current,...candidates.map(event=>event.id)])]);
+  const deselectVisible=()=>{const visibleIds=new Set(candidates.map(event=>event.id));setSelected(current=>current.filter(id=>!visibleIds.has(id)))};
+  const clearFilters=()=>{setQuery('');setDateFilter('');setStateFilter('');setCityFilter('')};
 
   const card=useMemo(
     ()=>chosen.length&&assets?generateShareCard(chosen,{format,assets}):null,
@@ -81,11 +84,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   },[selected]);
 
   const toggle=(id:string)=>{
-    setSelected(current=>{
-      if(current.includes(id))return current.filter(item=>item!==id);
-      if(current.length>=MAX_EVENTS)return current;
-      return [...current,id];
-    });
+    setSelected(current=>current.includes(id)?current.filter(item=>item!==id):[...current,id]);
   };
 
   const content=useMemo<ShareContent>(()=>({
@@ -104,12 +103,12 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
       <div>
         <h1>Crie seu painel de mobilizações.</h1>
         <p className='page-lead'>
-          Escolha até {MAX_EVENTS} eventos e gere uma peça pronta para compartilhar.
+          Escolha os eventos por estado, cidade e data. Você pode selecionar todos os resultados; a agenda divide automaticamente seleções grandes em vários cards.
           Cada card mostra data, horário, cidade, local e tipo de mobilização.
         </p>
       </div>
       <div className='share-counter'>
-        <strong>{selected.length}/{MAX_EVENTS}</strong>
+        <strong>{selected.length}</strong>
         <span>selecionados</span>
       </div>
     </div>
@@ -121,33 +120,37 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
           <span>{candidates.length} disponíveis</span>
         </div>
 
-        <div className='share-filter-row'>
+        <div className='share-filter-row share-filter-row-custom'>
           <div className='share-search'>
-            <input
-              value={query}
-              onChange={e=>setQuery(e.target.value)}
-              placeholder='Buscar cidade, estado ou evento...'
-              aria-label='Buscar eventos para divulgação'
-            />
-            {query&&
-              <button type='button' onClick={()=>setQuery('')} aria-label='Limpar busca'>
-                <X size={16}/>
-              </button>
-            }
+            <input value={query} onChange={e=>setQuery(e.target.value)} placeholder='Buscar cidade, estado ou evento...' aria-label='Buscar eventos para divulgação'/>
+            {query&&<button type='button' onClick={()=>setQuery('')} aria-label='Limpar busca'><X size={16}/></button>}
           </div>
+          <label className='share-builder-select'>
+            <span>Estado</span>
+            <select value={stateFilter} onChange={e=>{setStateFilter(e.target.value);setCityFilter('')}} aria-label='Filtrar por estado'>
+              <option value=''>Todos os estados</option>
+              {states.map(state=><option key={state} value={state}>{state}</option>)}
+            </select>
+          </label>
+          <label className='share-builder-select'>
+            <span>Cidade</span>
+            <select value={cityFilter} onChange={e=>setCityFilter(e.target.value)} aria-label='Filtrar por cidade'>
+              <option value=''>Todas as cidades</option>
+              {cities.map(city=><option key={city} value={city}>{city}</option>)}
+            </select>
+          </label>
           <div className='share-date-filter'>
             <CalendarDays size={17} aria-hidden='true'/>
-            <input
-              type='date'
-              value={dateFilter}
-              onChange={e=>setDateFilter(e.target.value)}
-              aria-label='Filtrar eventos por data'
-            />
-            {dateFilter&&
-              <button type='button' className='share-date-clear' onClick={()=>setDateFilter('')} aria-label='Limpar filtro de data'>
-                <X size={15}/>
-              </button>
-            }
+            <input type='date' value={dateFilter} onChange={e=>setDateFilter(e.target.value)} aria-label='Filtrar eventos por data'/>
+            {dateFilter&&<button type='button' className='share-date-clear' onClick={()=>setDateFilter('')} aria-label='Limpar filtro de data'><X size={15}/></button>}
+          </div>
+        </div>
+        <div className='share-picker-toolbar'>
+          <span>{candidates.length} resultado{candidates.length===1?'':'s'} para os filtros atuais</span>
+          <div>
+            <button type='button' className='button ghost' onClick={allVisibleSelected?deselectVisible:selectVisible} disabled={!candidates.length}>{allVisibleSelected?'Desmarcar resultados':'Selecionar tudo'}</button>
+            <button type='button' className='button ghost' onClick={clearFilters} disabled={!query&&!dateFilter&&!stateFilter&&!cityFilter}><X size={15}/>Limpar filtros</button>
+            <button type='button' className='button ghost' onClick={()=>setSelected([])} disabled={!selected.length}><X size={15}/>Limpar seleção</button>
           </div>
         </div>
 
@@ -170,13 +173,11 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
         <div className='share-event-list'>
           {candidates.map(event=>{
             const isSelected=selected.includes(event.id);
-            const disabled=!isSelected&&selected.length>=MAX_EVENTS;
             return <button
               key={event.id}
               type='button'
               className={isSelected?'share-event selected':'share-event'}
               onClick={()=>toggle(event.id)}
-              disabled={disabled}
             >
               <span className='share-event-check'>{isSelected?<Check size={15}/>:<span/>}</span>
               <span className='share-event-copy'>

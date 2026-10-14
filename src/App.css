@@ -826,3 +826,34 @@ body{background:var(--page);color:var(--ink)}
 @media(max-width:700px){.agenda-discovery-head{align-items:flex-start;flex-direction:column;gap:10px}.agenda-discovery-head .button{width:100%}.filter-row select,.filter-row .clear-btn{flex:1 1 100%;width:100%;min-width:0}.filters-wrap{padding:14px}.searchbox{padding:11px 12px}.map-filters{display:grid;grid-template-columns:1fr;gap:9px}.map-search,.map-filters select{width:100%;min-width:0;box-sizing:border-box}.map-count{flex-wrap:wrap}}
 
 @media(max-width:700px){.map-filters .clear-btn{width:100%;justify-content:center}}
+
+
+/* Calendar discovery filters */
+.calendar-filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end;margin:18px 0 14px;padding:16px;border:1px solid var(--line);border-radius:16px;background:#fff}
+.calendar-filter-field{display:grid;gap:6px;min-width:0;color:var(--muted);font-size:12px;font-weight:700}
+.calendar-filter-field select,.calendar-filter-field input{width:100%;min-width:0;min-height:42px;border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:#fff;color:var(--ink);font:inherit;font-size:13px}
+.calendar-filter-field select:focus-visible,.calendar-filter-field input:focus-visible{outline:3px solid rgba(162,29,53,.25);outline-offset:2px}
+.calendar-filter-actions{grid-column:1/-1;display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}
+@media(max-width:780px){.calendar-filters{grid-template-columns:repeat(2,minmax(0,1fr));padding:13px;gap:10px}}
+@media(max-width:480px){.calendar-filters{grid-template-columns:minmax(0,1fr)}.calendar-filter-actions{justify-content:stretch}.calendar-filter-actions .button{flex:1;justify-content:center}}
+
+/* Personalized share builder controls */
+.share-filter-row-custom{grid-template-columns:minmax(0,1.4fr) repeat(2,minmax(125px,.8fr)) minmax(155px,.75fr);align-items:end}
+.share-builder-select{display:grid;gap:5px;min-width:0;color:var(--muted);font-size:11px;font-weight:700}
+.share-builder-select select{width:100%;min-width:0;height:43px;padding:9px 10px;border:1px solid var(--line);border-radius:11px;background:#fff;color:var(--ink);font:inherit;font-size:13px}
+.share-picker-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:11px 0}
+.share-picker-toolbar>span{color:var(--muted);font-size:12px}
+.share-picker-toolbar>div{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.share-picker-toolbar .button{min-height:36px;padding:8px 10px;font-size:12px}
+@media(max-width:900px){.share-filter-row-custom{grid-template-columns:repeat(2,minmax(0,1fr))}.share-filter-row-custom .share-search{grid-column:1/-1}}
+@media(max-width:620px){.share-filter-row-custom{grid-template-columns:1fr}.share-filter-row-custom .share-search{grid-column:auto}.share-picker-toolbar{align-items:stretch}.share-picker-toolbar>div{width:100%}.share-picker-toolbar .button{flex:1;justify-content:center}}
+
+/* Transparent inventory for events that still need map coordinates */
+.map-unmapped{margin-top:12px;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+.map-unmapped summary{padding:13px 15px;cursor:pointer;color:var(--ink);font-size:13px;font-weight:700}
+.map-unmapped-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:0 12px 12px;max-height:380px;overflow:auto}
+.map-unmapped-item{display:grid;gap:4px;padding:10px;border:1px solid var(--line);border-radius:9px;color:var(--ink);text-decoration:none}
+.map-unmapped-item:hover{border-color:var(--accent)}
+.map-unmapped-item strong{font-size:12px;line-height:1.35}
+.map-unmapped-item span,.map-unmapped-item small{color:var(--muted);font-size:11px;line-height:1.35}
+@media(max-width:640px){.map-unmapped-list{grid-template-columns:1fr}}

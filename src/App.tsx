@@ -791,7 +791,7 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
   const normalized=normalizedSearchText(query.trim());
   const baseFiltered=publicEvents.filter(event=>{
     if(effectiveStateFilter&&event.state!==effectiveStateFilter)return false;
-    if(effectiveCityFilter&&normalizedSearchText(event.city)!==normalizedSearchText(effectiveCityFilter))return false;
+    if(effectiveCityFilter&&!physicalCitiesForEvent(event).some(city=>normalizedSearchText(city)===normalizedSearchText(effectiveCityFilter)))return false;
     if(typeFilter&&event.type!==typeFilter)return false;
     if(normalized&&!normalizedSearchText([event.title,event.city,event.state,event.venue,event.address||'',event.type].filter(Boolean).join(' ')).includes(normalized))return false;
     return true;
@@ -886,7 +886,7 @@ function MapPage({events}:{events:MobilizationEvent[]}){
   const state=cityProfile.preference?.state||'';
   const publicEvents=events.filter(event=>event.public);
   const filteredEvents=showMyCityOnly&&city&&state
-    ?publicEvents.filter(event=>normalizedSearchText(event.city)===normalizedSearchText(city)&&normalizedSearchText(event.state)===normalizedSearchText(state))
+    ?publicEvents.filter(event=>physicalCitiesForEvent(event).some(eventCity=>normalizedSearchText(eventCity)===normalizedSearchText(city))&&normalizedSearchText(event.state)===normalizedSearchText(state))
     :publicEvents;
   return <div className="container page">
     <div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> MAPA DE MOBILIZAÇÕES</div>

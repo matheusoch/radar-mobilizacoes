@@ -954,7 +954,7 @@ body{background:var(--page);color:var(--ink)}
 @media(max-width:1000px){
   .map-filters{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
   .map-search{grid-column:1/-1}
-  .map-filters>.clear-btn{width:100%}
+  .map-filters>.clear-btn{grid-column:1/-1;width:100%}
 }
 @media(max-width:620px){
   .map-filters{grid-template-columns:minmax(0,1fr);gap:9px}
@@ -965,3 +965,11 @@ body{background:var(--page);color:var(--ink)}
 
 /* Pequenas áreas de interação respondem ao teclado com o mesmo destaque do tema. */
 .date-chip:focus-visible,.calendar-day:focus-visible,.agenda-sort select:focus-visible{outline:3px solid rgba(162,29,53,.42);outline-offset:3px}
+
+.map-search button{display:grid;place-items:center;flex:none;width:28px;height:28px;border:0;border-radius:50%;background:#f0eee9;color:var(--ink);cursor:pointer}
+.map-search button:hover,.map-date-clear:hover{background:#e8e3de}
+.map-search button:focus-visible{outline:3px solid rgba(162,29,53,.35);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){
+  .date-chip,.calendar-day{transition:none!important}
+  .date-chip:hover,.calendar-day:hover{transform:none}
+}

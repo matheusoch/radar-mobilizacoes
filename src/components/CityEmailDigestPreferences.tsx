@@ -100,8 +100,8 @@ export default function CityEmailDigestPreferences(){
     if(!supabase||!user)return;
     setBusy(true);setError('');setMessage('');
     try{
-      if((settings.enabled||settings.in_app_enabled)&&(!settings.city.trim()||!settings.state)){
-        setError('Informe sua cidade e seu estado para receber apenas os eventos da sua região.');
+      if(!settings.city.trim()||!settings.state){
+        setError('Informe sua cidade e seu estado para salvar sua localização preferida e personalizar a agenda.');
         return;
       }
       if(settings.enabled&&EMAIL_DIGEST_ENABLED&&!user.email_confirmed_at){
@@ -163,13 +163,13 @@ export default function CityEmailDigestPreferences(){
   return <div className="container page narrow city-digest-page">
     <div className="eyebrow"><Bell size={15}/> ALERTAS POR CIDADE</div>
     <h1>Alertas de mobilizações por cidade.</h1>
-    <p className="page-lead">Escolha a cidade e decida se quer notificações dentro do site e, quando estiver ativo, um resumo diário por e-mail às 8h (horário de Brasília).</p>
+    <p className="page-lead">Salve sua cidade e estado preferidos para filtrar rapidamente a agenda. As notificações dentro do site e os resumos por e-mail são opções separadas; você pode salvar a cidade sem ativar nenhum dos dois canais.</p>
     <div className="city-digest-panel">
       <label className="city-digest-field"><span><MapPin size={15}/>Cidade</span>
-        <input value={settings.city} onChange={event=>setSettings(current=>({...current,city:event.target.value}))} maxLength={100} autoComplete="address-level2" placeholder="Ex.: Fortaleza" disabled={busy} required={settings.enabled||settings.in_app_enabled}/>
+        <input value={settings.city} onChange={event=>setSettings(current=>({...current,city:event.target.value}))} maxLength={100} autoComplete="address-level2" placeholder="Ex.: Fortaleza" disabled={busy} required/>
       </label>
       <label className="city-digest-field"><span>Estado</span>
-        <select value={settings.state} onChange={event=>setSettings(current=>({...current,state:event.target.value}))} autoComplete="address-level1" disabled={busy} required={settings.enabled||settings.in_app_enabled}>
+        <select value={settings.state} onChange={event=>setSettings(current=>({...current,state:event.target.value}))} autoComplete="address-level1" disabled={busy} required>
           <option value="">Selecione a UF</option>{BRAZILIAN_STATES.map(state=><option key={state.code} value={state.code}>{state.name} ({state.code})</option>)}
         </select>
       </label>

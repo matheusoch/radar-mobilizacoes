@@ -1136,6 +1136,31 @@ const blank=():MobilizationEvent=>({
         if(urlErr)throw urlErr;
         editing.image_url=pub.publicUrl;
         editing.poster_sha256=posterSha256;
+        if(posterSha256){
+          const{data:oldIndex,error:readIndexError}=await db.from('poster_index')
+            .select('source_filenames,source_indices,matched_event_ids,duplicate_count,storage_path,image_url,file_bytes,width,height')
+            .eq('sha256',posterSha256).maybeSingle();
+          if(readIndexError)throw new Error('Pôster enviado, mas não foi possível consultar o índice: '+readIndexError.message);
+          let width:number|null=null,height:number|null=null;
+          try{const bitmap=await createImageBitmap(posterFile);width=bitmap.width;height=bitmap.height;bitmap.close();}catch{/* Metadata is optional; the file hash and URL remain indexable. */}
+          const sourceFilenames=[...new Set([...(oldIndex?.source_filenames||[]),posterFile.name])];
+          const matchedEventIds=[...new Set([...(oldIndex?.matched_event_ids||[]),savedId])];
+          const{error:indexError}=await db.from('poster_index').upsert({
+            sha256:posterSha256,
+            source_filename:oldIndex?.source_filenames?.[0]||posterFile.name,
+            source_filenames:sourceFilenames,
+            source_indices:oldIndex?.source_indices||[],
+            storage_path:oldIndex?.storage_path||path,
+            image_url:oldIndex?.image_url||pub.publicUrl,
+            file_bytes:oldIndex?.file_bytes||posterFile.size,
+            width:oldIndex?.width||width,
+            height:oldIndex?.height||height,
+            duplicate_count:Math.max(oldIndex?.duplicate_count||1,sourceFilenames.length),
+            matched_event_ids:matchedEventIds,
+            indexed_at:new Date().toISOString()
+          },{onConflict:'sha256'});
+          if(indexError)throw new Error('Pôster enviado, mas falhou ao atualizar o índice pesquisável: '+indexError.message);
+        }
       }
       const{error:deleteSourcesError}=await db.from('event_sources').delete().eq('event_id',savedId);
       if(deleteSourcesError)throw deleteSourcesError;

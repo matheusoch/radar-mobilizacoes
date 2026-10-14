@@ -35,6 +35,7 @@ test('daily digest uses a guarded server secret, requires explicit subscriptions
   assert.match(sender, /if\(!regional\.length\)\{noEvents\+\+;return;\}/);
   assert.match(unsubscribe, /EMAIL_UNSUBSCRIBE_SECRET/);
   assert.match(unsubscribe, /request\.method==="GET"/);
-  assert.match(unsubscribe, /request\.method==="POST"/);
+  assert.match(unsubscribe, /request\.method!=="GET"&&request\.method!=="POST"/);
+  assert.match(unsubscribe, /method:"PATCH"/);
   assert.match(unsubscribe, /enabled:false,unsubscribed_at/);
 });

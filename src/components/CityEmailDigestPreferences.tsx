@@ -10,6 +10,7 @@ type DigestSettings={
   city:string;
   state:string;
   enabled:boolean;
+  in_app_enabled:boolean;
   email_format:EmailFormat;
   consent_at:string|null;
   unsubscribed_at:string|null;
@@ -18,6 +19,7 @@ const DEFAULT_SETTINGS:DigestSettings={
   city:'',
   state:'',
   enabled:false,
+  in_app_enabled:false,
   email_format:'ambos',
   consent_at:null,
   unsubscribed_at:null,
@@ -51,7 +53,7 @@ export default function CityEmailDigestPreferences(){
 
   useEffect(()=>{
     if(authLoading)return;
-    if(!supabase||!user||!EMAIL_DIGEST_ENABLED){
+    if(!supabase||!user){
       setLoading(false);
       return;
     }
@@ -61,7 +63,7 @@ export default function CityEmailDigestPreferences(){
     (async()=>{
       const{data,error:loadError}=await supabase
         .from('city_email_digest_subscriptions')
-        .select('city,state,enabled,email_format,consent_at,unsubscribed_at')
+        .select('city,state,enabled,in_app_enabled,email_format,consent_at,unsubscribed_at')
         .eq('user_id',user.id)
         .maybeSingle();
       if(!active)return;
@@ -73,6 +75,7 @@ export default function CityEmailDigestPreferences(){
           city:data.city||'',
           state:data.state||'',
           enabled:Boolean(data.enabled),
+          in_app_enabled:Boolean(data.in_app_enabled),
           email_format:(data.email_format||'ambos') as EmailFormat,
           consent_at:data.consent_at||null,
           unsubscribed_at:data.unsubscribed_at||null,
@@ -85,7 +88,7 @@ export default function CityEmailDigestPreferences(){
           ...DEFAULT_SETTINGS,
           city:typeof metadata.digest_city==='string'?metadata.digest_city:(typeof metadata.city==='string'?metadata.city:''),
           state:typeof metadata.digest_state==='string'?metadata.digest_state:(typeof metadata.state==='string'?metadata.state:''),
-          enabled:activationRequested&&hasSignupConsent,
+          enabled:EMAIL_DIGEST_ENABLED&&activationRequested&&hasSignupConsent,
           email_format:(metadata.email_digest_format==='resumo'||metadata.email_digest_format==='cards'||metadata.email_digest_format==='ambos'?metadata.email_digest_format:'ambos') as EmailFormat,
         });
       }
@@ -97,18 +100,19 @@ export default function CityEmailDigestPreferences(){
     if(!supabase||!user)return;
     setBusy(true);setError('');setMessage('');
     try{
-      if(settings.enabled&&(!settings.city.trim()||!settings.state)){
+      if((settings.enabled||settings.in_app_enabled)&&(!settings.city.trim()||!settings.state)){
         setError('Informe sua cidade e seu estado para receber apenas os eventos da sua região.');
         return;
       }
-      if(settings.enabled&&!user.email_confirmed_at){
+      if(settings.enabled&&EMAIL_DIGEST_ENABLED&&!user.email_confirmed_at){
         setError('Confirme primeiro o e-mail da sua conta. Depois volte aqui para ativar os resumos.');
         return;
       }
-      const{data:saveData,error:saveError}=await supabase.rpc('save_city_email_digest_preferences',{
+      const{data:saveData,error:saveError}=await supabase.rpc('save_city_alert_preferences',{
         p_city:settings.city.trim(),
         p_state:settings.state,
-        p_enabled:settings.enabled,
+        p_in_app_enabled:settings.in_app_enabled,
+        p_email_enabled:settings.enabled,
         p_email_format:settings.email_format,
       });
       if(saveError){
@@ -121,13 +125,18 @@ export default function CityEmailDigestPreferences(){
         city:typeof saved?.city==='string'?saved.city:current.city,
         state:typeof saved?.state==='string'?saved.state:current.state,
         enabled:typeof saved?.enabled==='boolean'?saved.enabled:false,
+        in_app_enabled:typeof saved?.in_app_enabled==='boolean'?saved.in_app_enabled:false,
         email_format:(saved?.email_format||current.email_format) as EmailFormat,
         consent_at:saved?.consent_at??null,
         unsubscribed_at:saved?.unsubscribed_at??null,
       }));
-      setMessage(settings.enabled
-        ?'Preferência salva. Você receberá os resumos quando o envio diário estiver ativo.'
-        :'Preferência salva. Você não receberá mais os resumos por e-mail.');
+      setMessage(settings.in_app_enabled&&settings.enabled
+        ?'Preferências salvas. Você receberá notificações no site e, quando o serviço estiver ativo, resumos por e-mail.'
+        :settings.in_app_enabled
+          ?'Preferência salva. Você receberá notificações dentro do site para eventos da sua cidade.'
+          :settings.enabled
+            ?'Preferência salva. O envio por e-mail depende da ativação da infraestrutura.'
+            :'Preferência salva. Você desativou os alertas por cidade.');
     }catch(err){
       setError(err instanceof Error?err.message:'Não foi possível salvar sua preferência.');
     }finally{
@@ -135,22 +144,13 @@ export default function CityEmailDigestPreferences(){
     }
   };
 
-  if(!EMAIL_DIGEST_ENABLED){
-    return <div className="container page narrow city-digest-page">
-      <div className="eyebrow"><Bell size={15}/> ALERTAS POR E-MAIL</div>
-      <h1>Mobilizações da sua cidade, direto no e-mail.</h1>
-      <p className="page-lead">Estamos preparando o envio diário com eventos da sua região, opção de cancelamento a qualquer momento e proteção do seu endereço pessoal.</p>
-      <div className="callout info"><Info size={18}/><span>O serviço de e-mail ainda não foi ativado. Nenhuma mensagem será enviada até que o remetente e o agendamento estejam configurados e testados.</span></div>
-      <Link to="/" className="button ghost">Voltar à agenda</Link>
-    </div>;
-  }
 
   if(authLoading||loading)return <div className="loading"><div className="spinner"/>Carregando suas preferências…</div>;
   if(!user){
     return <div className="container page narrow city-digest-page">
-      <div className="eyebrow"><Bell size={15}/> ALERTAS POR E-MAIL</div>
-      <h1>Receba mobilizações da sua cidade.</h1>
-      <p className="page-lead">Entre ou crie uma conta para escolher sua cidade, seu estado e o formato do resumo diário.</p>
+      <div className="eyebrow"><Bell size={15}/> ALERTAS POR CIDADE</div>
+      <h1>Receba alertas sobre mobilizações da sua cidade.</h1>
+      <p className="page-lead">Entre ou crie uma conta para escolher a cidade e ativar notificações dentro do site. O e-mail é opcional.</p>
       <div className="city-digest-actions">
         <Link className="button primary" to={'/entrar?next='+encodeURIComponent('/preferencias-alertas')}><LogIn size={17}/>Entrar</Link>
         <Link className="button ghost" to={'/entrar?mode=signup&digest=1&next='+encodeURIComponent('/preferencias-alertas?ativar=1')}><Mail size={17}/>Criar conta e ativar</Link>
@@ -161,30 +161,36 @@ export default function CityEmailDigestPreferences(){
   if(loading)return <div className="loading"><div className="spinner"/>Carregando suas preferências…</div>;
 
   return <div className="container page narrow city-digest-page">
-    <div className="eyebrow"><Bell size={15}/> ALERTAS POR E-MAIL</div>
-    <h1>Mobilizações da sua cidade, direto no e-mail.</h1>
-    <p className="page-lead">Escolha a cidade e o formato. A proposta é enviar às 8h (horário de Brasília) um resumo das mobilizações de hoje e dos próximos sete dias, quando houver eventos na sua região.</p>
+    <div className="eyebrow"><Bell size={15}/> ALERTAS POR CIDADE</div>
+    <h1>Alertas de mobilizações por cidade.</h1>
+    <p className="page-lead">Escolha a cidade e decida se quer notificações dentro do site e, quando estiver ativo, um resumo diário por e-mail às 8h (horário de Brasília).</p>
     <div className="city-digest-panel">
       <label className="city-digest-field"><span><MapPin size={15}/>Cidade</span>
-        <input value={settings.city} onChange={event=>setSettings(current=>({...current,city:event.target.value}))} maxLength={100} autoComplete="address-level2" placeholder="Ex.: Fortaleza" disabled={busy} required={settings.enabled}/>
+        <input value={settings.city} onChange={event=>setSettings(current=>({...current,city:event.target.value}))} maxLength={100} autoComplete="address-level2" placeholder="Ex.: Fortaleza" disabled={busy} required={settings.enabled||settings.in_app_enabled}/>
       </label>
       <label className="city-digest-field"><span>Estado</span>
-        <select value={settings.state} onChange={event=>setSettings(current=>({...current,state:event.target.value}))} autoComplete="address-level1" disabled={busy} required={settings.enabled}>
+        <select value={settings.state} onChange={event=>setSettings(current=>({...current,state:event.target.value}))} autoComplete="address-level1" disabled={busy} required={settings.enabled||settings.in_app_enabled}>
           <option value="">Selecione a UF</option>{BRAZILIAN_STATES.map(state=><option key={state.code} value={state.code}>{state.name} ({state.code})</option>)}
         </select>
       </label>
-      <fieldset className="city-digest-format">
+      <fieldset className="city-digest-format" disabled={busy||!EMAIL_DIGEST_ENABLED}>
         <legend>Formato do e-mail</legend>
         <label><input type="radio" name="digest-format" value="resumo" checked={settings.email_format==='resumo'} onChange={()=>setSettings(current=>({...current,email_format:'resumo'}))} disabled={busy}/>Resumo de texto</label>
         <label><input type="radio" name="digest-format" value="cards" checked={settings.email_format==='cards'} onChange={()=>setSettings(current=>({...current,email_format:'cards'}))} disabled={busy}/>Cards por evento</label>
         <label><input type="radio" name="digest-format" value="ambos" checked={settings.email_format==='ambos'} onChange={()=>setSettings(current=>({...current,email_format:'ambos'}))} disabled={busy}/>Resumo + cards</label>
       </fieldset>
       <label className="city-digest-consent">
-        <input type="checkbox" checked={settings.enabled} onChange={event=>setSettings(current=>({...current,enabled:event.target.checked}))} disabled={busy}/>
-        <span><strong>Quero receber o resumo diário por e-mail.</strong><small>Autorizo o uso do meu e-mail, cidade e estado exclusivamente para enviar estes avisos. Posso cancelar a qualquer momento e não receberei mensagens se não houver eventos na minha região.</small></span>
+        <input type="checkbox" checked={settings.in_app_enabled} onChange={event=>setSettings(current=>({...current,in_app_enabled:event.target.checked}))} disabled={busy}/>
+        <span><strong>Quero receber notificações dentro do site.</strong><small>O sino no topo mostrará novos eventos públicos da cidade e do estado escolhidos. Você pode desativar a qualquer momento.</small></span>
       </label>
+      <label className="city-digest-consent">
+        <input type="checkbox" checked={settings.enabled} onChange={event=>setSettings(current=>({...current,enabled:event.target.checked}))} disabled={busy||!EMAIL_DIGEST_ENABLED}/>
+        <span><strong>Quero receber o resumo diário por e-mail.</strong><small>É um consentimento separado. Usaremos seu e-mail somente para estes avisos; você pode cancelar a qualquer momento.</small></span>
+      </label>
+      {!EMAIL_DIGEST_ENABLED&&<div className="callout info"><Info size={18}/><span>O envio por e-mail ainda não foi ativado. Você já pode configurar notificações dentro do site; o e-mail só poderá ser habilitado depois que o remetente, os segredos e o agendamento forem testados.</span></div>}
       <p className="city-digest-privacy">Ao ativar, você confirma uma preferência de comunicação específica da Agenda. <Link to="/privacidade">Leia como os dados serão usados.</Link></p>
-      {settings.enabled&&<div className="city-digest-status"><ShieldCheck size={16}/>Consentimento ativo somente após salvar.</div>}
+      {settings.in_app_enabled&&<div className="city-digest-status"><ShieldCheck size={16}/>Notificações dentro do site serão ativadas após salvar.</div>}
+      {settings.enabled&&<div className="city-digest-status"><ShieldCheck size={16}/>Consentimento para e-mail ativo somente após salvar.</div>}
       {settings.consent_at&&<p className="city-digest-meta">Consentimento registrado em {new Date(settings.consent_at).toLocaleDateString('pt-BR')}.</p>}
       {error&&<div className="callout warning"><XCircle size={18}/><span>{error}</span></div>}
       {message&&<div className="callout info"><CheckCircle2 size={18}/><span>{message}</span></div>}

@@ -105,7 +105,7 @@ export default function CityEmailDigestPreferences(){
         setError('Confirme primeiro o e-mail da sua conta. Depois volte aqui para ativar os resumos.');
         return;
       }
-      const{error:saveError}=await supabase.rpc('save_city_email_digest_preferences',{
+      const{data:saveData,error:saveError}=await supabase.rpc('save_city_email_digest_preferences',{
         p_city:settings.city.trim(),
         p_state:settings.state,
         p_enabled:settings.enabled,
@@ -115,7 +115,16 @@ export default function CityEmailDigestPreferences(){
         if(saveError.message?.includes('EMAIL_NOT_VERIFIED'))throw new Error('Confirme primeiro o e-mail da sua conta para ativar os resumos.');
         throw new Error('Não foi possível salvar agora. Confira os dados e tente novamente.');
       }
-      setSettings(current=>({...current,consent_at:current.enabled?new Date().toISOString():current.consent_at,unsubscribed_at:current.enabled?null:new Date().toISOString()}));
+      const saved=(saveData||null) as Partial<DigestSettings>|null;
+      setSettings(current=>({
+        ...current,
+        city:typeof saved?.city==='string'?saved.city:current.city,
+        state:typeof saved?.state==='string'?saved.state:current.state,
+        enabled:typeof saved?.enabled==='boolean'?saved.enabled:false,
+        email_format:(saved?.email_format||current.email_format) as EmailFormat,
+        consent_at:saved?.consent_at??null,
+        unsubscribed_at:saved?.unsubscribed_at??null,
+      }));
       setMessage(settings.enabled
         ?'Preferência salva. Você receberá os resumos quando o envio diário estiver ativo.'
         :'Preferência salva. Você não receberá mais os resumos por e-mail.');

@@ -749,6 +749,10 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
 
 function CalendarPage({events}:{events:MobilizationEvent[]}){
   const publicEvents=events.filter(event=>event.public);
+  const cityProfile=useCityPreference();
+  const[showMyCityOnly,setShowMyCityOnly]=useState(false);
+  const preferenceCity=cityProfile.preference?.city||'';
+  const preferenceState=cityProfile.preference?.state||'';
   const today=localDateKey();
   const[selectedDate,setSelectedDate]=useState(today);
   const[visibleMonth,setVisibleMonth]=useState(()=>today.slice(0,7)+'-01');
@@ -757,6 +761,8 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
   const[cityFilter,setCityFilter]=useState('');
   const[typeFilter,setTypeFilter]=useState('');
   const[showAllDates,setShowAllDates]=useState(false);
+  const effectiveStateFilter=showMyCityOnly&&preferenceCity&&preferenceState?preferenceState:stateFilter;
+  const effectiveCityFilter=showMyCityOnly&&preferenceCity&&preferenceState?preferenceCity:cityFilter;
 
   const selectedDateObj=new Date(selectedDate+'T12:00:00');
   const dateLabel=selectedDateObj.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
@@ -778,13 +784,13 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
     });
   };
   const states=[...new Set(publicEvents.map(event=>event.state).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-  const citySource=publicEvents.filter(event=>!stateFilter||event.state===stateFilter);
+  const citySource=publicEvents.filter(event=>!effectiveStateFilter||event.state===effectiveStateFilter);
   const cities=[...new Set(citySource.map(event=>event.city).filter(city=>city&&city.trim()))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   const types=[...new Set(publicEvents.map(event=>event.type).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   const normalized=normalizedSearchText(query.trim());
   const baseFiltered=publicEvents.filter(event=>{
-    if(stateFilter&&event.state!==stateFilter)return false;
-    if(cityFilter&&normalizedSearchText(event.city)!==normalizedSearchText(cityFilter))return false;
+    if(effectiveStateFilter&&event.state!==effectiveStateFilter)return false;
+    if(effectiveCityFilter&&normalizedSearchText(event.city)!==normalizedSearchText(effectiveCityFilter))return false;
     if(typeFilter&&event.type!==typeFilter)return false;
     if(normalized&&!normalizedSearchText([event.title,event.city,event.state,event.venue,event.address||'',event.type].filter(Boolean).join(' ')).includes(normalized))return false;
     return true;
@@ -798,7 +804,7 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
     (grouped[event.date]??=[]).push(event);
     return grouped;
   },{})).sort(([a],[b])=>a.localeCompare(b));
-  const clearFilters=()=>{setQuery('');setStateFilter('');setCityFilter('');setTypeFilter('');setShowAllDates(false)};
+  const clearFilters=()=>{setQuery('');setStateFilter('');setCityFilter('');setTypeFilter('');setShowAllDates(false);setShowMyCityOnly(false)};
 
   return <div className="container page">
     <div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> CALENDÁRIO DO SEGUNDO TURNO</div>
@@ -807,6 +813,8 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
         <h1>Calendário de mobilizações</h1>
         <p className="page-lead">{showAllDates?'Veja os eventos de todas as datas que correspondem aos filtros.':<>Exibindo eventos de <strong>{dateLabel}</strong>. Escolha outro dia diretamente no calendário abaixo.</>}</p>
       </div>
+      {cityProfile.user&&preferenceCity&&preferenceState&&<button type="button" className="button ghost" aria-pressed={showMyCityOnly} onClick={()=>{const next=!showMyCityOnly;setShowMyCityOnly(next);setShowAllDates(next)}}>{showMyCityOnly?'Mostrar calendário completo':('Ver minha cidade: '+preferenceCity+'/'+preferenceState)}</button>}
+      {cityProfile.user&&(!preferenceCity||!preferenceState)&&<Link to="/preferencias-alertas" className="button ghost">Cadastrar minha cidade</Link>}
     </div>
     <section className="calendar-picker" aria-label="Escolher data da agenda">
       <div className="calendar-picker-heading">
@@ -833,22 +841,22 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
     </section>
     <div className="calendar-search">
       <Search size={19}/>
-      <input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Buscar cidade, estado, local ou evento..." aria-label="Buscar no calendário"/>
+      <input value={query} onChange={event=>{setQuery(event.target.value);setShowMyCityOnly(false)}} placeholder="Buscar cidade, estado, local ou evento..." aria-label="Buscar no calendário"/>
       {query&&<button type="button" onClick={()=>setQuery('')} aria-label="Limpar busca">×</button>}
     </div>
     <div className="calendar-filters">
       <label className="calendar-filter-field"><span>Estado</span>
-        <select value={stateFilter} onChange={event=>{const next=event.target.value;setStateFilter(next);setCityFilter('');if(next)setShowAllDates(true)}}>
+        <select value={effectiveStateFilter} onChange={event=>{const next=event.target.value;setShowMyCityOnly(false);setStateFilter(next);setCityFilter('');if(next)setShowAllDates(true)}}>
           <option value="">Todos os estados</option>{states.map(state=><option key={state} value={state}>{state}</option>)}
         </select>
       </label>
       <label className="calendar-filter-field"><span>Cidade</span>
-        <select value={cityFilter} onChange={event=>{const next=event.target.value;setCityFilter(next);if(next)setShowAllDates(true)}}>
+        <select value={effectiveCityFilter} onChange={event=>{const next=event.target.value;setShowMyCityOnly(false);setCityFilter(next);if(next)setShowAllDates(true)}}>
           <option value="">Todas as cidades</option>{cities.map(city=><option key={city} value={city}>{city}</option>)}
         </select>
       </label>
       <label className="calendar-filter-field"><span>Tipo de mobilização</span>
-        <select value={typeFilter} onChange={event=>setTypeFilter(event.target.value)}>
+        <select value={typeFilter} onChange={event=>{setShowMyCityOnly(false);setTypeFilter(event.target.value)}}>
           <option value="">Todos os tipos</option>{types.map(type=><option key={type} value={type}>{type}</option>)}
         </select>
       </label>

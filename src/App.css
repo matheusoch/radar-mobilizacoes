@@ -1017,3 +1017,21 @@ body{background:var(--page);color:var(--ink)}
   .auth-digest-fields{padding:12px}
   .city-digest-policy section{padding:13px}
 }
+
+
+/* Admin: bounded, searchable source and discrepancy lists. */
+.source-picker-list-tools{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:10px;align-items:center;margin:10px 0 12px}
+.source-picker-search{display:flex;align-items:center;gap:8px;min-width:0;border:1px solid var(--line);border-radius:10px;background:#fff;padding:0 10px;color:var(--muted)}
+.source-picker-search input{border:0!important;outline:none;background:transparent!important;padding:10px 0!important;min-width:0}
+.source-picker-list-tools>.analytics-note{text-align:right}
+.source-picker-more{display:flex;justify-content:flex-start;margin-top:12px}
+.editorial-audit-filters{grid-template-columns:minmax(210px,1fr) minmax(240px,1.5fr) auto;align-items:end;margin:12px 0}
+.editorial-audit-filters>label{display:grid;gap:5px;min-width:0;font-size:11px;font-weight:800;color:var(--muted)}
+.editorial-audit-search>div{display:flex;align-items:center;gap:8px;min-width:0;border:1px solid var(--line);border-radius:10px;background:#fff;padding:0 10px}
+.editorial-audit-search>div svg{flex:none;color:var(--muted)}
+.editorial-audit-search>div input{border:0;background:transparent;padding:10px 0;min-width:0}
+.editorial-audit-filters>button{min-height:40px}
+@media(max-width:800px){
+  .source-picker-list-tools,.editorial-audit-filters{grid-template-columns:1fr}
+  .source-picker-list-tools>.analytics-note{text-align:left}
+}

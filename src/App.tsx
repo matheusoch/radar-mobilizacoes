@@ -388,9 +388,12 @@ function Home({events}:{events:MobilizationEvent[]}){
   const[showMyCityOnly,setShowMyCityOnly]=useState(false);
   const preferenceCity=cityProfile.preference?.city||'';
   const preferenceState=cityProfile.preference?.state||'';
-  const filtersForResults=showMyCityOnly&&preferenceCity&&preferenceState
-    ?{...filters,city:preferenceCity,state:preferenceState}
-    :filters;
+  const filtersForResults=useMemo(
+    ()=>showMyCityOnly&&preferenceCity&&preferenceState
+      ?{...filters,city:preferenceCity,state:preferenceState}
+      :filters,
+    [filters,showMyCityOnly,preferenceCity,preferenceState]
+  );
   const states=useMemo(()=>agendaFilterOptions(events,filtersForResults,today,lastDay,'state'),[events,filtersForResults,today,lastDay]);
   const cities=useMemo(()=>agendaFilterOptions(events,filtersForResults,today,lastDay,'city'),[events,filtersForResults,today,lastDay]);
   const types=useMemo(()=>agendaFilterOptions(events,filtersForResults,today,lastDay,'type'),[events,filtersForResults,today,lastDay]);

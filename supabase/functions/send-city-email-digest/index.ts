@@ -87,7 +87,7 @@ Deno.serve(async(request)=>{
   subUrl.searchParams.set("enabled","eq.true"); subUrl.searchParams.set("order","user_id.asc");
   const eventsUrl=new URL(base+"/rest/v1/events");
   eventsUrl.searchParams.set("select","id,title,date,time,time_label,city,state,venue,address,type");
-  eventsUrl.searchParams.set("is_public","eq.true"); eventsUrl.searchParams.set("date","gte."+today); eventsUrl.searchParams.append("date","lte."+end);
+  eventsUrl.searchParams.set("is_public","eq.true"); eventsUrl.searchParams.set("and","(date.gte."+today+",date.lte."+end+")");
   eventsUrl.searchParams.set("order","date.asc"); eventsUrl.searchParams.set("limit","1000");
   try {
     const [subs,events]=await Promise.all([fetchAll<Subscription>(subUrl,service),fetchJson<DigestEvent[]>(eventsUrl,service)]);

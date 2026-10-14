@@ -59,7 +59,7 @@ Mantenha VITE_EMAIL_DIGEST_ENABLED=false enquanto as funções, o domínio, os s
 - Vercel: configure VITE_EMAIL_DIGEST_ENABLED=true no ambiente de produção e faça novo deploy.
 - Cloudflare via GitHub Actions: defina a variável de repositório Actions VITE_EMAIL_DIGEST_ENABLED=true; o workflow injeta esse valor só durante o build.
 
-Enquanto a flag está desligada, o CTA não aparece na página inicial e a página de preferências avisa que o serviço não está ativo. Usuários atuais não são inscritos automaticamente: devem entrar, escolher cidade/UF e marcar o consentimento. Usuários novos só serão inscritos se marcarem a caixa e salvarem as preferências.
+Enquanto a flag está desligada, a página inicial mostra o CTA como “Alertas por cidade — em breve” e a página de preferências avisa que o serviço não está ativo; não existe inscrição ativa nem envio. Usuários atuais não são inscritos automaticamente: devem entrar, escolher cidade/UF e marcar o consentimento. Usuários novos só serão inscritos se marcarem a caixa e salvarem as preferências.
 
 ## 5. Migração de banco
 

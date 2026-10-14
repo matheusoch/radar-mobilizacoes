@@ -258,18 +258,22 @@ function Home({events}:{events:MobilizationEvent[]}){
   const cities=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'city'),[events,filters,today,lastDay]);
   const types=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'type'),[events,filters,today,lastDay]);
   const modalities:AgendaModality[]=['Presencial','Virtual','Híbrido'];
-  const dayShortcuts=useMemo(()=>Array.from({length:8},(_,offset)=>{
-    const date=new Date(`${today}T12:00:00`);
-    date.setDate(date.getDate()+offset);
-    const key=localDateKey(date);
-    return {
-      key,
-      weekday:offset===0?'Hoje':date.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.',''),
-      day:String(date.getDate()).padStart(2,'0'),
-      month:date.toLocaleDateString('pt-BR',{month:'short'}).replace('.',''),
-      count:events.filter(event=>event.public&&event.date===key).length,
-    };
-  }),[events,today]);
+  const dayShortcuts=useMemo(()=>{
+    const availableDates=[...new Set(events
+      .filter(event=>event.public&&event.date>=today)
+      .map(event=>event.date))].sort((a,b)=>a.localeCompare(b));
+    return availableDates.map(key=>{
+      const date=new Date(`${key}T12:00:00`);
+      const weekday=key===today?'Hoje':date.toLocaleDateString('pt-BR',{weekday:'long'}).replace('-feira','');
+      return {
+        key,
+        weekday:weekday.charAt(0).toLocaleUpperCase('pt-BR')+weekday.slice(1),
+        day:String(date.getDate()).padStart(2,'0'),
+        month:date.toLocaleDateString('pt-BR',{month:'short'}).replace('.',''),
+        count:events.filter(event=>event.public&&event.date===key).length,
+      };
+    });
+  },[events,today]);
   const filtered=useMemo(()=>events.filter(event=>matchesAgendaFilters(event,filters,today,lastDay)),[events,filters,today,lastDay]);
   const[attendance,setAttendance]=useState<Record<string,{count:number;attending:boolean}>>({});
   const orderedEvents=useMemo(()=>{
@@ -312,7 +316,7 @@ function Home({events}:{events:MobilizationEvent[]}){
         <button type="button" className="date-shortcut-reset" onClick={()=>setFilters(current=>({...current,date:'',period:'upcoming'}))}>Todos os próximos</button>
       </div>
       <div className="date-chip-list" role="group" aria-label="Filtrar mobilizações por dia">
-        {dayShortcuts.map(day=><button type="button" key={day.key} className="date-chip" aria-pressed={filters.date===day.key} onClick={()=>setFilters(current=>({...current,date:day.key,period:day.key===today?'today':'upcoming'}))}>
+        {dayShortcuts.map(day=><button type="button" key={day.key} className="date-chip" aria-pressed={filters.date===day.key} onClick={()=>setFilters(current=>({...current,date:day.key,period:day.key===today?'today':'selected-date'}))}>
           <span className="date-chip-weekday">{day.weekday}</span>
           <span className="date-chip-date"><strong>{day.day}</strong><small>{day.month}</small></span>
           <span className="date-chip-count">{day.count} evento{day.count===1?'':'s'}</span>
@@ -608,21 +612,22 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
 }
 
 function CalendarPage({events}:{events:MobilizationEvent[]}){
-  const publicEvents=events.filter(e=>e.public);
-  const getLocalDateKey=()=>{
-    const d=new Date();
-    return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
-  };
-  const today=getLocalDateKey();
+  const publicEvents=events.filter(event=>event.public);
+  const today=localDateKey();
   const[selectedDate,setSelectedDate]=useState(today);
   const[query,setQuery]=useState('');
+  const[stateFilter,setStateFilter]=useState('');
+  const[cityFilter,setCityFilter]=useState('');
+  const[typeFilter,setTypeFilter]=useState('');
+  const[showAllDates,setShowAllDates]=useState(false);
 
   const shiftDate=(days:number)=>{
     setSelectedDate(current=>{
-      const d=new Date(current+'T12:00:00');
-      d.setDate(d.getDate()+days);
-      return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
+      const date=new Date(current+'T12:00:00');
+      date.setDate(date.getDate()+days);
+      return localDateKey(date);
     });
+    setShowAllDates(false);
   };
 
   const selectedDateObj=new Date(selectedDate+'T12:00:00');
@@ -630,51 +635,81 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
   const dateIndicatorLabel=selectedDate===today
     ?'Hoje'
     :String(selectedDateObj.getDate()).padStart(2,'0')+' '+selectedDateObj.toLocaleDateString('pt-BR',{month:'short'}).replace('.','');
-  const normalized=query.trim().toLowerCase();
-  const filtered=publicEvents.filter(e=>e.date===selectedDate&&(!normalized||(e.city+' '+(e.state||'')+' '+e.title+' '+e.venue).toLowerCase().includes(normalized)));
-  const groups=Object.entries(filtered.reduce((a:Record<string,MobilizationEvent[]>,e)=>{(a[e.date]??=[]).push(e);return a},{})).sort(([a],[b])=>a.localeCompare(b));
+  const states=[...new Set(publicEvents.map(event=>event.state).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const citySource=publicEvents.filter(event=>!stateFilter||event.state===stateFilter);
+  const cities=[...new Set(citySource.map(event=>event.city).filter(city=>city&&city.trim()))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const types=[...new Set(publicEvents.map(event=>event.type).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const normalized=normalizedSearchText(query.trim());
+  const filtered=publicEvents.filter(event=>{
+    if(!showAllDates&&event.date!==selectedDate)return false;
+    if(stateFilter&&event.state!==stateFilter)return false;
+    if(cityFilter&&normalizedSearchText(event.city)!==normalizedSearchText(cityFilter))return false;
+    if(typeFilter&&event.type!==typeFilter)return false;
+    if(normalized&&!normalizedSearchText([event.title,event.city,event.state,event.venue,event.address||'',event.type].filter(Boolean).join(' ')).includes(normalized))return false;
+    return true;
+  });
+  const groups=Object.entries(filtered.reduce((grouped:Record<string,MobilizationEvent[]>,event)=>{
+    (grouped[event.date]??=[]).push(event);
+    return grouped;
+  },{})).sort(([a],[b])=>a.localeCompare(b));
+  const clearFilters=()=>{setQuery('');setStateFilter('');setCityFilter('');setTypeFilter('');setShowAllDates(false)};
 
   return <div className="container page">
     <div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> CALENDÁRIO DO SEGUNDO TURNO</div>
     <div className="calendar-heading">
       <div>
-        <h1>{dateLabel.charAt(0).toUpperCase()+dateLabel.slice(1)}</h1>
-        <p className="page-lead">Navegue dia a dia e encontre rapidamente uma cidade, estado, local ou evento.</p>
+        <h1>{showAllDates?'Agenda por estado e cidade':dateLabel.charAt(0).toUpperCase()+dateLabel.slice(1)}</h1>
+        <p className="page-lead">Navegue por dia ou filtre a agenda por estado, cidade, tipo e palavra-chave. Ao selecionar um estado ou cidade, você pode ver mobilizações de todas as datas.</p>
       </div>
       <div className={`calendar-nav${selectedDate===today?'':' has-return'}`} aria-label="Navegação do calendário">
-        <button type="button" className="button ghost" onClick={e=>{e.preventDefault();shiftDate(-1)}} aria-label="Dia anterior" title="Dia anterior"><ChevronLeft size={17}/></button>
-        <span className="calendar-current-date" aria-live="polite">{dateIndicatorLabel}</span>
-        {selectedDate!==today&&<button type="button" className="button ghost" onClick={e=>{e.preventDefault();setSelectedDate(today)}} title="Voltar para hoje">Hoje</button>}
-        <button type="button" className="button ghost" onClick={e=>{e.preventDefault();shiftDate(1)}} aria-label="Próximo dia" title="Próximo dia"><ChevronRight size={17}/></button>
+        <button type="button" className="button ghost" onClick={()=>shiftDate(-1)} aria-label="Dia anterior" title="Dia anterior"><ChevronLeft size={17}/></button>
+        <span className="calendar-current-date" aria-live="polite">{showAllDates?'Todos os dias':dateIndicatorLabel}</span>
+        {!showAllDates&&selectedDate!==today&&<button type="button" className="button ghost" onClick={()=>{setSelectedDate(today);setShowAllDates(false)}} title="Voltar para hoje">Hoje</button>}
+        <button type="button" className="button ghost" onClick={()=>shiftDate(1)} aria-label="Próximo dia" title="Próximo dia"><ChevronRight size={17}/></button>
       </div>
     </div>
     <div className="calendar-search">
       <Search size={19}/>
-      <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar cidade, estado, local ou evento..." aria-label="Buscar no calendário"/>
+      <input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Buscar cidade, estado, local ou evento..." aria-label="Buscar no calendário"/>
       {query&&<button type="button" onClick={()=>setQuery('')} aria-label="Limpar busca">×</button>}
     </div>
-    <div className="calendar-result-count">{filtered.length} evento{filtered.length===1?'':'s'} em {dateLabel}</div>
-    {groups.map(([date,items])=><section className="day-group" key={date}>
-      <div className="day-label">
-        <strong>{new Date(date+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'}).replace('.','')}</strong>
-        <span>{items.length} evento{items.length===1?'':'s'}</span>
+    <div className="calendar-filters">
+      <label className="calendar-filter-field"><span>Estado</span>
+        <select value={stateFilter} onChange={event=>{const next=event.target.value;setStateFilter(next);setCityFilter('');if(next)setShowAllDates(true)}}>
+          <option value="">Todos os estados</option>{states.map(state=><option key={state} value={state}>{state}</option>)}
+        </select>
+      </label>
+      <label className="calendar-filter-field"><span>Cidade</span>
+        <select value={cityFilter} onChange={event=>{const next=event.target.value;setCityFilter(next);if(next)setShowAllDates(true)}}>
+          <option value="">Todas as cidades</option>{cities.map(city=><option key={city} value={city}>{city}</option>)}
+        </select>
+      </label>
+      <label className="calendar-filter-field"><span>Tipo de mobilização</span>
+        <select value={typeFilter} onChange={event=>setTypeFilter(event.target.value)}>
+          <option value="">Todos os tipos</option>{types.map(type=><option key={type} value={type}>{type}</option>)}
+        </select>
+      </label>
+      <label className="calendar-filter-field"><span>Data escolhida</span>
+        <input type="date" value={selectedDate} onChange={event=>{if(event.target.value){setSelectedDate(event.target.value);setShowAllDates(false)}}}/>
+      </label>
+      <div className="calendar-filter-actions">
+        <button type="button" className="button ghost" onClick={()=>setShowAllDates(value=>!value)} aria-pressed={showAllDates}>{showAllDates?'Ver apenas o dia escolhido':'Ver todos os dias'}</button>
+        {(query||stateFilter||cityFilter||typeFilter||showAllDates)&&<button type="button" className="button ghost" onClick={clearFilters}><X size={15}/>Limpar filtros</button>}
       </div>
+    </div>
+    <div className="calendar-result-count">{showAllDates?`${filtered.length} evento${filtered.length===1?'':'s'} encontrados na agenda`:`${filtered.length} evento${filtered.length===1?'':'s'} em ${dateLabel}`}</div>
+    {groups.map(([date,items])=><section className="day-group" key={date}>
+      <div className="day-label"><strong>{new Date(date+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'}).replace('.','')}</strong><span>{items.length} evento{items.length===1?'':'s'}</span></div>
       <div className="day-events">
-        {items.sort((a,b)=>(a.time||'99:99').localeCompare(b.time||'99:99')).map(e=>
-          <Link className="calendar-item" to={'/evento/'+e.id} key={e.id}>
-            <div className="calendar-time">{formatTimeText(e.time_label||e.time)||'—'}</div>
-            <div><strong>{e.city} · {e.state||'—'}</strong><span>{e.venue}</span></div>
-            <span className="calendar-type">{e.type}</span>
-          </Link>
-        )}
+        {items.slice().sort((a,b)=>(a.time||'99:99').localeCompare(b.time||'99:99')).map(event=><Link className="calendar-item" to={'/evento/'+event.id} key={event.id}>
+          <div className="calendar-time">{formatTimeText(event.time_label||event.time)||'—'}</div>
+          <div><strong>{event.city} · {event.state||'—'}</strong><span>{event.venue}</span></div><span className="calendar-type">{event.type}</span>
+        </Link>)}
       </div>
     </section>)}
-    {!groups.length&&<div className="empty calendar-empty">      <Search/><h3>Nenhum evento encontrado</h3>
-      <p>{query?'Tente outro termo de busca.':'Não há eventos públicos nesta data.'}</p>
-    </div>}
+    {!groups.length&&<div className="empty calendar-empty"><Search/><h3>Nenhum evento encontrado</h3><p>{query||stateFilter||cityFilter||typeFilter?'Tente alterar ou limpar os filtros.':'Não há eventos públicos nesta data.'}</p>{(query||stateFilter||cityFilter||typeFilter||showAllDates)&&<button type="button" className="button ghost" onClick={clearFilters}><X size={15}/>Limpar filtros</button>}</div>}
   </div>
 }
-
 function MapPage({events}:{events:MobilizationEvent[]}){return <div className="container page"><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> MAPA DE MOBILIZAÇÕES</div><h1>Mobilizações no Brasil</h1><p className="page-lead">Visualize eventos em apoio à candidatura de Lula no segundo turno, filtre por estado ou cidade e clique nos pontos para abrir cada evento. As coordenadas são as cadastradas editorialmente para cada mobilização.</p><MapView events={events.filter(e=>e.public)}/></div>}
 function AboutPage(){return <div className="container page narrow"><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> SOBRE A AGENDA</div><h1>Uma agenda pública de mobilizações eleitorais.</h1><p className="page-lead">A Agenda reúne eventos e mobilizações em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, transformando informações espalhadas em uma agenda navegável, fácil de conferir e de atualizar.</p><div className="about-grid"><div><h2>Como funciona</h2><p>Cada evento tem data, horário, cidade, local, tipo e links para as fontes usadas na conferência.</p></div><div><h2>O que “verificado” significa</h2><p>Os campos essenciais foram comparados com uma ou mais publicações ou fontes identificáveis. Isso não substitui a checagem no dia do evento.</p></div><div><h2>Independente</h2><p>Este projeto não é oficial de campanha, partido, governo ou organização.</p></div><div><h2>Base editorial</h2><p>A primeira carga foi montada a partir das threads, pôsteres e fontes complementares identificadas na pesquisa.</p></div></div></div>}
 

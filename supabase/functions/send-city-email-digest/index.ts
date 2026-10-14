@@ -93,6 +93,7 @@ Deno.serve(async(request)=>{
     const [subs,events]=await Promise.all([fetchAll<Subscription>(subUrl,service),fetchJson<DigestEvent[]>(eventsUrl,service)]);
     let sent=0,noEvents=0,alreadySent=0,unverified=0,failed=0;
     await concurrent(subs,CONCURRENCY,async(sub)=>{
+      try{
       if(!sub.enabled)return;
       if(sub.last_sent_on===today){alreadySent++;return;}
       const regional=events.filter(e=>norm(e.city)===norm(sub.city)&&norm(e.state)===norm(sub.state))
@@ -121,6 +122,10 @@ Deno.serve(async(request)=>{
       const patch=await fetch(patchUrl,{method:"PATCH",headers:{apikey:service,Authorization:"Bearer "+service,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({last_sent_on:today,last_sent_at:new Date().toISOString(),updated_at:new Date().toISOString()})});
       if(!patch.ok){failed++;return;}
       sent++;
+      }catch(error){
+        failed++;
+        console.error('City digest subscriber failed:',error instanceof Error?error.message:'unknown error');
+      }
     });
     return Response.json({date:today,subscribers:subs.length,sent,noEvents,alreadySent,unverified,failed});
   } catch(error) {

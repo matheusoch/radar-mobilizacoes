@@ -20,7 +20,8 @@ test('submission outcomes notify the submitter only when rejection or public pub
   assert.match(app, /submission_approved/);
   assert.match(app, /submission_rejected/);
   assert.match(app, /\/chat\?novo=1/);
-  assert.match(app, /Seu evento foi publicado no Radar/);
+  assert.match(app, /Seu evento foi aprovado/);
+  assert.match(migration, /Seu evento foi publicado no Radar/);
 });
 
 test('registered city preference is independent of opt-in and powers homepage, calendar and map filters', async () => {

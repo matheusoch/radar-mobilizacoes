@@ -9,6 +9,7 @@ import EventCard from './components/EventCard';
 import EventCommunity from './components/EventCommunity';
 import EventModerationPage from './components/EventModerationPage';
 import EditorialAuditPanel from './components/EditorialAuditPanel';
+import SourcePickerList from './components/SourcePickerList';
 import {BulkPosterImporter} from './components/BulkPosterImporter';
 import {PosterReviewPanel} from './components/PosterReviewPanel';
 import {SubmissionsPanel} from './components/SubmissionsPanel';
@@ -1638,7 +1639,7 @@ const blank=():MobilizationEvent=>({
 <label className="full">Observação<textarea value={editing.notes??''} onChange={e=>setEditing({...editing,notes:e.target.value})}/></label>
 <PosterImporter currentImage={editing.image_url} existingEvents={events} getAuthToken={async()=>{const{data}=await db.auth.getSession();return data.session?.access_token||null}} onFileSelected={(file,previewUrl)=>{setPosterFile(file);setPosterPreview(previewUrl);setMessage('')}} onCandidatesFound={candidates=>applyOcrCandidates(candidates)} onUseCandidate={useOcrCandidate}/>
 <details className="source-picker source-picker-collapsible full"><summary className="poster-upload-label"><ExternalLink size={17}/><strong>Fontes do evento</strong><span className="source-picker-hint">Expandir para vincular ou cadastrar fontes</span></summary>
-<div className="source-checks">{sources.map(s=><label key={s.id}><input type="checkbox" checked={editing.source_ids.includes(s.id)} onChange={e=>setEditing({...editing,source_ids:e.target.checked?[...editing.source_ids,s.id]:editing.source_ids.filter(id=>id!==s.id)})}/><span>{s.account_name}<small>{s.platform} · {s.url}</small></span></label>)}</div>
+<SourcePickerList sources={sources} selectedIds={editing.source_ids} onToggle={(id,checked)=>setEditing({...editing,source_ids:checked?[...editing.source_ids,id]:editing.source_ids.filter(sourceId=>sourceId!==id)})}/>
 <div className="source-add-toggle"><button type="button" className="button ghost" onClick={()=>setShowNewSource(value=>!value)}><ExternalLink size={16}/>{showNewSource?'Fechar cadastro':'＋ Adicionar fonte'}</button></div>
 {showNewSource&&<div className="source-add-form">
 <label className="full">Link da publicação ou página *<input type="url" placeholder="https://www.instagram.com/p/..." value={newSource.url} onChange={e=>setNewSource(previous=>({...previous,url:e.target.value,platform:detectSourcePlatform(e.target.value)}))}/></label>

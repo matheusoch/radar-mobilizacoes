@@ -18,7 +18,7 @@ export default function Filters({value,onChange,states,cities,types,modalities}:
   types:string[];
   modalities:string[];
 }){
-  const set=(key:keyof FiltersState,nextValue:string)=>onChange({...value,[key]:nextValue,...(key==='period'?{date:''}:{})});
+  const set=(key:keyof FiltersState,nextValue:string)=>onChange({...value,[key]:nextValue,...(key==='period'&&nextValue!=='selected-date'?{date:''}:{})});
   const clear=()=>onChange({search:'',state:'',city:'',type:'',period:'upcoming',modality:'',date:''});
   const hasFilters=Boolean(value.search.trim()||value.state||value.city||value.type||value.modality||value.date||value.period!=='upcoming');
   const modalityLabel=(modality:string)=>({
@@ -34,6 +34,7 @@ export default function Filters({value,onChange,states,cities,types,modalities}:
     </div>
     <div className="filter-row">
       <select aria-label="Filtrar por período" value={value.period} onChange={event=>set('period',event.target.value)}>
+        {value.period==='selected-date'&&value.date&&<option value="selected-date">{new Date(value.date+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'})}</option>}
         <option value="upcoming">Próximos eventos</option>
         <option value="today">Hoje</option>
         <option value="7days">Próximos 7 dias</option>

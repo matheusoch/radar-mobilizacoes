@@ -164,6 +164,7 @@ type CityPreference={
 };
 
 function useCityPreference(){
+  const location=useLocation();
   const[user,setUser]=useState<any>(null);
   const[authLoading,setAuthLoading]=useState(true);
   const[preference,setPreference]=useState<CityPreference|null>(null);
@@ -225,7 +226,7 @@ function useCityPreference(){
       if(active)setPreferenceLoading(false);
     });
     return()=>{active=false};
-  },[user?.id,authLoading]);
+  },[user?.id,authLoading,location.pathname]);
 
   return {user,preference,loading:authLoading||preferenceLoading};
 }
@@ -903,7 +904,6 @@ function AuthPage(){
   const location=useLocation();
   const params=new URLSearchParams(location.search);
   const next=params.get('next')||'/chat';
-  const digestSignup=params.get('digest')==='1';
   const[mode,setMode]=useState<'login'|'signup'|'recover'|'reset'>(()=>params.get('mode')==='signup'?'signup':'login');
   const citySignup=mode==='signup';
   const[email,setEmail]=useState('');

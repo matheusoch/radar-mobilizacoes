@@ -40,6 +40,7 @@ export default function MapView({events}:{events:MobilizationEvent[]}){
     return true;
   }),[events,state,city,normalized]);
   const mapped=filtered.filter(e=>e.lat!=null&&e.lng!=null);
+  const unmapped=filtered.filter(e=>e.lat==null||e.lng==null);
 
   return <div className="map-shell">
     <div className="map-filters">
@@ -47,13 +48,23 @@ export default function MapView({events}:{events:MobilizationEvent[]}){
       <select value={state} onChange={e=>{setState(e.target.value);setCity('')}} aria-label="Filtrar mapa por estado"><option value="">Todos os estados</option>{states.map(s=><option key={s}>{s}</option>)}</select>
       <select value={city} onChange={e=>setCity(e.target.value)} aria-label="Filtrar mapa por cidade"><option value="">Todas as cidades</option>{cities.map(item=><option key={item}>{item}</option>)}</select>
       {(state||city||query)&&<button type="button" className="clear-btn" onClick={()=>{setState('');setCity('');setQuery('')}}>Limpar filtros</button>}
-      <div className="map-count"><LocateFixed size={15}/>{mapped.length} ponto{mapped.length===1?'':'s'} no mapa · {filtered.length} evento{filtered.length===1?'':'s'} filtrado{filtered.length===1?'':'s'}</div>
+      <div className="map-count"><LocateFixed size={15}/>{mapped.length} ponto{mapped.length===1?'':'s'} no mapa · {unmapped.length} sem coordenadas · {filtered.length} evento{filtered.length===1?'':'s'} filtrado{filtered.length===1?'':'s'}</div>
     </div>
     <MapContainer center={[-14.2,-51.9]} zoom={4} scrollWheelZoom className="map">
       <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
       <FitBounds events={filtered}/>
       {mapped.map(e=><Marker key={e.id} position={[e.lat!,e.lng!]} icon={icon}><Popup><strong>{e.city} · {e.state}</strong><br/>{formatTimeText(e.time_label||e.time)||'Horário não informado'} · {e.venue}<br/><Link to={'/evento/'+e.id}>Ver evento</Link></Popup></Marker>)}
     </MapContainer>
-    <div className="map-note">O mapa usa as coordenadas cadastradas para cada evento. Quando um evento ainda não tem coordenadas, ele continua disponível no calendário e nos filtros, mas não aparece como ponto.</div>
+    <div className="map-note">O mapa só desenha um ponto quando o evento tem latitude e longitude cadastradas. Eventos sem coordenadas não recebem marcadores aproximados para não confundir a localização real do ato.</div>
+    {unmapped.length>0&&<details className="map-unmapped">
+      <summary>Ver {unmapped.length} evento{unmapped.length===1?'':'s'} que ainda não aparecem como ponto no mapa</summary>
+      <div className="map-unmapped-list">
+        {unmapped.map(event=><Link key={event.id} to={'/evento/'+event.id} className="map-unmapped-item">
+          <strong>{event.title}</strong>
+          <span>{new Date(event.date+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'}).replace('.','')} · {event.city}{event.state?' / '+event.state:''}</span>
+          <small>{event.venue||event.address||'Local não informado'}</small>
+        </Link>)}
+      </div>
+    </details>}
   </div>
 }

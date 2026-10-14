@@ -6,7 +6,7 @@ type Poster={sha256:string;file:string;source_index:number;source_filename:strin
 type Manifest={version:number;matches:Match[];posters:Poster[];source_images?:number;unique_files?:number;matched_events?:number;note?:string};
 type Row=Match&{title:string;date?:string;city?:string;imageUrl:string|null;result:'ready'|'existing'|'missing-event'|'missing-file'|'linked'|'failed'|'skipped';detail?:string};
 const hex=(buffer:ArrayBuffer)=>Array.from(new Uint8Array(buffer)).map(v=>v.toString(16).padStart(2,'0')).join('');
-const mime=(path:string)=>{const ext=path.split('.').pop()?.toLowerCase();return ext==='jpg'||ext==='jpeg'||ext==='jfif'?'image/jpeg':ext==='webp'?'image/webp':ext==='png'?'image/png':ext==='gif'?'image/gif':'application/octet-stream'};
+const mime=(path:string)=>{const ext=path.split('.').pop()?.toLowerCase();return ext==='jpg'||ext==='jpeg'||ext==='jfif'?'image/jpeg':ext==='webp'?'image/webp':ext==='png'?'image/png':ext==='gif'?'image/gif':ext==='avif'?'image/avif':ext==='bmp'?'image/bmp':ext==='svg'?'image/svg+xml':'application/octet-stream'};
 
 async function unzipPosterPackage(file:File,depth=0):Promise<Map<string,Blob>>{
   if(depth>2)throw new Error('O pacote contém mais de dois ZIPs aninhados. Extraia o ZIP interno e selecione-o diretamente.');
@@ -32,7 +32,12 @@ async function unzipPosterPackage(file:File,depth=0):Promise<Map<string,Blob>>{
     const isImage=/\.(jpe?g|jfif|png|webp|gif|avif|bmp|svg)$/i.test(basename);
     let name='';
     if(isManifest)name='poster-import-manifest.json';
-    else if(isImage)name=imageMarker>=0&&imageMarker<parts.length-1?'images/'+parts.slice(imageMarker+1).join('/'):'images/'+parts[parts.length-1];
+    else if(isImage){
+      const relative=imageMarker>=0&&imageMarker<parts.length-1
+        ?parts.slice(imageMarker+1).join('/')
+        :parts.slice(parts.length===1?0:1).join('/');
+      name='images/'+(relative||parts[parts.length-1]);
+    }
     else if(basename.endsWith('.zip'))name='__nested__/'+cleanName;
     else continue;
     if(name.startsWith('images/')&&size>8*1024*1024)throw new Error('Imagem acima de 8 MB no pacote: '+name);
@@ -49,21 +54,42 @@ async function unzipPosterPackage(file:File,depth=0):Promise<Map<string,Blob>>{
       catch{throw new Error('Não foi possível descompactar '+name+'. Use o arquivo poster-index-complete.zip, preparado para evitar incompatibilidade de compactação.');}
     }else throw new Error('Método de compactação ZIP não suportado ('+method+') em '+name);
     if(blob.size!==size)throw new Error('Tamanho incorreto para '+name);
-    files.set(name,blob);
+    let uniqueName=name;
+    let suffix=2;
+    while(files.has(uniqueName)){
+      const dot=name.lastIndexOf('.');
+      uniqueName=dot>name.lastIndexOf('/')?name.slice(0,dot)+'-'+suffix+name.slice(dot):name+'-'+suffix;
+      suffix++;
+    }
+    files.set(uniqueName,blob);
   }
   if(!files.has('poster-import-manifest.json')){
     const nested=Array.from(files.entries()).filter(([name])=>name.startsWith('__nested__/'));
     for(const [name,blob] of nested){
       try{
         const inner:Map<string,Blob>=await unzipPosterPackage(new File([blob],name.split('/').pop()||'poster-index.zip'),depth+1);
-        if(inner.has('poster-import-manifest.json'))return inner;
+        if(inner.has('poster-import-manifest.json')){
+          for(const [innerName,innerBlob] of inner){
+            if(innerName.startsWith('images/')&&!files.has(innerName))files.set(innerName,innerBlob);
+            else if(innerName==='poster-import-manifest.json')files.set(innerName,innerBlob);
+          }
+          return files;
+        }
+        for(const [innerName,innerBlob] of inner){
+          if(!innerName.startsWith('images/'))continue;
+          let mergedName='images/nested-'+name.split('/').pop()+'/'+innerName.slice('images/'.length);
+          let suffix=2;
+          while(files.has(mergedName)){
+            const dot=mergedName.lastIndexOf('.');
+            mergedName=dot>mergedName.lastIndexOf('/')?mergedName.slice(0,dot)+'-'+suffix+mergedName.slice(dot):mergedName+'-'+suffix;
+            suffix++;
+          }
+          files.set(mergedName,innerBlob);
+        }
       }catch(innerError){
         if(depth>=2)throw innerError;
       }
     }
-    const detected=Array.from(files.keys()).filter(name=>!name.startsWith('__nested__/')).slice(0,8).join(', ')||'nenhum manifesto ou arquivo de imagem reconhecido';
-    const nestedHint=nested.length?' Foi encontrado um ZIP interno, mas ele também não apresentou um manifesto válido.':'';
-    throw new Error('Não consegui localizar poster-import-manifest.json. Entradas reconhecidas: '+detected+'. O importador aceita manifesto em pastas aninhadas e imagens em diretórios diferentes. Confira se selecionou o pacote do índice completo.'+nestedHint);
   }
   return files;
 }
@@ -77,9 +103,46 @@ export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promis
 
   const inspect=async()=>{
     if(!zip)return;
-    setBusy(true);setNotice('');setRows([]);setFiles(null);setManifest(null);setProgress('Lendo e verificando o ZIP completo…');
+    setBusy(true);setNotice('');setRows([]);setFiles(null);setManifest(null);setProgress('Lendo o ZIP, calculando hashes e procurando duplicatas…');
     try{
-      const archive=await unzipPosterPackage(zip),parsed=JSON.parse(await archive.get('poster-import-manifest.json')!.text()) as Manifest;
+      const archive=await unzipPosterPackage(zip);
+      const manifestBlob=archive.get('poster-import-manifest.json');
+      let parsed:Manifest;
+      if(manifestBlob){
+        parsed=JSON.parse(await manifestBlob.text()) as Manifest;
+      }else{
+        const imageEntries=[...archive.entries()].filter(([path])=>path.startsWith('images/'));
+        if(!imageEntries.length)throw new Error('O ZIP não contém imagens de pôster reconhecíveis. Use JPG, JPEG, JFIF, PNG, WEBP, GIF, AVIF, BMP ou SVG.');
+        const byHash=new Map<string,Poster>();
+        let sourceIndex=0;
+        for(const [path,blob] of imageEntries){
+          sourceIndex++;
+          if(blob.size===0)throw new Error('Arquivo de imagem vazio: '+path);
+          const sha256=hex(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()));
+          const filename=path.split('/').pop()||path;
+          const existing=byHash.get(sha256);
+          if(existing){
+            existing.source_indices=[...existing.source_indices,sourceIndex];
+            existing.source_filenames=[...new Set([...existing.source_filenames,filename])];
+            existing.duplicate_indices=[...existing.duplicate_indices,sourceIndex];
+            existing.is_duplicate=true;
+            existing.event_count_matched=0;
+            continue;
+          }
+          let width:number|null=null,height:number|null=null;
+          try{
+            const bitmap=await createImageBitmap(blob);
+            width=bitmap.width;height=bitmap.height;bitmap.close();
+          }catch{/* Some supported formats, such as SVG, do not decode via createImageBitmap in every browser. */}
+          byHash.set(sha256,{
+            sha256,file:path,source_index:sourceIndex,source_filename:filename,
+            source_indices:[sourceIndex],source_filenames:[filename],bytes:blob.size,
+            width,height,duplicate_indices:[sourceIndex],is_duplicate:false,event_count_matched:0
+          });
+        }
+        const posters=[...byHash.values()];
+        parsed={version:1,matches:[],posters,source_images:imageEntries.length,unique_files:posters.length,matched_events:0,note:'Pacote sem manifesto: catalogação de todas as imagens únicas, sem vínculos automáticos a eventos.'};
+      }
       const normalizeIndexedPath=(path:string)=>{
         const normalized=path.replace(/\\/g,'/').replace(/^\.\//,'').replace(/^\/+/, '');
         const parts=normalized.split('/').filter(Boolean);
@@ -92,7 +155,6 @@ export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promis
       if(![1,2].includes(parsed.version)||!Array.isArray(parsed.matches)||!Array.isArray(parsed.posters)||!parsed.posters.length)throw new Error('Manifesto sem versão reconhecida ou sem imagens catalogáveis. O campo matches pode ficar vazio quando o pacote for apenas para catalogar imagens.');
       const posters=Array.isArray(parsed.posters)&&parsed.posters.length?parsed.posters:[...new Map(parsed.matches.map(m=>[m.sha256,{sha256:m.sha256,file:m.file,source_index:m.source_index,source_filename:m.source_filename,source_indices:[m.source_index],source_filenames:[m.source_filename],bytes:0,width:null,height:null,duplicate_indices:[m.source_index],is_duplicate:false,event_count_matched:0}])).values()];
       parsed.posters=posters;
-      if(parsed.version===2&&posters.length<250)throw new Error('O índice está incompleto: esperava-se o catálogo completo dos pôsteres, mas o pacote tem apenas '+posters.length+' imagens.');
       const paths=[...new Set([...posters.map(m=>m.file),...parsed.matches.map(m=>m.file)])];
       for(let i=0;i<paths.length;i++){
         const path=paths[i],blob=archive.get(path);
@@ -214,11 +276,11 @@ export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promis
 
   const statusText=(r:Row)=>r.result==='ready'?'Pronto para importar':r.result==='existing'?'Mídia preservada':r.result==='linked'?'Importado':r.result==='failed'?'Falha':r.result==='missing-event'?'Evento ausente':'Ignorado';
   return <section className="admin-section poster-reconcile-panel">
-    <div className="section-head compact"><div><div className="eyebrow">MÍDIA · ÍNDICE COMPLETO</div><h2>Indexar todos os pôsteres</h2><p className="page-lead">O pacote completo contém 271 arquivos de origem, 259 imagens únicas após remover duplicatas exatas e os 169 vínculos de alta confiança identificados. Todas as imagens entram no catálogo, mesmo sem evento associado. Cartazes já ligados a eventos não são sobrescritos.</p></div></div>
-    <div className="poster-reconcile-controls"><label className="poster-reconcile-file"><Upload size={18}/><span>{zip?zip.name:'Selecionar ZIP do índice completo'}</span><input type="file" accept=".zip,application/zip" onChange={e=>{setZip(e.target.files?.[0]||null);setRows([]);setFiles(null);setManifest(null);setNotice('');}}/></label><button type="button" className="button primary" disabled={!zip||busy} onClick={()=>void inspect()}><Search size={16}/>{busy?'Aguarde…':'Ler ZIP e conferir índice'}</button></div>
+    <div className="section-head compact"><div><div className="eyebrow">MÍDIA · CATÁLOGO DE PÔSTERES</div><h2>Indexar todos os pôsteres</h2><p className="page-lead">Envie qualquer ZIP com pôsteres em formatos de imagem compatíveis. O sistema calcula o SHA-256, identifica duplicatas exatas e cataloga cada imagem única, mesmo quando ainda não existe evento associado. Se o pacote trouxer um manifesto reconhecido, também confere os vínculos nele descritos. Sem manifesto, somente cataloga as imagens. Pôsteres que já estejam ligados a eventos não são sobrescritos.</p></div></div>
+    <div className="poster-reconcile-controls"><label className="poster-reconcile-file"><Upload size={18}/><span>{zip?zip.name:'Selecionar ZIP com pôsteres'}</span><input type="file" accept=".zip,application/zip" onChange={e=>{setZip(e.target.files?.[0]||null);setRows([]);setFiles(null);setManifest(null);setNotice('');}}/></label><button type="button" className="button primary" disabled={!zip||busy} onClick={()=>void inspect()}><Search size={16}/>{busy?'Aguarde…':'Ler ZIP e conferir pôsteres'}</button></div>
     {progress&&<div className="poster-reconcile-progress"><RefreshCw size={15}/>{progress}</div>}
     {notice&&<div className="callout info"><Info size={18}/><span>{notice}</span></div>}
     {manifest&&<div className="poster-reconcile-stats"><div><strong>{manifest.posters.length}</strong><span>imagens únicas</span></div><div><strong>{manifest.source_images||manifest.posters.length}</strong><span>arquivos de origem</span></div><div><strong>{rows.length}</strong><span>vínculos propostos</span></div><div><strong>{ready}</strong><span>eventos prontos</span></div></div>}
-    {manifest&&<>{rows.length>0&&<div className="poster-reconcile-preview"><div className="poster-reconcile-preview-head"><strong>Prévia dos vínculos propostos</strong><button type="button" className="button ghost" onClick={()=>setAll(v=>!v)}>{all?'Ver amostra':'Ver todos'} ({rows.length})</button></div><div className="poster-reconcile-table-wrap"><table className="poster-reconcile-table"><thead><tr><th>Evento</th><th>Imagem do arquivo</th><th>Estado</th></tr></thead><tbody>{(all?rows:rows.slice(0,8)).map(r=><tr key={r.event_id}><td><strong>{r.title}</strong><small>{[r.date,r.city].filter(Boolean).join(' · ')}</small></td><td><span>{r.source_filename}</span><small>Imagem #{r.source_index}</small></td><td><span className={'poster-reconcile-status '+r.result}>{statusText(r)}</span>{r.detail&&<small>{r.detail}</small>}</td></tr>)}</tbody></table></div></div>}<div className="poster-reconcile-footer"><p>{rows.length>0?'O catálogo indexa cada imagem única, registra nomes e números de origem, hashes e duplicatas, e mantém a URL pública. Só os vínculos propostos são associados automaticamente; demais cartazes permanecem pesquisáveis no catálogo. Eventos com mídia existente são preservados.':'Este pacote contém imagens para catalogação, sem vínculos automáticos com eventos. Depois da importação, use a Revisão de pôsteres para associar manualmente cada imagem à mobilização correspondente. Nenhum evento será alterado nesta operação.'}</p><button type="button" className="button primary" disabled={busy||!manifest} onClick={()=>void importAll()}><CheckCircle2 size={16}/>{busy?'Indexando…':rows.length>0?'Indexar '+manifest?.posters.length+' pôsteres e aplicar vínculos':'Indexar '+manifest?.posters.length+' pôsteres no catálogo'}</button></div></>}
+    {manifest&&<>{rows.length>0&&<div className="poster-reconcile-preview"><div className="poster-reconcile-preview-head"><strong>Prévia dos vínculos propostos</strong><button type="button" className="button ghost" onClick={()=>setAll(v=>!v)}>{all?'Ver amostra':'Ver todos'} ({rows.length})</button></div><div className="poster-reconcile-table-wrap"><table className="poster-reconcile-table"><thead><tr><th>Evento</th><th>Imagem do arquivo</th><th>Estado</th></tr></thead><tbody>{(all?rows:rows.slice(0,8)).map(r=><tr key={r.event_id}><td><strong>{r.title}</strong><small>{[r.date,r.city].filter(Boolean).join(' · ')}</small></td><td><span>{r.source_filename}</span><small>Imagem #{r.source_index}</small></td><td><span className={'poster-reconcile-status '+r.result}>{statusText(r)}</span>{r.detail&&<small>{r.detail}</small>}</td></tr>)}</tbody></table></div></div>}<div className="poster-reconcile-footer"><p>{rows.length>0?'O catálogo indexa cada imagem única, registra nomes e números de origem, hashes e duplicatas, e mantém a URL pública. Só os vínculos propostos são associados automaticamente; demais cartazes permanecem pesquisáveis no catálogo. Eventos com mídia existente são preservados.':'Este pacote contém imagens para catalogação, sem vínculos automáticos com eventos. Depois da importação, use a Revisão de pôsteres para associar manualmente cada imagem à mobilização correspondente. Nenhum evento será alterado nesta operação.'}</p><button type="button" className="button primary" disabled={busy||!manifest} onClick={()=>void importAll()}><CheckCircle2 size={16}/>{busy?'Indexando…':rows.length>0?'Indexar '+manifest?.posters.length+' imagens e aplicar vínculos':'Indexar '+manifest?.posters.length+' imagens no catálogo'}</button></div></>}
   </section>;
 }

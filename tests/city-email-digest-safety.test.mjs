@@ -20,7 +20,7 @@ test('digest signup has a separate, unchecked consent and only saves after a use
   const migration = await read('../supabase/migrations/20261014024000_add_city_email_digest.sql');
   assert.match(app, /const\[digestOptIn,setDigestOptIn\]=useState\(false\)/);
   assert.match(app, /email_digest_opt_in:digestOptIn/);
-  assert.match(app, /Quero receber os alertas diários por e-mail/);
+  assert.match(app, /Quero receber o resumo diário por e-mail/);
   assert.match(migration, /email_confirmed_at is not null/);
   assert.match(migration, /consent_at/);
   assert.match(migration, /revoke all on function public\.save_city_email_digest_preferences[\s\S]*from public, anon/);

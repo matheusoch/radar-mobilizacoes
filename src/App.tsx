@@ -9,6 +9,7 @@ import EventCard from './components/EventCard';
 import EventCommunity from './components/EventCommunity';
 import EventModerationPage from './components/EventModerationPage';
 import EditorialAuditPanel from './components/EditorialAuditPanel';
+import SourcePickerList from './components/SourcePickerList';
 import {BulkPosterImporter} from './components/BulkPosterImporter';
 import {PosterReviewPanel} from './components/PosterReviewPanel';
 import {SubmissionsPanel} from './components/SubmissionsPanel';
@@ -154,9 +155,87 @@ function agendaFilterOptions(events:MobilizationEvent[],filters:FiltersState,tod
   return selected&&!options.includes(selected)?[selected,...options]:options;
 }
 
+
+type CityPreference={
+  city:string;
+  state:string;
+  inAppEnabled:boolean;
+  emailEnabled:boolean;
+  hasSavedPreference:boolean;
+};
+
+function useCityPreference(){
+  const location=useLocation();
+  const[user,setUser]=useState<any>(null);
+  const[authLoading,setAuthLoading]=useState(true);
+  const[preference,setPreference]=useState<CityPreference|null>(null);
+  const[preferenceLoading,setPreferenceLoading]=useState(true);
+
+  useEffect(()=>{
+    if(!supabase){setAuthLoading(false);setPreferenceLoading(false);return}
+    let active=true;
+    supabase.auth.getUser().then(({data})=>{
+      if(active)setUser(data.user);
+    }).catch(()=>{
+      if(active)setUser(null);
+    }).finally(()=>{
+      if(active)setAuthLoading(false);
+    });
+    const{data:listener}=supabase.auth.onAuthStateChange((_event,session)=>{
+      if(active)setUser(session?.user??null);
+    });
+    return()=>{
+      active=false;
+      listener.subscription.unsubscribe();
+    };
+  },[]);
+
+  useEffect(()=>{
+    if(authLoading)return;
+    if(!supabase||!user?.id){
+      setPreference(null);
+      setPreferenceLoading(false);
+      return;
+    }
+    let active=true;
+    setPreferenceLoading(true);
+    (async()=>{
+      const{data,error}=await supabase
+        .from('city_email_digest_subscriptions')
+        .select('city,state,in_app_enabled,enabled')
+        .eq('user_id',user.id)
+        .maybeSingle();
+      if(!active)return;
+      const metadata=(user.user_metadata||{}) as Record<string,unknown>;
+      const city=(!error&&typeof data?.city==='string'&&data.city.trim())
+        ?data.city.trim()
+        :(typeof metadata.digest_city==='string'?metadata.digest_city.trim():'');
+      const state=(!error&&typeof data?.state==='string'&&data.state.trim())
+        ?data.state.trim().toUpperCase()
+        :(typeof metadata.digest_state==='string'?metadata.digest_state.trim().toUpperCase():'');
+      const hasSavedPreference=!error&&Boolean(data?.city?.trim()&&data?.state?.trim());
+      setPreference({
+        city,
+        state,
+        inAppEnabled:!error&&Boolean(data?.in_app_enabled),
+        emailEnabled:!error&&Boolean(data?.enabled),
+        hasSavedPreference,
+      });
+    })().catch(()=>{
+      if(active)setPreference({city:'',state:'',inAppEnabled:false,emailEnabled:false,hasSavedPreference:false});
+    }).finally(()=>{
+      if(active)setPreferenceLoading(false);
+    });
+    return()=>{active=false};
+  },[user?.id,authLoading,location.pathname]);
+
+  return {user,preference,loading:authLoading||preferenceLoading};
+}
+
+
 type AppNotification={
   id:string;
-  type:'chat_reply'|'city_event';
+  type:'chat_reply'|'city_event'|'submission_approved'|'submission_rejected';
   actor_name:string;
   chat_message_id:string;
   parent_message_id:string;
@@ -164,26 +243,22 @@ type AppNotification={
   created_at:string;
   read_at:string|null;
   event_slug?:string|null;
+  title?:string;
+  target_url?:string;
 };
 
 function NotificationBell(){
-  const[user,setUser]=useState<any>(null);
+  const{user,preference,loading:preferenceLoading}=useCityPreference();
   const[notifications,setNotifications]=useState<AppNotification[]>([]);
   const[open,setOpen]=useState(false);
   const[loading,setLoading]=useState(false);
-  useEffect(()=>{
-    if(!supabase)return;
-    supabase.auth.getUser().then(({data})=>setUser(data.user));
-    const{data}=supabase.auth.onAuthStateChange((_event,session)=>setUser(session?.user??null));
-    return()=>data.subscription.unsubscribe();
-  },[]);
   useEffect(()=>{
     const db=supabase;
     if(!db||!user?.id){setNotifications([]);return;}
     let active=true;
     const load=async()=>{
       setLoading(true);
-      const[chatResult,cityResult]=await Promise.all([
+      const[chatResult,cityResult,submissionResult]=await Promise.all([
         db.from('notifications')
           .select('id,type,actor_name,chat_message_id,parent_message_id,message_preview,created_at,read_at')
           .eq('user_id',user.id)
@@ -191,6 +266,11 @@ function NotificationBell(){
           .limit(20),
         db.from('city_event_notifications')
           .select('id,event_id,created_at,read_at,event:events(title,city,state,date,slug)')
+          .eq('user_id',user.id)
+          .order('created_at',{ascending:false})
+          .limit(20),
+        db.from('event_submission_notifications')
+          .select('id,notification_type,event_slug,event_title,title,message,created_at,read_at')
           .eq('user_id',user.id)
           .order('created_at',{ascending:false})
           .limit(20)
@@ -205,9 +285,25 @@ function NotificationBell(){
         message_preview:[row.event?.title,[row.event?.city,row.event?.state].filter(Boolean).join('/')].filter(Boolean).join(' · ')||'Novo evento na sua cidade',
         created_at:row.created_at,
         read_at:row.read_at,
-        event_slug:row.event?.slug||row.event_id
+        event_slug:row.event?.slug||row.event_id,
+        target_url:'/evento/'+encodeURIComponent(row.event?.slug||row.event_id||'')
       }));
-      if(active)setNotifications([...chatItems,...cityItems].sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)).slice(0,20));
+      const submissionItems:AppNotification[]=(submissionResult.error?[]:(submissionResult.data||[])).map((row:any)=>({
+        id:row.id,
+        type:row.notification_type==='approved'?'submission_approved':'submission_rejected',
+        actor_name:'Agenda de Mobilizações',
+        chat_message_id:'',
+        parent_message_id:'',
+        title:row.title||undefined,
+        message_preview:row.message||row.event_title||'Atualização sobre seu envio de evento.',
+        created_at:row.created_at,
+        read_at:row.read_at,
+        event_slug:row.event_slug||null,
+        target_url:row.notification_type==='approved'&&row.event_slug
+          ?'/evento/'+encodeURIComponent(row.event_slug)
+          :'/chat?novo=1'
+      }));
+      if(active)setNotifications([...chatItems,...cityItems,...submissionItems].sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)).slice(0,30));
       if(active)setLoading(false);
     };
     void load();
@@ -218,7 +314,11 @@ function NotificationBell(){
   const markRead=async(item:AppNotification)=>{
     if(!supabase||!user?.id)return;
     const readAt=new Date().toISOString();
-    const table=item.type==='city_event'?'city_event_notifications':'notifications';
+    const table=item.type==='city_event'
+      ?'city_event_notifications'
+      :item.type==='submission_approved'||item.type==='submission_rejected'
+        ?'event_submission_notifications'
+        :'notifications';
     const{error}=await supabase.from(table).update({read_at:readAt}).eq('id',item.id).eq('user_id',user.id).is('read_at',null);
     if(!error)setNotifications(previous=>previous.map(current=>current.id===item.id&&current.type===item.type?{...current,read_at:readAt}:current));
   };
@@ -227,7 +327,8 @@ function NotificationBell(){
     const readAt=new Date().toISOString();
     await Promise.all([
       supabase.from('notifications').update({read_at:readAt}).eq('user_id',user.id).is('read_at',null),
-      supabase.from('city_event_notifications').update({read_at:readAt}).eq('user_id',user.id).is('read_at',null)
+      supabase.from('city_event_notifications').update({read_at:readAt}).eq('user_id',user.id).is('read_at',null),
+      supabase.from('event_submission_notifications').update({read_at:readAt}).eq('user_id',user.id).is('read_at',null)
     ]);
     setNotifications(previous=>previous.map(item=>({...item,read_at:item.read_at||readAt})));
   };
@@ -237,11 +338,12 @@ function NotificationBell(){
     </button>
     {open&&<div className="notifications-popover" role="dialog" aria-label="Notificações">
       <div className="notifications-header"><div><strong>Notificações</strong><span>{unreadCount?unreadCount+' não lida(s)':'Tudo em dia'}</span></div>{unreadCount>0&&<button type="button" onClick={()=>void markAllRead()}>Marcar todas como lidas</button>}</div>
-      {!user?<div className="notifications-empty"><p>Entre na sua conta para acompanhar respostas aos seus comentários.</p><Link to="/entrar?next=%2Fchat" className="button primary" onClick={()=>setOpen(false)}>Entrar</Link></div>
+      {user&&!preferenceLoading&&!preference?.hasSavedPreference&&<div className="notifications-empty city-preference-nudge"><strong>Personalize sua Agenda</strong><span>Cadastre sua cidade e estado para filtrar eventos locais e, se desejar, receber alertas no site.</span><Link to="/preferencias-alertas" className="button ghost" onClick={()=>setOpen(false)}>Cadastrar minha cidade</Link></div>}
+      {!user?<div className="notifications-empty"><p>Entre na sua conta para acompanhar respostas, o andamento dos seus envios e novos eventos da sua cidade.</p><Link to="/entrar?next=%2Fchat" className="button primary" onClick={()=>setOpen(false)}>Entrar</Link></div>
       :loading&&notifications.length===0?<div className="notifications-empty">Carregando notificações…</div>
-      :notifications.length===0?<div className="notifications-empty"><Bell size={22}/><p>Você ainda não tem notificações.</p><span>Aqui aparecem respostas aos seus comentários e novos eventos da cidade cadastrada nos alertas.</span></div>
-      :<div className="notification-list">{notifications.map(item=><Link key={item.type+':'+item.id} to={item.type==='city_event'?'/evento/'+encodeURIComponent(item.event_slug||''):'/chat?mensagem='+encodeURIComponent(item.chat_message_id)} className={'notification-item'+(!item.read_at?' unread':'')} onClick={()=>{setOpen(false);if(!item.read_at)void markRead(item)}}>
-        <span className="notification-dot" aria-hidden="true"/><span className="notification-copy"><strong>{item.type==='city_event'?'Novo evento na sua cidade':item.actor_name==='Admin'?'A equipe da Agenda respondeu ao seu comentário':item.actor_name+' respondeu ao seu comentário'}</strong><span>{item.message_preview}</span><small>{new Date(item.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</small></span>
+      :notifications.length===0?<div className="notifications-empty"><Bell size={22}/><p>Você ainda não tem notificações.</p><span>Aqui aparecem respostas do chat, atualizações sobre seus envios e novos eventos das cidades que você acompanha.</span></div>
+      :<div className="notification-list">{notifications.map(item=><Link key={item.type+':'+item.id} to={item.target_url|| (item.type==='city_event'||item.type==='submission_approved'?'/evento/'+encodeURIComponent(item.event_slug||''):item.type==='submission_rejected'?'/chat?novo=1':'/chat?mensagem='+encodeURIComponent(item.chat_message_id))} className={'notification-item'+(!item.read_at?' unread':'')} onClick={()=>{setOpen(false);if(!item.read_at)void markRead(item)}}>
+        <span className="notification-dot" aria-hidden="true"/><span className="notification-copy"><strong>{item.title||(item.type==='city_event'?'Novo evento na sua cidade':item.type==='submission_approved'?'Seu evento foi aprovado':item.type==='submission_rejected'?'Seu evento não foi aprovado':item.actor_name==='Admin'?'A equipe da Agenda respondeu ao seu comentário':item.actor_name+' respondeu ao seu comentário')}</strong><span>{item.message_preview}</span><small>{new Date(item.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</small></span>
       </Link>)}</div>}
     </div>}
   </div>;
@@ -283,9 +385,19 @@ function Home({events}:{events:MobilizationEvent[]}){
   const lastDay=localDateKey(lastDate);
   const[filters,setFilters]=useState<FiltersState>({search:'',state:'',city:'',type:'',period:'upcoming',modality:'',date:''});
   const[sortBy,setSortBy]=useState<AgendaSort>('chronological');
-  const states=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'state'),[events,filters,today,lastDay]);
-  const cities=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'city'),[events,filters,today,lastDay]);
-  const types=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'type'),[events,filters,today,lastDay]);
+  const cityProfile=useCityPreference();
+  const[showMyCityOnly,setShowMyCityOnly]=useState(false);
+  const preferenceCity=cityProfile.preference?.city||'';
+  const preferenceState=cityProfile.preference?.state||'';
+  const filtersForResults=useMemo(
+    ()=>showMyCityOnly&&preferenceCity&&preferenceState
+      ?{...filters,city:preferenceCity,state:preferenceState}
+      :filters,
+    [filters,showMyCityOnly,preferenceCity,preferenceState]
+  );
+  const states=useMemo(()=>agendaFilterOptions(events,filtersForResults,today,lastDay,'state'),[events,filtersForResults,today,lastDay]);
+  const cities=useMemo(()=>agendaFilterOptions(events,filtersForResults,today,lastDay,'city'),[events,filtersForResults,today,lastDay]);
+  const types=useMemo(()=>agendaFilterOptions(events,filtersForResults,today,lastDay,'type'),[events,filtersForResults,today,lastDay]);
   const modalities:AgendaModality[]=['Presencial','Virtual','Híbrido'];
   const dayShortcuts=useMemo(()=>{
     const availableDates=[...new Set(events
@@ -303,7 +415,7 @@ function Home({events}:{events:MobilizationEvent[]}){
       };
     });
   },[events,today]);
-  const filtered=useMemo(()=>events.filter(event=>matchesAgendaFilters(event,filters,today,lastDay)),[events,filters,today,lastDay]);
+  const filtered=useMemo(()=>events.filter(event=>matchesAgendaFilters(event,filtersForResults,today,lastDay)),[events,filtersForResults,today,lastDay]);
   const[attendance,setAttendance]=useState<Record<string,{count:number;attending:boolean}>>({});
   const orderedEvents=useMemo(()=>{
     const copy=[...filtered];
@@ -352,7 +464,7 @@ function Home({events}:{events:MobilizationEvent[]}){
         </button>)}
       </div>
     </div>
-    <div className="agenda-discovery-head"><div><div className="eyebrow">ENCONTRE POR LOCALIZAÇÃO</div><p>Use os filtros para encontrar mobilizações por estado, cidade, tipo ou modalidade.</p></div><Link to="/mapa" className="button ghost"><MapPinned size={17}/>Explorar mapa</Link></div><Filters value={filters} onChange={setFilters} states={states} cities={cities} types={types} modalities={modalities}/><div className="section-head"><div><div className="eyebrow">AGENDA</div><h2>{filtered.length} evento{filtered.length===1?'':'s'}</h2></div><div className="section-tools"><div className="legend">Informação rastreável</div><div className="agenda-sort"><label htmlFor="agenda-sort">Ordenar por</label><select id="agenda-sort" aria-label="Ordenar eventos por" title="Ordem cronológica: data e horário crescentes." value={sortBy} onChange={event=>setSortBy(event.target.value as AgendaSort)}><option value="chronological">Ordem cronológica</option><option value="relevance">Mais relevantes</option><option value="city">Cidade (A–Z)</option><option value="state">Estado (A–Z)</option><option value="recent">Adicionados recentemente</option></select></div></div></div><div className="event-grid">{orderedEvents.map(e=><EventCard key={e.id} event={e} attendance={e.db_id?attendance[e.db_id]:undefined} onAttendance={()=>handleAttendance(e)}/>)}</div>{!filtered.length&&<div className="empty"><Info/><h3>Nenhum evento encontrado</h3><p>Tente outro termo ou remova alguns filtros.</p></div>}</section></>
+    <div className="agenda-discovery-head"><div><div className="eyebrow">ENCONTRE POR LOCALIZAÇÃO</div><p>Use os filtros para encontrar mobilizações por estado, cidade, tipo ou modalidade.</p></div><div className="section-tools">{cityProfile.user&&preferenceCity&&preferenceState&&<button type="button" className="button ghost" aria-pressed={showMyCityOnly} onClick={()=>setShowMyCityOnly(value=>!value)}>{showMyCityOnly?'Mostrar outros locais':('Ver minha cidade: '+preferenceCity+'/'+preferenceState)}</button>}{cityProfile.user&&(!preferenceCity||!preferenceState)&&<Link to="/preferencias-alertas" className="button ghost">Cadastrar minha cidade</Link>}<Link to="/mapa" className="button ghost"><MapPinned size={17}/>Explorar mapa</Link></div></div><Filters value={filtersForResults} onChange={next=>{setShowMyCityOnly(false);setFilters(next)}} states={states} cities={cities} types={types} modalities={modalities}/><div className="section-head"><div><div className="eyebrow">AGENDA</div><h2>{filtered.length} evento{filtered.length===1?'':'s'}</h2></div><div className="section-tools"><div className="legend">Informação rastreável</div><div className="agenda-sort"><label htmlFor="agenda-sort">Ordenar por</label><select id="agenda-sort" aria-label="Ordenar eventos por" title="Ordem cronológica: data e horário crescentes." value={sortBy} onChange={event=>setSortBy(event.target.value as AgendaSort)}><option value="chronological">Ordem cronológica</option><option value="relevance">Mais relevantes</option><option value="city">Cidade (A–Z)</option><option value="state">Estado (A–Z)</option><option value="recent">Adicionados recentemente</option></select></div></div></div><div className="event-grid">{orderedEvents.map(e=><EventCard key={e.id} event={e} attendance={e.db_id?attendance[e.db_id]:undefined} onAttendance={()=>handleAttendance(e)}/>)}</div>{!filtered.length&&<div className="empty"><Info/><h3>Nenhum evento encontrado</h3><p>Tente outro termo ou remova alguns filtros.</p></div>}</section></>
 }
 
 function escapeIcsText(value:string){
@@ -642,6 +754,10 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
 
 function CalendarPage({events}:{events:MobilizationEvent[]}){
   const publicEvents=events.filter(event=>event.public);
+  const cityProfile=useCityPreference();
+  const[showMyCityOnly,setShowMyCityOnly]=useState(false);
+  const preferenceCity=cityProfile.preference?.city||'';
+  const preferenceState=cityProfile.preference?.state||'';
   const today=localDateKey();
   const[selectedDate,setSelectedDate]=useState(today);
   const[visibleMonth,setVisibleMonth]=useState(()=>today.slice(0,7)+'-01');
@@ -650,6 +766,8 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
   const[cityFilter,setCityFilter]=useState('');
   const[typeFilter,setTypeFilter]=useState('');
   const[showAllDates,setShowAllDates]=useState(false);
+  const effectiveStateFilter=showMyCityOnly&&preferenceCity&&preferenceState?preferenceState:stateFilter;
+  const effectiveCityFilter=showMyCityOnly&&preferenceCity&&preferenceState?preferenceCity:cityFilter;
 
   const selectedDateObj=new Date(selectedDate+'T12:00:00');
   const dateLabel=selectedDateObj.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
@@ -671,13 +789,13 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
     });
   };
   const states=[...new Set(publicEvents.map(event=>event.state).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-  const citySource=publicEvents.filter(event=>!stateFilter||event.state===stateFilter);
+  const citySource=publicEvents.filter(event=>!effectiveStateFilter||event.state===effectiveStateFilter);
   const cities=[...new Set(citySource.map(event=>event.city).filter(city=>city&&city.trim()))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   const types=[...new Set(publicEvents.map(event=>event.type).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   const normalized=normalizedSearchText(query.trim());
   const baseFiltered=publicEvents.filter(event=>{
-    if(stateFilter&&event.state!==stateFilter)return false;
-    if(cityFilter&&normalizedSearchText(event.city)!==normalizedSearchText(cityFilter))return false;
+    if(effectiveStateFilter&&event.state!==effectiveStateFilter)return false;
+    if(effectiveCityFilter&&!physicalCitiesForEvent(event).some(city=>normalizedSearchText(city)===normalizedSearchText(effectiveCityFilter)))return false;
     if(typeFilter&&event.type!==typeFilter)return false;
     if(normalized&&!normalizedSearchText([event.title,event.city,event.state,event.venue,event.address||'',event.type].filter(Boolean).join(' ')).includes(normalized))return false;
     return true;
@@ -691,7 +809,7 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
     (grouped[event.date]??=[]).push(event);
     return grouped;
   },{})).sort(([a],[b])=>a.localeCompare(b));
-  const clearFilters=()=>{setQuery('');setStateFilter('');setCityFilter('');setTypeFilter('');setShowAllDates(false)};
+  const clearFilters=()=>{setQuery('');setStateFilter('');setCityFilter('');setTypeFilter('');setShowAllDates(false);setShowMyCityOnly(false)};
 
   return <div className="container page">
     <div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> CALENDÁRIO DO SEGUNDO TURNO</div>
@@ -700,6 +818,8 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
         <h1>Calendário de mobilizações</h1>
         <p className="page-lead">{showAllDates?'Veja os eventos de todas as datas que correspondem aos filtros.':<>Exibindo eventos de <strong>{dateLabel}</strong>. Escolha outro dia diretamente no calendário abaixo.</>}</p>
       </div>
+      {cityProfile.user&&preferenceCity&&preferenceState&&<button type="button" className="button ghost" aria-pressed={showMyCityOnly} onClick={()=>{const next=!showMyCityOnly;setShowMyCityOnly(next);setShowAllDates(next)}}>{showMyCityOnly?'Mostrar calendário completo':('Ver minha cidade: '+preferenceCity+'/'+preferenceState)}</button>}
+      {cityProfile.user&&(!preferenceCity||!preferenceState)&&<Link to="/preferencias-alertas" className="button ghost">Cadastrar minha cidade</Link>}
     </div>
     <section className="calendar-picker" aria-label="Escolher data da agenda">
       <div className="calendar-picker-heading">
@@ -726,22 +846,22 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
     </section>
     <div className="calendar-search">
       <Search size={19}/>
-      <input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Buscar cidade, estado, local ou evento..." aria-label="Buscar no calendário"/>
+      <input value={query} onChange={event=>{setQuery(event.target.value);setShowMyCityOnly(false)}} placeholder="Buscar cidade, estado, local ou evento..." aria-label="Buscar no calendário"/>
       {query&&<button type="button" onClick={()=>setQuery('')} aria-label="Limpar busca">×</button>}
     </div>
     <div className="calendar-filters">
       <label className="calendar-filter-field"><span>Estado</span>
-        <select value={stateFilter} onChange={event=>{const next=event.target.value;setStateFilter(next);setCityFilter('');if(next)setShowAllDates(true)}}>
+        <select value={effectiveStateFilter} onChange={event=>{const next=event.target.value;setShowMyCityOnly(false);setStateFilter(next);setCityFilter('');if(next)setShowAllDates(true)}}>
           <option value="">Todos os estados</option>{states.map(state=><option key={state} value={state}>{state}</option>)}
         </select>
       </label>
       <label className="calendar-filter-field"><span>Cidade</span>
-        <select value={cityFilter} onChange={event=>{const next=event.target.value;setCityFilter(next);if(next)setShowAllDates(true)}}>
+        <select value={effectiveCityFilter} onChange={event=>{const next=event.target.value;setShowMyCityOnly(false);setCityFilter(next);if(next)setShowAllDates(true)}}>
           <option value="">Todas as cidades</option>{cities.map(city=><option key={city} value={city}>{city}</option>)}
         </select>
       </label>
       <label className="calendar-filter-field"><span>Tipo de mobilização</span>
-        <select value={typeFilter} onChange={event=>setTypeFilter(event.target.value)}>
+        <select value={typeFilter} onChange={event=>{setShowMyCityOnly(false);setTypeFilter(event.target.value)}}>
           <option value="">Todos os tipos</option>{types.map(type=><option key={type} value={type}>{type}</option>)}
         </select>
       </label>
@@ -763,15 +883,33 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
     {!groups.length&&<div className="empty calendar-empty"><Search/><h3>Nenhum evento encontrado</h3><p>{query||stateFilter||cityFilter||typeFilter?'Tente alterar ou limpar os filtros.':'Não há eventos públicos nesta data.'}</p>{(query||stateFilter||cityFilter||typeFilter||showAllDates)&&<button type="button" className="button ghost" onClick={clearFilters}><X size={15}/>Limpar filtros</button>}</div>}
   </div>
 }
-function MapPage({events}:{events:MobilizationEvent[]}){return <div className="container page"><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> MAPA DE MOBILIZAÇÕES</div><h1>Mobilizações no Brasil</h1><p className="page-lead">Visualize as mobilizações por data, estado ou cidade. Escolha um período ou um dia específico, explore os pontos disponíveis e abra cada evento para conferir horário, local e fontes.</p><MapView events={events.filter(e=>e.public)}/></div>}
+function MapPage({events}:{events:MobilizationEvent[]}){
+  const cityProfile=useCityPreference();
+  const[showMyCityOnly,setShowMyCityOnly]=useState(false);
+  const city=cityProfile.preference?.city||'';
+  const state=cityProfile.preference?.state||'';
+  const publicEvents=events.filter(event=>event.public);
+  const filteredEvents=showMyCityOnly&&city&&state
+    ?publicEvents.filter(event=>physicalCitiesForEvent(event).some(eventCity=>normalizedSearchText(eventCity)===normalizedSearchText(city))&&normalizedSearchText(event.state)===normalizedSearchText(state))
+    :publicEvents;
+  return <div className="container page">
+    <div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> MAPA DE MOBILIZAÇÕES</div>
+    <h1>Mobilizações no Brasil</h1>
+    <p className="page-lead">Visualize as mobilizações por data, estado ou cidade. Escolha um período ou um dia específico, explore os pontos disponíveis e abra cada evento para conferir horário, local e fontes.</p>
+    {cityProfile.user&&city&&state&&<div className="calendar-filter-actions"><button type="button" className="button ghost" aria-pressed={showMyCityOnly} onClick={()=>setShowMyCityOnly(value=>!value)}>{showMyCityOnly?'Mostrar todas as cidades':('Ver minha cidade: '+city+'/'+state)}</button></div>}
+    {cityProfile.user&&(!city||!state)&&<div className="callout info"><Info size={18}/><span>Cadastre sua cidade e estado para filtrar rapidamente o mapa.</span><Link to="/preferencias-alertas" className="button ghost">Cadastrar minha cidade</Link></div>}
+    {showMyCityOnly&&!filteredEvents.length&&<div className="callout info"><Info size={18}/><span>Nenhum evento público encontrado para {city}/{state} com os dados atuais.</span></div>}
+    <MapView events={filteredEvents}/>
+  </div>
+}
 function AboutPage(){return <div className="container page narrow"><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> SOBRE A AGENDA</div><h1>Uma agenda pública de mobilizações eleitorais.</h1><p className="page-lead">A Agenda reúne eventos e mobilizações em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, transformando informações espalhadas em uma agenda navegável, fácil de conferir e de atualizar.</p><div className="about-grid"><div><h2>Como funciona</h2><p>Cada evento tem data, horário, cidade, local, tipo e links para as fontes usadas na conferência.</p></div><div><h2>O que “verificado” significa</h2><p>Os campos essenciais foram comparados com uma ou mais publicações ou fontes identificáveis. Isso não substitui a checagem no dia do evento.</p></div><div><h2>Independente</h2><p>Este projeto não é oficial de campanha, partido, governo ou organização.</p></div><div><h2>Base editorial</h2><p>A primeira carga foi montada a partir das threads, pôsteres e fontes complementares identificadas na pesquisa.</p></div></div></div>}
 
 function AuthPage(){
   const location=useLocation();
   const params=new URLSearchParams(location.search);
   const next=params.get('next')||'/chat';
-  const digestSignup=EMAIL_DIGEST_ENABLED&&params.get('digest')==='1';
   const[mode,setMode]=useState<'login'|'signup'|'recover'|'reset'>(()=>params.get('mode')==='signup'?'signup':'login');
+  const citySignup=mode==='signup';
   const[email,setEmail]=useState('');
   const[password,setPassword]=useState('');
   const[confirmPassword,setConfirmPassword]=useState('');
@@ -779,6 +917,7 @@ function AuthPage(){
   const[digestCity,setDigestCity]=useState('');
   const[digestState,setDigestState]=useState('');
   const[digestOptIn,setDigestOptIn]=useState(false);
+  const[cityInAppOptIn,setCityInAppOptIn]=useState(false);
   const[digestFormat,setDigestFormat]=useState<'resumo'|'cards'|'ambos'>('ambos');
   const[msg,setMsg]=useState('');
   const[busy,setBusy]=useState(false);
@@ -819,8 +958,8 @@ function AuthPage(){
         if(error)setMsg(error.message);
         else navigate(next);
       }else{
-        if(digestSignup&&digestOptIn&&(!digestCity.trim()||!digestState)){
-          setMsg('Para receber os alertas, informe sua cidade e estado. Você também pode criar a conta sem aderir aos e-mails.');
+        if((cityInAppOptIn||digestOptIn)&&(!digestCity.trim()||!digestState)){
+          setMsg('Para ativar alertas da cidade, informe cidade e estado. Você também pode criar a conta sem ativar notificações.');
           return;
         }
         const{data,error}=await db.auth.signUp({
@@ -830,9 +969,10 @@ function AuthPage(){
             emailRedirectTo:window.location.origin+next,
             data:{
               display_name:displayName||safeName(email),
-              ...(digestSignup?{
+              ...(citySignup?{
                 digest_city:digestCity.trim(),
                 digest_state:digestState,
+                city_in_app_opt_in:cityInAppOptIn,
                 email_digest_opt_in:digestOptIn,
                 email_digest_format:digestFormat,
                 email_digest_consent_version:'city-digest-v1-2026-10',
@@ -842,9 +982,11 @@ function AuthPage(){
         });
         if(error)setMsg(error.message);
         else if(data.session)navigate(next);
-        else setMsg(digestSignup&&digestOptIn
-          ?'Conta criada. Confirme seu e-mail; depois abra as preferências de alertas para salvar sua adesão.'
-          :'Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre na Agenda.');
+        else setMsg(citySignup&&(cityInAppOptIn||digestOptIn)
+          ?'Conta criada. Confirme seu e-mail; suas preferências de cidade ficarão disponíveis na Agenda.'
+          :citySignup&&digestCity.trim()&&digestState
+            ?'Conta criada. Sua cidade foi registrada para personalizar a agenda. Verifique seu e-mail e depois entre.'
+            :'Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre na Agenda.');
       }
     }catch(error){
       setMsg(error instanceof Error?error.message:'Não foi possível concluir a operação. Tente novamente.');
@@ -854,8 +996,8 @@ function AuthPage(){
   };
 
   const title=mode==='login'?'Entre para participar.':mode==='signup'?'Crie sua conta.':mode==='recover'?'Recupere sua senha.':'Defina uma nova senha.';
-  const lead=mode==='reset'?'Use uma senha nova para voltar à Agenda.':digestSignup&&mode==='signup'
-    ?'Crie sua conta e, se desejar, ative um resumo diário de mobilizações da sua cidade. A adesão é opcional.'
+  const lead=mode==='reset'?'Use uma senha nova para voltar à Agenda.':citySignup
+    ?'Crie sua conta e, se desejar, salve sua cidade para personalizar a agenda. As notificações no site e por e-mail são escolhas separadas e opcionais.'
     :'O chat exige login para reduzir spam e manter as sugestões sob moderação.';
 
   return <div className="container page narrow">
@@ -867,16 +1009,18 @@ function AuthPage(){
       {mode!=='reset'&&<label className="auth-field"><span>E-mail</span><input type="email" placeholder="voce@exemplo.com" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete={mode==='recover'?'email':'username'}/></label>}
       {(mode==='login'||mode==='signup'||mode==='reset')&&<label className="auth-field"><span>Senha</span><input type="password" placeholder="Pelo menos 6 caracteres" value={password} onChange={e=>setPassword(e.target.value)} minLength={6} required autoComplete={mode==='reset'?'new-password':mode==='login'?'current-password':'new-password'}/></label>}
       {mode==='reset'&&<label className="auth-field"><span>Confirme a nova senha</span><input type="password" placeholder="Repita sua nova senha" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} minLength={6} required autoComplete="new-password"/></label>}
-      {digestSignup&&mode==='signup'&&<section className="auth-digest-fields" aria-labelledby="auth-digest-title">
-        <div><div className="eyebrow">OPCIONAL</div><h2 id="auth-digest-title">Alertas da sua cidade</h2><p>Receba às 8h, no horário de Brasília, um resumo dos eventos de hoje e dos próximos sete dias na região informada.</p></div>
-        <label className="auth-field"><span>Cidade</span><input value={digestCity} onChange={e=>setDigestCity(e.target.value)} maxLength={100} autoComplete="address-level2" placeholder="Ex.: Fortaleza" required={digestOptIn} disabled={busy}/></label>
-        <label className="auth-field"><span>Estado</span><select value={digestState} onChange={e=>setDigestState(e.target.value)} autoComplete="address-level1" required={digestOptIn} disabled={busy}><option value="">Selecione a UF</option>{BRAZILIAN_STATES.map(state=><option key={state.code} value={state.code}>{state.name} ({state.code})</option>)}</select></label>
-        <fieldset className="auth-digest-format"><legend>Formato do e-mail</legend>
-          <label><input type="radio" name="signup-digest-format" value="resumo" checked={digestFormat==='resumo'} onChange={()=>setDigestFormat('resumo')} disabled={busy}/>Resumo de texto</label>
-          <label><input type="radio" name="signup-digest-format" value="cards" checked={digestFormat==='cards'} onChange={()=>setDigestFormat('cards')} disabled={busy}/>Cards por evento</label>
-          <label><input type="radio" name="signup-digest-format" value="ambos" checked={digestFormat==='ambos'} onChange={()=>setDigestFormat('ambos')} disabled={busy}/>Resumo + cards</label>
+      {citySignup&&<section className="auth-digest-fields" aria-labelledby="auth-city-title">
+        <div><div className="eyebrow">OPCIONAL</div><h2 id="auth-city-title">Personalize sua agenda</h2><p>Informe sua cidade e estado para filtrar eventos locais na página inicial, no calendário e no mapa. Você pode salvar a localização mesmo sem ativar notificações.</p></div>
+        <label className="auth-field"><span>Cidade preferida</span><input value={digestCity} onChange={e=>setDigestCity(e.target.value)} maxLength={100} autoComplete="address-level2" placeholder="Ex.: Fortaleza" required={cityInAppOptIn||digestOptIn} disabled={busy}/></label>
+        <label className="auth-field"><span>Estado</span><select value={digestState} onChange={e=>setDigestState(e.target.value)} autoComplete="address-level1" required={cityInAppOptIn||digestOptIn} disabled={busy}><option value="">Selecione a UF</option>{BRAZILIAN_STATES.map(state=><option key={state.code} value={state.code}>{state.name} ({state.code})</option>)}</select></label>
+        <label className="auth-digest-consent"><input type="checkbox" checked={cityInAppOptIn} onChange={e=>setCityInAppOptIn(e.target.checked)} disabled={busy}/><span><strong>Quero receber notificações dentro do site.</strong><small>O sino mostrará quando um novo evento for publicado na cidade e no estado escolhidos. Esta opção é independente do e-mail.</small></span></label>
+        <fieldset className="auth-digest-format" disabled={busy||!EMAIL_DIGEST_ENABLED}><legend>Formato do e-mail</legend>
+          <label><input type="radio" name="signup-digest-format" value="resumo" checked={digestFormat==='resumo'} onChange={()=>setDigestFormat('resumo')} disabled={busy||!EMAIL_DIGEST_ENABLED}/>Resumo de texto</label>
+          <label><input type="radio" name="signup-digest-format" value="cards" checked={digestFormat==='cards'} onChange={()=>setDigestFormat('cards')} disabled={busy||!EMAIL_DIGEST_ENABLED}/>Cards por evento</label>
+          <label><input type="radio" name="signup-digest-format" value="ambos" checked={digestFormat==='ambos'} onChange={()=>setDigestFormat('ambos')} disabled={busy||!EMAIL_DIGEST_ENABLED}/>Resumo + cards</label>
         </fieldset>
-        <label className="auth-digest-consent"><input type="checkbox" checked={digestOptIn} onChange={e=>setDigestOptIn(e.target.checked)} disabled={busy}/><span><strong>Quero receber os alertas diários por e-mail.</strong><small>Esta autorização é opcional e separada da conta. Só ativará o envio depois que você confirmar o e-mail e salvar a preferência. É possível cancelar quando quiser. <Link to="/privacidade" target="_blank" rel="noreferrer">Saiba como os dados serão usados.</Link></small></span></label>
+        <label className="auth-digest-consent"><input type="checkbox" checked={digestOptIn} onChange={e=>setDigestOptIn(e.target.checked)} disabled={busy||!EMAIL_DIGEST_ENABLED}/><span><strong>Quero receber o resumo diário por e-mail.</strong><small>Esta autorização é separada e opcional. O envio ainda não está ativo; quando estiver, só será ativado depois da confirmação do e-mail e do salvamento das preferências. Você pode cancelar quando quiser. <Link to="/privacidade" target="_blank" rel="noreferrer">Saiba como os dados serão usados.</Link></small></span></label>
+        {!EMAIL_DIGEST_ENABLED&&<p className="legend">O envio por e-mail ainda está sendo configurado. Você já pode salvar sua cidade e, se escolher, receber alertas dentro do site.</p>}
       </section>}
       <button className="button primary" disabled={busy}>{busy?'Aguarde…':mode==='login'?'Entrar':mode==='signup'?'Criar conta':mode==='recover'?'Enviar link de recuperação':'Salvar nova senha'}</button>
       {msg&&<div className="callout info" role="status"><Info size={18}/><span>{msg}</span></div>}
@@ -1495,7 +1639,7 @@ const blank=():MobilizationEvent=>({
 <label className="full">Observação<textarea value={editing.notes??''} onChange={e=>setEditing({...editing,notes:e.target.value})}/></label>
 <PosterImporter currentImage={editing.image_url} existingEvents={events} getAuthToken={async()=>{const{data}=await db.auth.getSession();return data.session?.access_token||null}} onFileSelected={(file,previewUrl)=>{setPosterFile(file);setPosterPreview(previewUrl);setMessage('')}} onCandidatesFound={candidates=>applyOcrCandidates(candidates)} onUseCandidate={useOcrCandidate}/>
 <details className="source-picker source-picker-collapsible full"><summary className="poster-upload-label"><ExternalLink size={17}/><strong>Fontes do evento</strong><span className="source-picker-hint">Expandir para vincular ou cadastrar fontes</span></summary>
-<div className="source-checks">{sources.map(s=><label key={s.id}><input type="checkbox" checked={editing.source_ids.includes(s.id)} onChange={e=>setEditing({...editing,source_ids:e.target.checked?[...editing.source_ids,s.id]:editing.source_ids.filter(id=>id!==s.id)})}/><span>{s.account_name}<small>{s.platform} · {s.url}</small></span></label>)}</div>
+<SourcePickerList sources={sources} selectedIds={editing.source_ids} onToggle={(id,checked)=>setEditing({...editing,source_ids:checked?[...editing.source_ids,id]:editing.source_ids.filter(sourceId=>sourceId!==id)})}/>
 <div className="source-add-toggle"><button type="button" className="button ghost" onClick={()=>setShowNewSource(value=>!value)}><ExternalLink size={16}/>{showNewSource?'Fechar cadastro':'＋ Adicionar fonte'}</button></div>
 {showNewSource&&<div className="source-add-form">
 <label className="full">Link da publicação ou página *<input type="url" placeholder="https://www.instagram.com/p/..." value={newSource.url} onChange={e=>setNewSource(previous=>({...previous,url:e.target.value,platform:detectSourcePlatform(e.target.value)}))}/></label>

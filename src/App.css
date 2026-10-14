@@ -808,14 +808,14 @@ body{background:var(--page);color:var(--ink)}
 .date-chip-list{display:flex;gap:8px;overflow-x:auto;padding:2px 1px 8px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
 .date-chip{display:flex;flex:1 0 118px;min-width:0;flex-direction:column;align-items:flex-start;gap:4px;padding:11px 12px;border:1px solid var(--line);border-radius:13px;background:#fff;color:var(--ink);text-align:left;font:inherit;cursor:pointer;scroll-snap-align:start;transition:background .15s ease,border-color .15s ease,color .15s ease}
 .date-chip:hover{border-color:var(--accent)}
-.date-chip[aria-pressed=true]{background:#ffcc00;border-color:#ffcc00;color:#171717}
+.date-chip[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
 .date-chip-weekday{font-size:11px;line-height:1.2;color:var(--muted);text-transform:capitalize}
-.date-chip[aria-pressed=true] .date-chip-weekday,.date-chip[aria-pressed=true] .date-chip-count{color:#383016}
+.date-chip[aria-pressed=true] .date-chip-weekday{color:#fff}.date-chip[aria-pressed=true] .date-chip-count{color:#ffcc00}
 .date-chip:focus-visible{outline:3px solid rgba(162,29,53,.45);outline-offset:3px}
 .date-chip-date{display:flex;align-items:baseline;gap:5px;line-height:1}
 .date-chip-date strong{font-family:var(--font-heading);font-size:25px;font-weight:900;letter-spacing:-.04em}
 .date-chip-date small{font-size:11px;text-transform:lowercase;color:var(--muted)}
-.date-chip[aria-pressed=true] .date-chip-date small{color:#383016}
+.date-chip[aria-pressed=true] .date-chip-date small{color:rgba(255,255,255,.84)}
 .date-chip-count{font-size:11px;color:var(--muted);margin-top:5px;white-space:nowrap}
 @media(max-width:640px){.date-shortcuts{padding:14px;border-radius:16px}.date-shortcuts-heading{align-items:flex-start}.date-shortcuts-heading h2{max-width:220px}.date-shortcut-reset{padding:7px 9px;font-size:11px}.date-chip{flex:0 0 104px;padding:10px}.date-chip-date strong{font-size:23px}}
 @media(max-width:370px){.date-shortcuts-heading{flex-direction:column;align-items:stretch}.date-shortcuts-heading h2{max-width:none}.date-shortcut-reset{align-self:flex-start}}
@@ -878,8 +878,8 @@ body{background:var(--page);color:var(--ink)}
 .calendar-day.has-events{background:#fffdfa;border-color:#eadfcf}
 .calendar-day.has-events small{color:var(--accent);font-weight:800}
 .calendar-day:hover{border-color:var(--accent);transform:translateY(-1px)}
-.calendar-day.selected{background:#ffcc00;border-color:#ffcc00;color:#171717}
-.calendar-day.selected small{color:#383016}
+.calendar-day.selected{background:var(--accent);border-color:var(--accent);color:#fff}
+.calendar-day.selected small{color:#ffcc00}
 .calendar-day.is-today:not(.selected){box-shadow:inset 0 0 0 1px var(--accent)}
 .calendar-day:focus-visible{outline:3px solid rgba(162,29,53,.4);outline-offset:2px}
 @media(max-width:680px){
@@ -905,3 +905,71 @@ body{background:var(--page);color:var(--ink)}
 }
 
 @media(max-width:680px){.calendar-day-count-word{display:none}}
+
+
+/* Acessibilidade e quebra de filtros em telas estreitas. */
+@media(max-width:620px){
+  .section-tools{width:100%;align-items:stretch;justify-content:flex-start;flex-direction:column;gap:12px}
+  .section-tools .legend{white-space:normal}
+  .agenda-sort{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;justify-content:stretch;min-width:0;width:100%;flex:1}
+  .agenda-sort label{white-space:normal;line-height:1.4}
+  .agenda-sort select{width:100%;min-width:0;max-width:100%;box-sizing:border-box}
+}
+.share-builder-date{display:grid;gap:5px;min-width:0;color:var(--muted);font-size:11px;font-weight:700}
+.share-builder-date>label{line-height:1.3}
+.share-builder-date .share-date-filter{width:100%;box-sizing:border-box;min-width:0}
+.share-builder-date .share-date-filter input{font-size:13px}
+.share-builder-date .share-date-filter input:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
+.share-builder-date .share-date-clear:focus-visible{outline:3px solid rgba(162,29,53,.35);outline-offset:2px}
+@media(max-width:900px){
+  .share-filter-row-custom{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .share-filter-row-custom .share-search{grid-column:1/-1}
+  .share-builder-select,.share-builder-date{min-width:0}
+}
+@media(max-width:620px){
+  .share-filter-row-custom{grid-template-columns:minmax(0,1fr);gap:10px}
+  .share-filter-row-custom .share-search{grid-column:auto}
+  .share-builder-select select,.share-builder-date .share-date-filter{min-height:44px}
+}
+
+/* Calendário: vinho da identidade como seleção; semana em branco e contagem em amarelo. */
+.date-chip[aria-pressed=true] .date-chip-weekday{color:#fff}
+.date-chip[aria-pressed=true] .date-chip-count{color:#ffcc00}
+.calendar-day.selected{background:var(--accent);border-color:var(--accent);color:#fff}
+.calendar-day.selected small{color:#ffcc00}
+
+/* Filtros do mapa: período, data específica, local e busca em linhas fluídas. */
+.map-filters{display:grid;grid-template-columns:minmax(190px,1.35fr) repeat(2,minmax(120px,.75fr)) minmax(160px,.85fr) minmax(185px,1fr) auto;gap:10px;align-items:end;margin-bottom:12px}
+.map-filter-field{display:grid;gap:5px;min-width:0;color:var(--muted);font-size:11px;font-weight:800}
+.map-filter-field>span{line-height:1.3}
+.map-filter-field select,.map-date-filter{width:100%;min-width:0;min-height:43px;box-sizing:border-box;border:1px solid var(--line);border-radius:11px;background:#fff;color:var(--ink);font:inherit;font-size:13px}
+.map-filter-field select{padding:10px}
+.map-date-filter{display:flex;align-items:center;gap:7px;padding:8px 9px}
+.map-date-filter>svg{flex:none;color:var(--muted)}
+.map-date-filter input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:12px}
+.map-date-clear{display:grid;place-items:center;width:26px;height:26px;flex:none;border:0;border-radius:50%;background:#f0eee9;color:var(--ink);cursor:pointer}
+.map-filter-field select:focus-visible,.map-date-filter:focus-within,.map-date-clear:focus-visible{outline:3px solid rgba(162,29,53,.32);outline-offset:2px}
+.map-filters>.clear-btn{min-height:43px;justify-content:center;white-space:normal}
+.map-count{grid-column:1/-1;white-space:normal;line-height:1.5;flex-wrap:wrap}
+@media(max-width:1000px){
+  .map-filters{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .map-search{grid-column:1/-1}
+  .map-filters>.clear-btn{grid-column:1/-1;width:100%}
+}
+@media(max-width:620px){
+  .map-filters{grid-template-columns:minmax(0,1fr);gap:9px}
+  .map-search{grid-column:auto}
+  .map-filter-field,.map-search,.map-filters>.clear-btn{width:100%;box-sizing:border-box}
+  .map-count{grid-column:auto}
+}
+
+/* Pequenas áreas de interação respondem ao teclado com o mesmo destaque do tema. */
+.date-chip:focus-visible,.calendar-day:focus-visible,.agenda-sort select:focus-visible{outline:3px solid rgba(162,29,53,.42);outline-offset:3px}
+
+.map-search button{display:grid;place-items:center;flex:none;width:28px;height:28px;border:0;border-radius:50%;background:#f0eee9;color:var(--ink);cursor:pointer}
+.map-search button:hover,.map-date-clear:hover{background:#e8e3de}
+.map-search button:focus-visible{outline:3px solid rgba(162,29,53,.35);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){
+  .date-chip,.calendar-day{transition:none!important}
+  .date-chip:hover,.calendar-day:hover{transform:none}
+}

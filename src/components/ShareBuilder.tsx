@@ -139,10 +139,13 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
               {cities.map(city=><option key={city} value={city}>{city}</option>)}
             </select>
           </label>
-          <div className='share-date-filter'>
-            <CalendarDays size={17} aria-hidden='true'/>
-            <input type='date' value={dateFilter} onChange={e=>setDateFilter(e.target.value)} aria-label='Filtrar eventos por data'/>
-            {dateFilter&&<button type='button' className='share-date-clear' onClick={()=>setDateFilter('')} aria-label='Limpar filtro de data'><X size={15}/></button>}
+          <div className='share-builder-date'>
+            <label htmlFor='share-date-filter'>Data</label>
+            <div className='share-date-filter'>
+              <CalendarDays size={17} aria-hidden='true'/>
+              <input id='share-date-filter' type='date' value={dateFilter} onChange={e=>setDateFilter(e.target.value)} aria-label='Filtrar eventos por data'/>
+              {dateFilter&&<button type='button' className='share-date-clear' onClick={()=>setDateFilter('')} aria-label='Limpar filtro de data'><X size={15}/></button>}
+            </div>
           </div>
         </div>
         <div className='share-picker-toolbar'>

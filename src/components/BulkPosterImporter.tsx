@@ -6,7 +6,7 @@ type Poster={sha256:string;file:string;source_index:number;source_filename:strin
 type Manifest={version:number;matches:Match[];posters:Poster[];source_images?:number;unique_files?:number;matched_events?:number;note?:string};
 type Row=Match&{title:string;date?:string;city?:string;imageUrl:string|null;result:'ready'|'existing'|'missing-event'|'missing-file'|'linked'|'failed'|'skipped';detail?:string};
 const hex=(buffer:ArrayBuffer)=>Array.from(new Uint8Array(buffer)).map(v=>v.toString(16).padStart(2,'0')).join('');
-const mime=(path:string)=>{const ext=path.split('.').pop()?.toLowerCase();return ext==='jpg'||ext==='jpeg'||ext==='jfif'?'image/jpeg':ext==='webp'?'image/webp':ext==='png'?'image/png':ext==='gif'?'image/gif':'application/octet-stream'};
+const mime=(path:string)=>{const ext=path.split('.').pop()?.toLowerCase();return ext==='jpg'||ext==='jpeg'||ext==='jfif'?'image/jpeg':ext==='webp'?'image/webp':ext==='png'?'image/png':ext==='gif'?'image/gif':ext==='avif'?'image/avif':ext==='bmp'?'image/bmp':ext==='svg'?'image/svg+xml':'application/octet-stream'};
 
 async function unzipPosterPackage(file:File,depth=0):Promise<Map<string,Blob>>{
   if(depth>2)throw new Error('O pacote contém mais de dois ZIPs aninhados. Extraia o ZIP interno e selecione-o diretamente.');
@@ -155,7 +155,6 @@ export function BulkPosterImporter({db,onComplete}:{db:any;onComplete:()=>Promis
       if(![1,2].includes(parsed.version)||!Array.isArray(parsed.matches)||!Array.isArray(parsed.posters)||!parsed.posters.length)throw new Error('Manifesto sem versão reconhecida ou sem imagens catalogáveis. O campo matches pode ficar vazio quando o pacote for apenas para catalogar imagens.');
       const posters=Array.isArray(parsed.posters)&&parsed.posters.length?parsed.posters:[...new Map(parsed.matches.map(m=>[m.sha256,{sha256:m.sha256,file:m.file,source_index:m.source_index,source_filename:m.source_filename,source_indices:[m.source_index],source_filenames:[m.source_filename],bytes:0,width:null,height:null,duplicate_indices:[m.source_index],is_duplicate:false,event_count_matched:0}])).values()];
       parsed.posters=posters;
-      if(parsed.version===2&&posters.length<250)throw new Error('O índice está incompleto: esperava-se o catálogo completo dos pôsteres, mas o pacote tem apenas '+posters.length+' imagens.');
       const paths=[...new Set([...posters.map(m=>m.file),...parsed.matches.map(m=>m.file)])];
       for(let i=0;i<paths.length;i++){
         const path=paths[i],blob=archive.get(path);

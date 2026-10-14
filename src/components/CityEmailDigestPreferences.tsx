@@ -169,7 +169,7 @@ export default function CityEmailDigestPreferences(){
         <input value={settings.city} onChange={event=>setSettings(current=>({...current,city:event.target.value}))} maxLength={100} autoComplete="address-level2" placeholder="Ex.: Fortaleza" disabled={busy} required={settings.enabled||settings.in_app_enabled}/>
       </label>
       <label className="city-digest-field"><span>Estado</span>
-        <select value={settings.state} onChange={event=>setSettings(current=>({...current,state:event.target.value}))} autoComplete="address-level1" disabled={busy} required={settings.enabled}>
+        <select value={settings.state} onChange={event=>setSettings(current=>({...current,state:event.target.value}))} autoComplete="address-level1" disabled={busy} required={settings.enabled||settings.in_app_enabled}>
           <option value="">Selecione a UF</option>{BRAZILIAN_STATES.map(state=><option key={state.code} value={state.code}>{state.name} ({state.code})</option>)}
         </select>
       </label>

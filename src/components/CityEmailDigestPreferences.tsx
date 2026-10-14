@@ -71,10 +71,13 @@ export default function CityEmailDigestPreferences(){
         setError('Não foi possível carregar suas preferências. Tente novamente mais tarde.');
         setSettings(DEFAULT_SETTINGS);
       }else if(data){
+        const metadata=(user.user_metadata||{}) as Record<string,unknown>;
+        const activationRequested=new URLSearchParams(location.search).get('ativar')==='1';
+        const hasSignupConsent=metadata.email_digest_opt_in===true;
         setSettings({
           city:data.city||'',
           state:data.state||'',
-          enabled:Boolean(data.enabled),
+          enabled:Boolean(data.enabled)||(EMAIL_DIGEST_ENABLED&&activationRequested&&hasSignupConsent&&Boolean(user.email_confirmed_at)),
           in_app_enabled:Boolean(data.in_app_enabled),
           email_format:(data.email_format||'ambos') as EmailFormat,
           consent_at:data.consent_at||null,

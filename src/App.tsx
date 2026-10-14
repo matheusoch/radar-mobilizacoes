@@ -155,13 +155,14 @@ function agendaFilterOptions(events:MobilizationEvent[],filters:FiltersState,tod
 
 type AppNotification={
   id:string;
-  type:'chat_reply';
+  type:'chat_reply'|'city_event';
   actor_name:string;
   chat_message_id:string;
   parent_message_id:string;
   message_preview:string;
   created_at:string;
   read_at:string|null;
+  event_slug?:string|null;
 };
 
 function NotificationBell(){
@@ -181,12 +182,31 @@ function NotificationBell(){
     let active=true;
     const load=async()=>{
       setLoading(true);
-      const{data,error}=await db.from('notifications')
-        .select('id,type,actor_name,chat_message_id,parent_message_id,message_preview,created_at,read_at')
-        .eq('user_id',user.id)
-        .order('created_at',{ascending:false})
-        .limit(20);
-      if(active&&!error)setNotifications((data||[]) as AppNotification[]);
+      const[chatResult,cityResult]=await Promise.all([
+        db.from('notifications')
+          .select('id,type,actor_name,chat_message_id,parent_message_id,message_preview,created_at,read_at')
+          .eq('user_id',user.id)
+          .order('created_at',{ascending:false})
+          .limit(20),
+        db.from('city_event_notifications')
+          .select('id,event_id,created_at,read_at,event:events(title,city,state,date,slug)')
+          .eq('user_id',user.id)
+          .order('created_at',{ascending:false})
+          .limit(20)
+      ]);
+      const chatItems=(chatResult.error?[]:(chatResult.data||[])) as AppNotification[];
+      const cityItems:AppNotification[]=(cityResult.error?[]:(cityResult.data||[])).map((row:any)=>({
+        id:row.id,
+        type:'city_event',
+        actor_name:'Agenda de Mobilizações',
+        chat_message_id:'',
+        parent_message_id:'',
+        message_preview:[row.event?.title,[row.event?.city,row.event?.state].filter(Boolean).join('/')].filter(Boolean).join(' · ')||'Novo evento na sua cidade',
+        created_at:row.created_at,
+        read_at:row.read_at,
+        event_slug:row.event?.slug||row.event_id
+      }));
+      if(active)setNotifications([...chatItems,...cityItems].sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)).slice(0,20));
       if(active)setLoading(false);
     };
     void load();
@@ -194,17 +214,21 @@ function NotificationBell(){
     return()=>{active=false;window.clearInterval(interval)};
   },[user?.id]);
   const unreadCount=notifications.filter(item=>!item.read_at).length;
-  const markRead=async(id:string)=>{
+  const markRead=async(item:AppNotification)=>{
     if(!supabase||!user?.id)return;
     const readAt=new Date().toISOString();
-    const{error}=await supabase.from('notifications').update({read_at:readAt}).eq('id',id).eq('user_id',user.id).is('read_at',null);
-    if(!error)setNotifications(previous=>previous.map(item=>item.id===id?{...item,read_at:readAt}:item));
+    const table=item.type==='city_event'?'city_event_notifications':'notifications';
+    const{error}=await supabase.from(table).update({read_at:readAt}).eq('id',item.id).eq('user_id',user.id).is('read_at',null);
+    if(!error)setNotifications(previous=>previous.map(current=>current.id===item.id&&current.type===item.type?{...current,read_at:readAt}:current));
   };
   const markAllRead=async()=>{
     if(!supabase||!user?.id||!unreadCount)return;
     const readAt=new Date().toISOString();
-    const{error}=await supabase.from('notifications').update({read_at:readAt}).eq('user_id',user.id).is('read_at',null);
-    if(!error)setNotifications(previous=>previous.map(item=>({...item,read_at:item.read_at||readAt})));
+    await Promise.all([
+      supabase.from('notifications').update({read_at:readAt}).eq('user_id',user.id).is('read_at',null),
+      supabase.from('city_event_notifications').update({read_at:readAt}).eq('user_id',user.id).is('read_at',null)
+    ]);
+    setNotifications(previous=>previous.map(item=>({...item,read_at:item.read_at||readAt})));
   };
   return <div className="notification-area">
     <button type="button" className={'notification-toggle'+(open?' is-open':'')} aria-label={unreadCount?unreadCount+' notificações não lidas':'Notificações'} aria-expanded={open} onClick={()=>setOpen(value=>!value)}>
@@ -214,9 +238,9 @@ function NotificationBell(){
       <div className="notifications-header"><div><strong>Notificações</strong><span>{unreadCount?unreadCount+' não lida(s)':'Tudo em dia'}</span></div>{unreadCount>0&&<button type="button" onClick={()=>void markAllRead()}>Marcar todas como lidas</button>}</div>
       {!user?<div className="notifications-empty"><p>Entre na sua conta para acompanhar respostas aos seus comentários.</p><Link to="/entrar?next=%2Fchat" className="button primary" onClick={()=>setOpen(false)}>Entrar</Link></div>
       :loading&&notifications.length===0?<div className="notifications-empty">Carregando notificações…</div>
-      :notifications.length===0?<div className="notifications-empty"><Bell size={22}/><p>Você ainda não tem notificações.</p><span>Quando alguém responder a um comentário seu, o aviso aparecerá aqui.</span></div>
-      :<div className="notification-list">{notifications.map(item=><Link key={item.id} to={'/chat?mensagem='+encodeURIComponent(item.chat_message_id)} className={'notification-item'+(!item.read_at?' unread':'')} onClick={()=>{setOpen(false);if(!item.read_at)void markRead(item.id)}}>
-        <span className="notification-dot" aria-hidden="true"/><span className="notification-copy"><strong>{item.actor_name==='Admin'?'A equipe da Agenda respondeu ao seu comentário':item.actor_name+' respondeu ao seu comentário'}</strong><span>{item.message_preview}</span><small>{new Date(item.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</small></span>
+      :notifications.length===0?<div className="notifications-empty"><Bell size={22}/><p>Você ainda não tem notificações.</p><span>Aqui aparecem respostas aos seus comentários e novos eventos da cidade cadastrada nos alertas.</span></div>
+      :<div className="notification-list">{notifications.map(item=><Link key={item.type+':'+item.id} to={item.type==='city_event'?'/evento/'+encodeURIComponent(item.event_slug||''):'/chat?mensagem='+encodeURIComponent(item.chat_message_id)} className={'notification-item'+(!item.read_at?' unread':'')} onClick={()=>{setOpen(false);if(!item.read_at)void markRead(item)}}>
+        <span className="notification-dot" aria-hidden="true"/><span className="notification-copy"><strong>{item.type==='city_event'?'Novo evento na sua cidade':item.actor_name==='Admin'?'A equipe da Agenda respondeu ao seu comentário':item.actor_name+' respondeu ao seu comentário'}</strong><span>{item.message_preview}</span><small>{new Date(item.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</small></span>
       </Link>)}</div>}
     </div>}
   </div>;
@@ -313,7 +337,7 @@ function Home({events}:{events:MobilizationEvent[]}){
       else alert(message);
     }
   };
-  return <><section className="hero"><div className="container hero-grid"><div><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> AGENDA DE MOBILIZAÇÕES</div><h1>Eventos e mobilizações pelo Brasil.</h1><p>Agenda de atos, manifestações, plenárias e encontros em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, organizados por data e cidade e acompanhados de fontes para conferência.</p><div className="hero-actions"><Link to="/chat?novo=1" className="button primary"><CalendarPlus size={18}/>Adicionar evento</Link><Link to="/calendario" className="button ghost"><CalendarDays size={18}/>Ver calendário</Link><Link to="/divulgar" className="button ghost"><ImageIcon size={18}/>Criar divulgação</Link><Link to="/chat" className="button ghost"><MessageCircle size={18}/>Enviar atualização</Link><Link to="/preferencias-alertas" className="button ghost"><Bell size={18}/>{EMAIL_DIGEST_ENABLED?'Alertas por cidade':'Alertas por cidade — em breve'}</Link></div></div><div className="hero-card"><div className="hero-stat"><strong>{events.length}</strong><span>eventos públicos</span></div><div className="hero-stat"><strong>{states.length}</strong><span>estados representados</span></div><div className="hero-stat"><strong>{events.filter(e=>e.status!=='warning').length}</strong><span>sem alerta de divergência</span></div></div></div></section><ShareSection events={events}/><section className="container section">
+  return <><section className="hero"><div className="container hero-grid"><div><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> AGENDA DE MOBILIZAÇÕES</div><h1>Eventos e mobilizações pelo Brasil.</h1><p>Agenda de atos, manifestações, plenárias e encontros em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, organizados por data e cidade e acompanhados de fontes para conferência.</p><div className="hero-actions"><Link to="/chat?novo=1" className="button primary"><CalendarPlus size={18}/>Adicionar evento</Link><Link to="/calendario" className="button ghost"><CalendarDays size={18}/>Ver calendário</Link><Link to="/divulgar" className="button ghost"><ImageIcon size={18}/>Criar divulgação</Link><Link to="/chat" className="button ghost"><MessageCircle size={18}/>Enviar atualização</Link><Link to="/preferencias-alertas" className="button ghost"><Bell size={18}/>{EMAIL_DIGEST_ENABLED?'Alertas por cidade':'Alertas por cidade — em breve'}</Link></div></div><div className="hero-card"><div className="hero-stat"><strong>{events.filter(e=>e.public&&e.date>=today&&e.date<=lastDay).length}</strong><span>eventos nos próximos 7 dias</span></div><div className="hero-stat"><strong>{new Set(events.filter(e=>e.public&&e.date>=today&&e.date<=lastDay).map(e=>e.city.trim()).filter(Boolean)).size}</strong><span>cidades com mobilizações</span></div><div className="hero-stat"><strong>{events.filter(e=>e.public&&e.date===today).length}</strong><span>eventos hoje</span></div></div></div></section><ShareSection events={events}/><section className="container section">
     <div className="date-shortcuts">
       <div className="date-shortcuts-heading">
         <div><div className="eyebrow">POR DATA</div><h2>Mobilizações nos próximos dias</h2></div>
@@ -1136,6 +1160,31 @@ const blank=():MobilizationEvent=>({
         if(urlErr)throw urlErr;
         editing.image_url=pub.publicUrl;
         editing.poster_sha256=posterSha256;
+        if(posterSha256){
+          const{data:oldIndex,error:readIndexError}=await db.from('poster_index')
+            .select('source_filenames,source_indices,matched_event_ids,duplicate_count,storage_path,image_url,file_bytes,width,height')
+            .eq('sha256',posterSha256).maybeSingle();
+          if(readIndexError)throw new Error('Pôster enviado, mas não foi possível consultar o índice: '+readIndexError.message);
+          let width:number|null=null,height:number|null=null;
+          try{const bitmap=await createImageBitmap(posterFile);width=bitmap.width;height=bitmap.height;bitmap.close();}catch{/* Metadata is optional; the file hash and URL remain indexable. */}
+          const sourceFilenames=[...new Set([...(oldIndex?.source_filenames||[]),posterFile.name])];
+          const matchedEventIds=[...new Set([...(oldIndex?.matched_event_ids||[]),savedId])];
+          const{error:indexError}=await db.from('poster_index').upsert({
+            sha256:posterSha256,
+            source_filename:oldIndex?.source_filenames?.[0]||posterFile.name,
+            source_filenames:sourceFilenames,
+            source_indices:oldIndex?.source_indices||[],
+            storage_path:oldIndex?.storage_path||path,
+            image_url:oldIndex?.image_url||pub.publicUrl,
+            file_bytes:oldIndex?.file_bytes||posterFile.size,
+            width:oldIndex?.width||width,
+            height:oldIndex?.height||height,
+            duplicate_count:Math.max(oldIndex?.duplicate_count||1,sourceFilenames.length),
+            matched_event_ids:matchedEventIds,
+            indexed_at:new Date().toISOString()
+          },{onConflict:'sha256'});
+          if(indexError)throw new Error('Pôster enviado, mas falhou ao atualizar o índice pesquisável: '+indexError.message);
+        }
       }
       const{error:deleteSourcesError}=await db.from('event_sources').delete().eq('event_id',savedId);
       if(deleteSourcesError)throw deleteSourcesError;
@@ -1349,6 +1398,34 @@ const blank=():MobilizationEvent=>({
             if(!ids.length)throw new Error('Nenhum evento associado');
             const{error}=await db.from('events').update({poster_sha256:hash}).in('id',ids);
             if(error)throw error;
+            const{data:oldIndex,error:readIndexError}=await db.from('poster_index')
+              .select('source_filenames,source_indices,matched_event_ids,duplicate_count,storage_path,image_url,file_bytes,width,height')
+              .eq('sha256',hash).maybeSingle();
+            if(readIndexError)throw readIndexError;
+            const imagePath=new URL(url).pathname;
+            const bucketMarker='/storage/v1/object/public/event_posters/';
+            const bucketPosition=imagePath.indexOf(bucketMarker);
+            const storagePath=bucketPosition>=0?decodeURIComponent(imagePath.slice(bucketPosition+bucketMarker.length)):imagePath;
+            const sourceName=decodeURIComponent(storagePath.split('/').pop()||('poster-'+hash.slice(0,12)));
+            let width:number|null=null,height:number|null=null;
+            try{const bitmap=await createImageBitmap(blob);width=bitmap.width;height=bitmap.height;bitmap.close();}catch{/* Dimensions are optional for legacy images. */}
+            const sourceFilenames=[...new Set([...(oldIndex?.source_filenames||[]),sourceName])];
+            const matchedEventIds=[...new Set([...(oldIndex?.matched_event_ids||[]),...ids])];
+            const{error:indexError}=await db.from('poster_index').upsert({
+              sha256:hash,
+              source_filename:oldIndex?.source_filenames?.[0]||sourceName,
+              source_filenames:sourceFilenames,
+              source_indices:oldIndex?.source_indices||[],
+              storage_path:oldIndex?.storage_path||storagePath,
+              image_url:oldIndex?.image_url||url,
+              file_bytes:oldIndex?.file_bytes||blob.size,
+              width:oldIndex?.width||width,
+              height:oldIndex?.height||height,
+              duplicate_count:Math.max(oldIndex?.duplicate_count||1,sourceFilenames.length),
+              matched_event_ids:matchedEventIds,
+              indexed_at:new Date().toISOString()
+            },{onConflict:'sha256'});
+            if(indexError)throw indexError;
             indexedEvents+=ids.length;
           }catch{
             failed++;
@@ -1384,7 +1461,7 @@ const blank=():MobilizationEvent=>({
  </div><label>Status<select value={editing.status} onChange={e=>setEditing({...editing,status:e.target.value as any})}>{['confirmed','updated','warning','pending'].map(x=><option key={x}>{x}</option>)}</select></label><label>Latitude<input value={editing.lat??''} onChange={e=>setEditing({...editing,lat:e.target.value?Number(e.target.value):null})}/></label><label>Longitude<input value={editing.lng??''} onChange={e=>setEditing({...editing,lng:e.target.value?Number(e.target.value):null})}/></label><label className="full">Descrição<textarea value={editing.description??''} onChange={e=>setEditing({...editing,description:e.target.value})}/></label>
 <label className="full">Observação<textarea value={editing.notes??''} onChange={e=>setEditing({...editing,notes:e.target.value})}/></label>
 <PosterImporter currentImage={editing.image_url} existingEvents={events} getAuthToken={async()=>{const{data}=await db.auth.getSession();return data.session?.access_token||null}} onFileSelected={(file,previewUrl)=>{setPosterFile(file);setPosterPreview(previewUrl);setMessage('')}} onCandidatesFound={candidates=>applyOcrCandidates(candidates)} onUseCandidate={useOcrCandidate}/>
-<div className="source-picker full"><div className="poster-upload-label"><ExternalLink size={17}/><strong>Fontes do evento</strong></div>
+<details className="source-picker source-picker-collapsible full"><summary className="poster-upload-label"><ExternalLink size={17}/><strong>Fontes do evento</strong><span className="source-picker-hint">Expandir para vincular ou cadastrar fontes</span></summary>
 <div className="source-checks">{sources.map(s=><label key={s.id}><input type="checkbox" checked={editing.source_ids.includes(s.id)} onChange={e=>setEditing({...editing,source_ids:e.target.checked?[...editing.source_ids,s.id]:editing.source_ids.filter(id=>id!==s.id)})}/><span>{s.account_name}<small>{s.platform} · {s.url}</small></span></label>)}</div>
 <div className="source-add-toggle"><button type="button" className="button ghost" onClick={()=>setShowNewSource(value=>!value)}><ExternalLink size={16}/>{showNewSource?'Fechar cadastro':'＋ Adicionar fonte'}</button></div>
 {showNewSource&&<div className="source-add-form">
@@ -1395,7 +1472,7 @@ const blank=():MobilizationEvent=>({
 <label className="full">Observação (opcional)<textarea rows={2} placeholder="Contexto útil para conferir a publicação" value={newSource.note} onChange={e=>setNewSource(previous=>({...previous,note:e.target.value}))}/></label>
 <div className="source-add-actions full"><button type="button" className="button primary" onClick={()=>void addSource()} disabled={savingSource}>{savingSource?'Salvando fonte…':'Salvar e selecionar fonte'}</button><button type="button" className="button ghost" onClick={()=>{setShowNewSource(false);setNewSource({url:'',platform:'',account_name:'',account_handle:'',note:''})}}>Cancelar</button></div>
 <small className="full">O cadastro da fonte é salvo imediatamente; para vinculá-la definitivamente ao evento, clique também em “Salvar evento”. Links repetidos reutilizam a fonte existente.</small>
-</div>}</div>
+</div>}</details>
 <label className="check full"><input type="checkbox" checked={editing.public} onChange={e=>setEditing({...editing,public:e.target.checked})}/> Publicar no radar</label></div>
 <div className="edit-footer"><button className="button primary" disabled={saving} onClick={save}>{saving?'Salvando…':'Salvar evento'}</button><button className="button ghost" onClick={()=>setEditing(null)}>Cancelar</button></div></div>}
     <section className="admin-section admin-event-filter"><div className="section-head compact"><div><div className="eyebrow">EVENTOS</div><h2>Filtrar cadastro</h2></div><div className="admin-filter-summary"><span className="analytics-note">{filteredAdminEvents.length} de {events.length} registros</span><span className="analytics-note">{events.filter(e=>!e.image_url?.trim()).length} sem mídia no total</span></div></div><div className="admin-filter-row"><input value={adminQuery} onChange={e=>setAdminQuery(e.target.value)} placeholder="Buscar por título, cidade, UF ou local…"/><input type="date" value={adminDate} onChange={e=>setAdminDate(e.target.value)} aria-label="Filtrar por data"/><select value={adminStatus} onChange={e=>setAdminStatus(e.target.value)} aria-label="Filtrar por status"><option value="">Todos os status</option><option value="confirmed">Confirmado</option><option value="updated">Atualizado</option><option value="warning">Alerta</option><option value="pending">Pendente</option></select><select value={adminMedia} onChange={e=>setAdminMedia(e.target.value as 'all'|'missing'|'attached')} aria-label="Filtrar por mídia"><option value="all">Com e sem mídia</option><option value="missing">Sem foto/pôster</option><option value="attached">Com foto/pôster</option></select><select value={adminSort} onChange={e=>setAdminSort(e.target.value as 'recent'|'city'|'state')} aria-label="Ordenar cadastro por"><option value="recent">Adicionados recentemente</option><option value="city">Cidade (A–Z)</option><option value="state">Estado (A–Z)</option></select>{(adminQuery||adminDate||adminStatus||adminMedia!=='all')&&<button className="clear-btn" onClick={()=>{setAdminQuery('');setAdminDate('');setAdminStatus('');setAdminMedia('all')}}><X size={15}/> Limpar filtros</button>}</div></section>

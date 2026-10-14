@@ -69,21 +69,48 @@ begin
     raise exception 'USER_NOT_FOUND' using errcode = 'P0002';
   end if;
 
-  if p_enabled and not v_verified then
+  if v_format not in ('resumo','cards','ambos') then
+    raise exception 'INVALID_EMAIL_FORMAT' using errcode = '22023';
+  end if;
+
+  if not coalesce(p_enabled, false) then
+    update public.city_email_digest_subscriptions as current_preferences
+      set enabled = false,
+          unsubscribed_at = case when current_preferences.enabled then now() else current_preferences.unsubscribed_at end,
+          updated_at = now()
+      where current_preferences.user_id = v_user_id
+      returning * into v_result;
+
+    if found then
+      return jsonb_build_object(
+        'city', v_result.city,
+        'state', v_result.state,
+        'enabled', v_result.enabled,
+        'email_format', v_result.email_format,
+        'consent_at', v_result.consent_at,
+        'unsubscribed_at', v_result.unsubscribed_at,
+        'updated_at', v_result.updated_at
+      );
+    end if;
+
+    return jsonb_build_object(
+      'city', null, 'state', null, 'enabled', false,
+      'email_format', v_format, 'consent_at', null,
+      'unsubscribed_at', null, 'updated_at', now()
+    );
+  end if;
+
+  if not v_verified then
     raise exception 'EMAIL_NOT_VERIFIED'
       using errcode = '42501',
             hint = 'Confirme o endereço de e-mail da conta antes de ativar os resumos.';
   end if;
 
-  if p_enabled and (v_city = '' or v_state not in (
+  if v_city = '' or v_state not in (
     'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG',
     'PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'
-  )) then
+  ) then
     raise exception 'VALID_CITY_AND_STATE_REQUIRED' using errcode = '22023';
-  end if;
-
-  if v_format not in ('resumo','cards','ambos') then
-    raise exception 'INVALID_EMAIL_FORMAT' using errcode = '22023';
   end if;
 
   insert into public.city_email_digest_subscriptions as current_preferences (
@@ -91,45 +118,29 @@ begin
     unsubscribed_at, last_sent_on, last_sent_at, created_at, updated_at
   )
   values (
-    v_user_id,
-    case when p_enabled then v_city else coalesce(nullif(v_city,''), 'Não informado') end,
-    case when p_enabled then v_state else coalesce(nullif(v_state,''), 'SP') end,
-    coalesce(p_enabled, false),
-    v_format,
-    case when p_enabled then now() else null end,
-    case when p_enabled then 'city-digest-v1-2026-10' else null end,
-    case when p_enabled then null else now() end,
-    null,
-    null,
-    now(),
-    now()
+    v_user_id, v_city, v_state, true, v_format, now(),
+    'city-digest-v1-2026-10', null, null, null, now(), now()
   )
   on conflict (user_id) do update set
-    city = case when excluded.enabled then excluded.city else current_preferences.city end,
-    state = case when excluded.enabled then excluded.state else current_preferences.state end,
-    enabled = excluded.enabled,
+    city = excluded.city,
+    state = excluded.state,
+    enabled = true,
     email_format = excluded.email_format,
     consent_at = case
-      when excluded.enabled and (
-        not current_preferences.enabled
+      when not current_preferences.enabled
         or current_preferences.city is distinct from excluded.city
         or current_preferences.state is distinct from excluded.state
         or current_preferences.email_format is distinct from excluded.email_format
-      ) then now()
+      then now()
       else current_preferences.consent_at
     end,
-    consent_version = case when excluded.enabled then 'city-digest-v1-2026-10' else current_preferences.consent_version end,
-    unsubscribed_at = case
-      when excluded.enabled then null
-      when current_preferences.enabled then now()
-      else current_preferences.unsubscribed_at
-    end,
+    consent_version = 'city-digest-v1-2026-10',
+    unsubscribed_at = null,
     last_sent_on = case
-      when excluded.enabled and (
-        not current_preferences.enabled
+      when not current_preferences.enabled
         or current_preferences.city is distinct from excluded.city
         or current_preferences.state is distinct from excluded.state
-      ) then null
+      then null
       else current_preferences.last_sent_on
     end,
     updated_at = now()

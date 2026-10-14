@@ -26,8 +26,11 @@ test('digest signup has a separate, unchecked consent and only saves after a use
 
 test('daily digest uses a guarded server secret, requires explicit subscriptions and provides unsubscribe', async () => {
   const sender = await read('../supabase/functions/send-city-email-digest/index.ts');
+  const config = await read('../supabase/config.toml');
   const unsubscribe = await read('../supabase/functions/unsubscribe-city-email-digest/index.ts');
   assert.match(sender, /DIGEST_CRON_SECRET/);
+  assert.match(config, /\[functions\.send-city-email-digest\][\s\S]*?verify_jwt = false/);
+  assert.match(config, /\[functions\.unsubscribe-city-email-digest\][\s\S]*?verify_jwt = false/);
   assert.match(sender, /return new Response\("Unauthorized",\{status:401\}\)/);
   assert.match(sender, /sub\.last_sent_on===today/);
   assert.match(sender, /norm\(e\.city\)===norm\(sub\.city\)&&norm\(e\.state\)===norm\(sub\.state\)/);

@@ -903,3 +903,5 @@ body{background:var(--page);color:var(--ink)}
   .calendar-day-number{width:22px;height:22px;font-size:11px}
   .calendar-day small{font-size:8px}
 }
+
+@media(max-width:680px){.calendar-day-count-word{display:none}}

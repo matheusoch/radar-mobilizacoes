@@ -878,7 +878,25 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
     {!groups.length&&<div className="empty calendar-empty"><Search/><h3>Nenhum evento encontrado</h3><p>{query||stateFilter||cityFilter||typeFilter?'Tente alterar ou limpar os filtros.':'Não há eventos públicos nesta data.'}</p>{(query||stateFilter||cityFilter||typeFilter||showAllDates)&&<button type="button" className="button ghost" onClick={clearFilters}><X size={15}/>Limpar filtros</button>}</div>}
   </div>
 }
-function MapPage({events}:{events:MobilizationEvent[]}){return <div className="container page"><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> MAPA DE MOBILIZAÇÕES</div><h1>Mobilizações no Brasil</h1><p className="page-lead">Visualize as mobilizações por data, estado ou cidade. Escolha um período ou um dia específico, explore os pontos disponíveis e abra cada evento para conferir horário, local e fontes.</p><MapView events={events.filter(e=>e.public)}/></div>}
+function MapPage({events}:{events:MobilizationEvent[]}){
+  const cityProfile=useCityPreference();
+  const[showMyCityOnly,setShowMyCityOnly]=useState(false);
+  const city=cityProfile.preference?.city||'';
+  const state=cityProfile.preference?.state||'';
+  const publicEvents=events.filter(event=>event.public);
+  const filteredEvents=showMyCityOnly&&city&&state
+    ?publicEvents.filter(event=>normalizedSearchText(event.city)===normalizedSearchText(city)&&normalizedSearchText(event.state)===normalizedSearchText(state))
+    :publicEvents;
+  return <div className="container page">
+    <div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> MAPA DE MOBILIZAÇÕES</div>
+    <h1>Mobilizações no Brasil</h1>
+    <p className="page-lead">Visualize as mobilizações por data, estado ou cidade. Escolha um período ou um dia específico, explore os pontos disponíveis e abra cada evento para conferir horário, local e fontes.</p>
+    {cityProfile.user&&city&&state&&<div className="calendar-filter-actions"><button type="button" className="button ghost" aria-pressed={showMyCityOnly} onClick={()=>setShowMyCityOnly(value=>!value)}>{showMyCityOnly?'Mostrar todas as cidades':('Ver minha cidade: '+city+'/'+state)}</button></div>}
+    {cityProfile.user&&(!city||!state)&&<div className="callout info"><Info size={18}/><span>Cadastre sua cidade e estado para filtrar rapidamente o mapa.</span><Link to="/preferencias-alertas" className="button ghost">Cadastrar minha cidade</Link></div>}
+    {showMyCityOnly&&!filteredEvents.length&&<div className="callout info"><Info size={18}/><span>Nenhum evento público encontrado para {city}/{state} com os dados atuais.</span></div>}
+    <MapView events={filteredEvents}/>
+  </div>
+}
 function AboutPage(){return <div className="container page narrow"><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> SOBRE A AGENDA</div><h1>Uma agenda pública de mobilizações eleitorais.</h1><p className="page-lead">A Agenda reúne eventos e mobilizações em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, transformando informações espalhadas em uma agenda navegável, fácil de conferir e de atualizar.</p><div className="about-grid"><div><h2>Como funciona</h2><p>Cada evento tem data, horário, cidade, local, tipo e links para as fontes usadas na conferência.</p></div><div><h2>O que “verificado” significa</h2><p>Os campos essenciais foram comparados com uma ou mais publicações ou fontes identificáveis. Isso não substitui a checagem no dia do evento.</p></div><div><h2>Independente</h2><p>Este projeto não é oficial de campanha, partido, governo ou organização.</p></div><div><h2>Base editorial</h2><p>A primeira carga foi montada a partir das threads, pôsteres e fontes complementares identificadas na pesquisa.</p></div></div></div>}
 
 function AuthPage(){

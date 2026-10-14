@@ -10,7 +10,9 @@ test('city digest stays disabled until the sender and schedule are configured', 
   const preferences = await read('../src/components/CityEmailDigestPreferences.tsx');
   assert.match(env, /VITE_EMAIL_DIGEST_ENABLED=false/);
   assert.match(workflow, /VITE_EMAIL_DIGEST_ENABLED:.*'false'/);
-  assert.match(preferences, /if\(!EMAIL_DIGEST_ENABLED\)/);
+  assert.match(preferences, /disabled=\{busy\|\|!EMAIL_DIGEST_ENABLED\}/);
+  assert.match(preferences, /Quero receber notificações dentro do site/);
+  assert.match(preferences, /p_email_enabled:settings.enabled/);
 });
 
 test('digest signup has a separate, unchecked consent and only saves after a user action', async () => {

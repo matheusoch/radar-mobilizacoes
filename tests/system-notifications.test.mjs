@@ -8,31 +8,37 @@ test('system notifications cover approved Chat messages, milestones and the dail
   const migration = await read('../supabase/migrations/20261015144117_social_and_daily_notifications.sql');
   const app = await read('../src/App.tsx');
 
-  assert.match(migration, /create table if not exists public\\.system_notifications/);
-  assert.match(migration, /enable row level security/);
-  assert.match(migration, /after insert or update of status on public\\.chat_messages/);
-  assert.match(migration, /new\\.status is distinct from 'approved'/);
-  assert.match(migration, /u\\.id <> new\\.user_id/);
-  assert.match(migration, /array\\[25, 50, 100, 200, 500, 1000\\]/i);
-  assert.match(migration, /primary key \\(event_id, milestone\\)/);
-  assert.match(migration, /on conflict \\(user_id, dedupe_key\\) do nothing/);
-  assert.match(migration, /s\\.in_app_enabled is true/);
-  assert.match(migration, /create_daily_city_digest_notifications/);
-  assert.match(migration, /cron\\.schedule/);
-  assert.match(migration, /'0 23 \\* \\* \\*'/);
-  assert.match(migration, /America\\/Sao_Paulo/);
+  for (const phrase of [
+    'create table if not exists public.system_notifications',
+    'enable row level security',
+    'after insert or update of status on public.chat_messages',
+    "new.status is distinct from 'approved'",
+    'u.id <> new.user_id',
+    'array[25, 50, 100, 200, 500, 1000]',
+    'primary key (event_id, milestone)',
+    'on conflict (user_id, dedupe_key) do nothing',
+    's.in_app_enabled is true',
+    'create_daily_city_digest_notifications',
+    'cron.schedule',
+    "'0 23 * * *'",
+    'America/Sao_Paulo'
+  ]) assert.ok(migration.includes(phrase), 'Migration deve conter: ' + phrase);
 
-  assert.match(app, /from\\('system_notifications'\\)/);
-  assert.match(app, /Ver mensagem/);
-  assert.match(app, /Compartilhar evento/);
-  assert.match(app, /Ver agenda/);
-  assert.match(app, /new URLSearchParams\\(location\\.search\\)/);
+  for (const phrase of [
+    "from('system_notifications')",
+    'Ver mensagem',
+    'Compartilhar evento',
+    'Ver agenda',
+    'new URLSearchParams(location.search)'
+  ]) assert.ok(app.includes(phrase), 'Interface deve conter: ' + phrase);
 });
 
 test('daily digest URL restores date, city and state filters on the homepage', async () => {
   const app = await read('../src/App.tsx');
-  assert.match(app, /date:params\\.get\\('date'\\)\\|\\|''/);
-  assert.match(app, /city:params\\.get\\('city'\\)\\|\\|''/);
-  assert.match(app, /state:params\\.get\\('state'\\)\\|\\|''/);
-  assert.match(app, /period:params\\.get\\('date'\\)\\?'selected-date':'upcoming'/);
+  for (const phrase of [
+    "date:params.get('date')||''",
+    "city:params.get('city')||''",
+    "state:params.get('state')||''",
+    "period:params.get('date')?'selected-date':'upcoming'"
+  ]) assert.ok(app.includes(phrase), 'O filtro da agenda deve conter: ' + phrase);
 });

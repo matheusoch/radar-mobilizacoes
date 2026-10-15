@@ -1042,3 +1042,8 @@ body{background:var(--page);color:var(--ink)}
 .source-empty{margin:10px 0;padding:12px;border:1px dashed var(--line);border-radius:9px;color:var(--muted);font-size:12px}
 .source-add-form{margin-top:12px}
 @media(max-width:800px){.source-checks{grid-template-columns:1fr}.source-checks label{min-height:44px}.source-picker-head{align-items:flex-start}.source-pagination span{font-size:10px}}
+
+
+/* Ações das notificações ficam visíveis sem alterar o layout dos cards de evento. */
+.notification-action-label{justify-self:start;display:inline-flex;align-items:center;margin-top:2px;padding:5px 9px;border:1px solid #edc3bd;border-radius:8px;background:#fff;color:var(--accent)!important;font-size:10px!important;font-weight:800;line-height:1.2}
+.notification-item:hover .notification-action-label{background:var(--accent-soft);border-color:#d98a82}

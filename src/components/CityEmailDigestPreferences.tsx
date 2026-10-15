@@ -4,6 +4,8 @@ import {Bell,CheckCircle2,Info,LogIn,Mail,MapPin,ShieldCheck,XCircle} from 'luci
 import {Link,useLocation} from 'react-router-dom';
 import {BRAZILIAN_STATES} from '../lib/brazilianStates';
 import {supabase} from '../lib/supabase';
+import LocationAutocomplete from './LocationAutocomplete';
+import {canonicalizeLocation,canonicalizeLocationOptions} from '../lib/locationNormalization';
 
 type EmailFormat='resumo'|'cards'|'ambos';
 type DigestSettings={
@@ -32,6 +34,7 @@ export default function CityEmailDigestPreferences(){
   const[authLoading,setAuthLoading]=useState(true);
   const[loading,setLoading]=useState(true);
   const[settings,setSettings]=useState<DigestSettings>(DEFAULT_SETTINGS);
+  const[cityOptions,setCityOptions]=useState<string[]>([]);
   const[busy,setBusy]=useState(false);
   const[message,setMessage]=useState('');
   const[error,setError]=useState('');
@@ -49,6 +52,15 @@ export default function CityEmailDigestPreferences(){
       active=false;
       listener.subscription.unsubscribe();
     };
+  },[]);
+
+  useEffect(()=>{
+    if(!supabase)return;
+    let active=true;
+    supabase.from('events').select('city').eq('is_public',true).not('city','is',null).limit(5000).then(({data})=>{
+      if(active)setCityOptions(canonicalizeLocationOptions((data||[]).map((row:any)=>String(row.city||'')).filter(Boolean)));
+    });
+    return()=>{active=false};
   },[]);
 
   useEffect(()=>{
@@ -108,8 +120,9 @@ export default function CityEmailDigestPreferences(){
         setError('Confirme primeiro o e-mail da sua conta. Depois volte aqui para ativar os resumos.');
         return;
       }
+      const canonicalCity=canonicalizeLocation(settings.city,cityOptions);
       const{data:saveData,error:saveError}=await supabase.rpc('save_city_alert_preferences',{
-        p_city:settings.city.trim(),
+        p_city:canonicalCity,
         p_state:settings.state,
         p_in_app_enabled:settings.in_app_enabled,
         p_email_enabled:settings.enabled,
@@ -122,7 +135,7 @@ export default function CityEmailDigestPreferences(){
       const saved=(saveData||null) as Partial<DigestSettings>|null;
       setSettings(current=>({
         ...current,
-        city:typeof saved?.city==='string'?saved.city:current.city,
+        city:typeof saved?.city==='string'?canonicalizeLocation(saved.city,cityOptions):canonicalCity,
         state:typeof saved?.state==='string'?saved.state:current.state,
         enabled:typeof saved?.enabled==='boolean'?saved.enabled:false,
         in_app_enabled:typeof saved?.in_app_enabled==='boolean'?saved.in_app_enabled:false,
@@ -166,7 +179,8 @@ export default function CityEmailDigestPreferences(){
     <p className="page-lead">Escolha a cidade e decida se quer notificações dentro do site e, quando estiver ativo, um resumo diário por e-mail às 8h (horário de Brasília).</p>
     <div className="city-digest-panel">
       <label className="city-digest-field"><span><MapPin size={15}/>Cidade</span>
-        <input value={settings.city} onChange={event=>setSettings(current=>({...current,city:event.target.value}))} maxLength={100} autoComplete="address-level2" placeholder="Ex.: Fortaleza" disabled={busy} required={settings.enabled||settings.in_app_enabled}/>
+        <LocationAutocomplete value={settings.city} onChange={city=>setSettings(current=>({...current,city}))} options={cityOptions} label="Cidade" maxLength={100} autoComplete="address-level2" placeholder="Ex.: Belo Horizonte" className="location-filter-input" disabled={busy} required={settings.enabled||settings.in_app_enabled}/>
+        <small className="location-suggestion-help">Digite para ver sugestões. Ao sair do campo, o nome será padronizado automaticamente.</small>
       </label>
       <label className="city-digest-field"><span>Estado</span>
         <select value={settings.state} onChange={event=>setSettings(current=>({...current,state:event.target.value}))} autoComplete="address-level1" disabled={busy} required={settings.enabled||settings.in_app_enabled}>

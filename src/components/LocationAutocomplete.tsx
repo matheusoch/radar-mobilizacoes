@@ -2,6 +2,7 @@ import {useId} from 'react';
 import {canonicalizeLocation} from '../lib/locationNormalization';
 
 type LocationAutocompleteProps={
+  canonicalize?:(value:string,options:string[])=>string;
   value:string;
   onChange:(value:string)=>void;
   options:string[];
@@ -16,7 +17,7 @@ type LocationAutocompleteProps={
 };
 
 export default function LocationAutocomplete({
-  value,onChange,options,label,placeholder='',className='',disabled=false,required=false,maxLength=100,autoComplete,onBlur
+  value,onChange,options,label,placeholder='',className='',disabled=false,required=false,maxLength=100,autoComplete,onBlur,canonicalize
 }:LocationAutocompleteProps){
   const generatedId=useId();
   const listId='location-options-'+generatedId.replace(/[^a-zA-Z0-9_-]/g,'');
@@ -26,7 +27,7 @@ export default function LocationAutocomplete({
       value={value}
       onChange={event=>onChange(event.target.value)}
       onBlur={()=>{
-        if(value.trim())onChange(canonicalizeLocation(value,options));
+        if(value.trim())onChange(canonicalize?canonicalize(value,options):canonicalizeLocation(value,options));
         onBlur?.();
       }}
       list={listId}

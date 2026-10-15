@@ -22,6 +22,7 @@ import ShareSection from './components/ShareSection';
 import CityEmailDigestPreferences from './components/CityEmailDigestPreferences';
 import EmailPrivacyPage from './components/EmailPrivacyPage';
 import {BRAZILIAN_STATES} from './lib/brazilianStates';
+import {canonicalizeLocationOptions,normalizeBrazilianStateKey,normalizeLocationKey} from './lib/locationNormalization';
 import {extractClockTime,formatTimeText} from './utils/formatTime';
 import {StatusBadge} from './components/Badge';
 import {getEvents,getAdminEvents,getSources,resolveImageUrl,mapDbEvent,getAttendanceStatus,toggleEventAttendance,recordPageView,recordEventAction} from './lib/data';
@@ -128,8 +129,8 @@ function matchesAgendaFilters(event:MobilizationEvent,filters:FiltersState,today
   const modality=deriveEventModality(event);
   if(skip!=='modality'&&filters.modality&&modality!==filters.modality)return false;
   const ignorePhysicalLocation=filters.modality==='Virtual'&&modality==='Virtual';
-  if(skip!=='state'&&filters.state&&!ignorePhysicalLocation&&((modality!=='Presencial'&&modality!=='Híbrido')||event.state!==filters.state))return false;
-  if(skip!=='city'&&filters.city&&!ignorePhysicalLocation&&!physicalCitiesForEvent(event,modality).includes(filters.city))return false;
+  if(skip!=='state'&&filters.state&&!ignorePhysicalLocation&&((modality!=='Presencial'&&modality!=='Híbrido')||normalizeBrazilianStateKey(event.state)!==normalizeBrazilianStateKey(filters.state)))return false;
+  if(skip!=='city'&&filters.city&&!ignorePhysicalLocation&&!physicalCitiesForEvent(event,modality).some(city=>normalizeLocationKey(city)===normalizeLocationKey(filters.city)))return false;
   if(skip!=='type'&&filters.type&&event.type!==filters.type)return false;
   if(filters.search&&!normalizedSearchText(`${event.title} ${event.city} ${event.state} ${event.venue} ${event.address||''} ${event.type}`).includes(normalizedSearchText(filters.search.trim())))return false;
   if(filters.date&&event.date!==filters.date)return false;
@@ -139,7 +140,7 @@ function matchesAgendaFilters(event:MobilizationEvent,filters:FiltersState,today
   return true;
 }
 function agendaFilterOptions(events:MobilizationEvent[],filters:FiltersState,today:string,lastDay:string,field:AgendaFilterField){
-  const options=[...new Set(events.filter(event=>matchesAgendaFilters(event,filters,today,lastDay,field)).flatMap(event=>{
+  const rawOptions=[...new Set(events.filter(event=>matchesAgendaFilters(event,filters,today,lastDay,field)).flatMap(event=>{
     if(field==='city')return physicalCitiesForEvent(event);
     if(field==='modality'){
       const modality=deriveEventModality(event);
@@ -149,8 +150,9 @@ function agendaFilterOptions(events:MobilizationEvent[],filters:FiltersState,tod
     if(field==='state'&&deriveEventModality(event)==='Virtual')return [];
     return value?[value]:[];
   }))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const options=field==='city'||field==='state'?canonicalizeLocationOptions(rawOptions):rawOptions;
   const selected=filters[field];
-  return selected&&!options.includes(selected)?[selected,...options]:options;
+  return selected&&!options.some(option=>normalizeLocationKey(option)===normalizeLocationKey(selected))?[selected,...options]:options;
 }
 
 type AppNotification={

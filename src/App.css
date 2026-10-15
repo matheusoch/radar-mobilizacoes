@@ -1056,3 +1056,11 @@ body{background:var(--page);color:var(--ink)}
 .venue-change-notice span{font-size:13px}
 .notification-action-label{justify-self:start;display:inline-flex;align-items:center;margin-top:2px;padding:5px 9px;border:1px solid #edc3bd;border-radius:8px;background:#fff;color:var(--accent)!important;font-size:10px!important;font-weight:800;line-height:1.2}
 .notification-item:hover .notification-action-label{background:var(--accent-soft);border-color:#d98a82}
+
+
+/* Sugestões de cidade e estado com nomes padronizados, sem alterar os cards. */
+.location-filter-field{display:grid;gap:4px;min-width:0;color:var(--muted);font-size:11px;font-weight:800}
+.location-filter-field>span{line-height:1.3}
+.location-filter-input{display:block;width:100%;min-width:0;min-height:42px;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px 11px;background:#fff;color:var(--ink);font:inherit;font-size:13px;font-weight:500}
+.location-filter-input:focus-visible{outline:3px solid rgba(162,29,53,.3);outline-offset:2px}
+.location-suggestion-help{display:block;color:var(--muted);font-size:11px;font-weight:500;line-height:1.45}

@@ -7,6 +7,8 @@ import {useShareCardAssets} from '../utils/useShareCardAssets';
 import {SHARE_SHORT_URL,buildCardShareText,type ShareContent} from '../utils/socialShare';
 import ShareCardActions from './ShareCardActions';
 import {formatTimeText} from '../utils/formatTime';
+import LocationAutocomplete from './LocationAutocomplete';
+import {canonicalizeLocationOptions,canonicalizeBrazilianState,normalizeBrazilianStateKey,stateSuggestionOptions,normalizeLocationKey} from '../lib/locationNormalization';
 
 const HASHTAGS=['AgendaDeMobilizacoes'] as const;
 
@@ -50,16 +52,16 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   const dateValues=Object.fromEntries(dateParts.map(part=>[part.type,part.value]));
   const today=dateValues.year+'-'+dateValues.month+'-'+dateValues.day;
   const upcomingEvents=useMemo(()=>events.filter(event=>event.public&&event.date>=today),[events,today]);
-  const states=useMemo(()=>[...new Set(upcomingEvents.filter(event=>!dateFilter||event.date===dateFilter).map(event=>event.state).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR')),[upcomingEvents,dateFilter]);
-  const cities=useMemo(()=>[...new Set(upcomingEvents.filter(event=>(!dateFilter||event.date===dateFilter)&&(!stateFilter||event.state===stateFilter)).map(event=>event.city).filter(city=>city&&city.trim()))].sort((a,b)=>a.localeCompare(b,'pt-BR')),[upcomingEvents,dateFilter,stateFilter]);
+  const states=useMemo(()=>stateSuggestionOptions(upcomingEvents.filter(event=>!dateFilter||event.date===dateFilter).map(event=>event.state).filter(Boolean)),[upcomingEvents,dateFilter]);
+  const cities=useMemo(()=>canonicalizeLocationOptions(upcomingEvents.filter(event=>(!dateFilter||event.date===dateFilter)&&(!stateFilter||normalizeBrazilianStateKey(event.state)===normalizeBrazilianStateKey(stateFilter))).map(event=>event.city).filter(city=>city&&city.trim())),[upcomingEvents,dateFilter,stateFilter]);
 
   const candidates=useMemo(()=>{
     const normalize=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
     const q=normalize(query);
     return groupSort(upcomingEvents.filter(event=>{
       if(dateFilter&&event.date!==dateFilter)return false;
-      if(stateFilter&&event.state!==stateFilter)return false;
-      if(cityFilter&&normalize(event.city)!==normalize(cityFilter))return false;
+      if(stateFilter&&normalizeBrazilianStateKey(event.state)!==normalizeBrazilianStateKey(stateFilter))return false;
+      if(cityFilter&&normalizeLocationKey(event.city)!==normalizeLocationKey(cityFilter))return false;
       if(!q)return true;
       return normalize([event.title,event.city,event.state,event.venue,event.type].filter(Boolean).join(' ')).includes(q);
     }));
@@ -127,17 +129,11 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
           </div>
           <label className='share-builder-select'>
             <span>Estado</span>
-            <select value={stateFilter} onChange={e=>{setStateFilter(e.target.value);setCityFilter('')}} aria-label='Filtrar por estado'>
-              <option value=''>Todos os estados</option>
-              {states.map(state=><option key={state} value={state}>{state}</option>)}
-            </select>
+            <LocationAutocomplete value={stateFilter} onChange={value=>{setStateFilter(value);setCityFilter('')}} options={states} canonicalize={canonicalizeBrazilianState} label='Filtrar por estado' placeholder='Todos os estados' className='location-filter-input'/>
           </label>
           <label className='share-builder-select'>
             <span>Cidade</span>
-            <select value={cityFilter} onChange={e=>setCityFilter(e.target.value)} aria-label='Filtrar por cidade'>
-              <option value=''>Todas as cidades</option>
-              {cities.map(city=><option key={city} value={city}>{city}</option>)}
-            </select>
+            <LocationAutocomplete value={cityFilter} onChange={setCityFilter} options={cities} label='Filtrar por cidade' placeholder='Todas as cidades' className='location-filter-input'/>
           </label>
           <div className='share-builder-date'>
             <label htmlFor='share-date-filter'>Data</label>

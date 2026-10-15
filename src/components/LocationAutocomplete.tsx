@@ -53,7 +53,7 @@ export default function LocationAutocomplete({
       autoComplete={autoComplete||'off'}
     />
     {focused&&matches.length>0&&<div id={listId} className="location-suggestion-list" role="listbox" aria-label={'Sugestões para '+label}>
-      {matches.map(option=><button type="button" role="option" aria-selected={normalizeLocationKey(option)===key} className="location-suggestion-option" key={option} onPointerDown={event=>event.preventDefault()} onClick={()=>choose(option)} key={option}>
+      {matches.map(option=><button type="button" role="option" aria-selected={normalizeLocationKey(option)===key} className="location-suggestion-option" onPointerDown={event=>event.preventDefault()} onClick={()=>choose(option)} key={option}>
         <span className="location-suggestion-icon">⌕</span><span>{option}</span>
       </button>)}
     </div>}

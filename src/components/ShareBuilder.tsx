@@ -8,7 +8,7 @@ import {SHARE_SHORT_URL,buildCardShareText,type ShareContent} from '../utils/soc
 import ShareCardActions from './ShareCardActions';
 import {formatTimeText} from '../utils/formatTime';
 import LocationAutocomplete from './LocationAutocomplete';
-import {canonicalizeLocationOptions} from '../lib/locationNormalization';
+import {canonicalizeLocationOptions,normalizeLocationKey} from '../lib/locationNormalization';
 
 const HASHTAGS=['AgendaDeMobilizacoes'] as const;
 
@@ -53,7 +53,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   const today=dateValues.year+'-'+dateValues.month+'-'+dateValues.day;
   const upcomingEvents=useMemo(()=>events.filter(event=>event.public&&event.date>=today),[events,today]);
   const states=useMemo(()=>canonicalizeLocationOptions(upcomingEvents.filter(event=>!dateFilter||event.date===dateFilter).map(event=>event.state).filter(Boolean)),[upcomingEvents,dateFilter]);
-  const cities=useMemo(()=>canonicalizeLocationOptions(upcomingEvents.filter(event=>(!dateFilter||event.date===dateFilter)&&(!stateFilter||normalize(event.state)===normalize(stateFilter))).map(event=>event.city).filter(city=>city&&city.trim())),[upcomingEvents,dateFilter,stateFilter]);
+  const cities=useMemo(()=>canonicalizeLocationOptions(upcomingEvents.filter(event=>(!dateFilter||event.date===dateFilter)&&(!stateFilter||normalizeLocationKey(event.state)===normalizeLocationKey(stateFilter))).map(event=>event.city).filter(city=>city&&city.trim())),[upcomingEvents,dateFilter,stateFilter]);
 
   const candidates=useMemo(()=>{
     const normalize=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();

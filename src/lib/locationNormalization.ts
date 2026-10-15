@@ -1,3 +1,5 @@
+import {BRAZILIAN_STATES} from './brazilianStates';
+
 export function normalizeLocationKey(value:string){
   return value.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g,' ').trim();
 }
@@ -31,4 +33,29 @@ export function canonicalizeLocationOptions(values:string[]){
     if(key&&!byKey.has(key))byKey.set(key,formatted);
   }
   return [...byKey.values()].sort((a,b)=>a.localeCompare(b,'pt-BR',{sensitivity:'base'}));
+}
+
+export function normalizeBrazilianStateKey(value:string){
+  const key=normalizeLocationKey(value);
+  const match=BRAZILIAN_STATES.find(state=>state.code.toLowerCase()===key||normalizeLocationKey(state.name)===key);
+  return match?.code||key;
+}
+
+export function canonicalizeBrazilianState(value:string,options:string[]=[]){
+  const key=normalizeLocationKey(value);
+  const match=BRAZILIAN_STATES.find(state=>state.code.toLowerCase()===key||normalizeLocationKey(state.name)===key);
+  if(match)return match.code;
+  return canonicalizeLocation(value,options);
+}
+
+export function stateSuggestionOptions(values:string[]){
+  const matched=BRAZILIAN_STATES.filter(state=>values.some(value=>{
+    const key=normalizeLocationKey(value);
+    return key===state.code.toLowerCase()||key===normalizeLocationKey(state.name);
+  }));
+  const extras=values.filter(value=>!BRAZILIAN_STATES.some(state=>{
+    const key=normalizeLocationKey(value);
+    return key===state.code.toLowerCase()||key===normalizeLocationKey(state.name);
+  }));
+  return [...new Set([...matched.flatMap(state=>[state.code,state.name]),...canonicalizeLocationOptions(extras)])];
 }

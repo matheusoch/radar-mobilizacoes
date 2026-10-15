@@ -1,13 +1,13 @@
 import {BRAZILIAN_STATES} from './brazilianStates';
 
 export function normalizeLocationKey(value:string){
-  return value.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g,' ').trim();
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g,' ').trim();
 }
 
 const LOWERCASE_PARTICLES=new Set(['da','das','de','do','dos','e']);
 
 export function formatBrazilianPlaceName(value:string){
-  const trimmed=value.trim().replace(/\\s+/g,' ');
+  const trimmed=value.trim().replace(/\s+/g,' ');
   if(!trimmed)return '';
   return trimmed.split(' ').map((word,index)=>{
     if(/^[A-Z]{2,3}$/.test(word))return word;
@@ -18,7 +18,7 @@ export function formatBrazilianPlaceName(value:string){
 }
 
 export function canonicalizeLocation(value:string,options:string[]=[]){
-  const trimmed=value.trim().replace(/\\s+/g,' ');
+  const trimmed=value.trim().replace(/\s+/g,' ');
   if(!trimmed)return '';
   const key=normalizeLocationKey(trimmed);
   const match=options.find(option=>normalizeLocationKey(option)===key);

@@ -1035,3 +1035,8 @@ body{background:var(--page);color:var(--ink)}
   .source-picker-list-tools,.editorial-audit-filters{grid-template-columns:1fr}
   .source-picker-list-tools>.analytics-note{text-align:left}
 }
+
+
+/* Ações das notificações ficam visíveis sem alterar o layout dos cards de evento. */
+.notification-action-label{justify-self:start;display:inline-flex;align-items:center;margin-top:2px;padding:5px 9px;border:1px solid #edc3bd;border-radius:8px;background:#fff;color:var(--accent)!important;font-size:10px!important;font-weight:800;line-height:1.2}
+.notification-item:hover .notification-action-label{background:var(--accent-soft);border-color:#d98a82}

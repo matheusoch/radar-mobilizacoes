@@ -1,4 +1,6 @@
 import {Search,X} from 'lucide-react';
+import LocationAutocomplete from './LocationAutocomplete';
+import {canonicalizeLocationOptions} from '../lib/locationNormalization';
 
 export interface FiltersState{
   search:string;
@@ -21,6 +23,8 @@ export default function Filters({value,onChange,states,cities,types,modalities}:
   const set=(key:keyof FiltersState,nextValue:string)=>onChange({...value,[key]:nextValue,...(key==='period'&&nextValue!=='selected-date'?{date:''}:{})});
   const clear=()=>onChange({search:'',state:'',city:'',type:'',period:'upcoming',modality:'',date:''});
   const hasFilters=Boolean(value.search.trim()||value.state||value.city||value.type||value.modality||value.date||value.period!=='upcoming');
+  const stateOptions=canonicalizeLocationOptions(states);
+  const cityOptions=canonicalizeLocationOptions(cities);
   const modalityLabel=(modality:string)=>({
     Presencial:'📍 Presencial',
     Virtual:'🌐 Virtual',
@@ -44,14 +48,14 @@ export default function Filters({value,onChange,states,cities,types,modalities}:
         <option value="">Todas as modalidades</option>
         {modalities.map(modality=><option key={modality} value={modality}>{modalityLabel(modality)}</option>)}
       </select>
-      <select aria-label="Filtrar por estado" value={value.state} onChange={event=>set('state',event.target.value)}>
-        <option value="">Todos os estados</option>
-        {states.map(state=><option key={state} value={state}>{state}</option>)}
-      </select>
-      <select aria-label="Filtrar por cidade" value={value.city} onChange={event=>set('city',event.target.value)}>
-        <option value="">Todas as cidades</option>
-        {cities.map(city=><option key={city} value={city}>{city}</option>)}
-      </select>
+      <label className="location-filter-field">
+        <span>Estado</span>
+        <LocationAutocomplete value={value.state} onChange={next=>set('state',next)} options={stateOptions} label="Filtrar por estado" placeholder="Todos os estados" className="location-filter-input"/>
+      </label>
+      <label className="location-filter-field">
+        <span>Cidade</span>
+        <LocationAutocomplete value={value.city} onChange={next=>set('city',next)} options={cityOptions} label="Filtrar por cidade" placeholder="Todas as cidades" className="location-filter-input"/>
+      </label>
       <select aria-label="Filtrar por tipo" value={value.type} onChange={event=>set('type',event.target.value)}>
         <option value="">Todos os tipos</option>
         {types.map(type=><option key={type} value={type}>{type}</option>)}

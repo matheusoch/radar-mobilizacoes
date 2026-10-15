@@ -235,7 +235,7 @@ function useCityPreference(){
 
 type AppNotification={
   id:string;
-  type:'chat_reply'|'city_event'|'submission_approved'|'submission_rejected';
+  type:'chat_reply'|'city_event'|'submission_approved'|'submission_rejected'|'chat_new_message'|'event_milestone'|'daily_city_digest';
   actor_name:string;
   chat_message_id:string;
   parent_message_id:string;
@@ -258,7 +258,7 @@ function NotificationBell(){
     let active=true;
     const load=async()=>{
       setLoading(true);
-      const[chatResult,cityResult,submissionResult]=await Promise.all([
+      const[chatResult,cityResult,submissionResult,systemResult]=await Promise.all([
         db.from('notifications')
           .select('id,type,actor_name,chat_message_id,parent_message_id,message_preview,created_at,read_at')
           .eq('user_id',user.id)
@@ -273,7 +273,12 @@ function NotificationBell(){
           .select('id,notification_type,event_slug,event_title,title,message,created_at,read_at')
           .eq('user_id',user.id)
           .order('created_at',{ascending:false})
-          .limit(20)
+          .limit(20),
+        db.from('system_notifications')
+          .select('id,notification_type,title,message,target_url,payload,created_at,read_at')
+          .eq('user_id',user.id)
+          .order('created_at',{ascending:false})
+          .limit(30)
       ]);
       const chatItems=(chatResult.error?[]:(chatResult.data||[])) as AppNotification[];
       const cityItems:AppNotification[]=(cityResult.error?[]:(cityResult.data||[])).map((row:any)=>({
@@ -303,7 +308,29 @@ function NotificationBell(){
           ?'/evento/'+encodeURIComponent(row.event_slug)
           :'/chat?novo=1'
       }));
-      if(active)setNotifications([...chatItems,...cityItems,...submissionItems].sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)).slice(0,30));
+      const systemItems:AppNotification[]=(systemResult.error?[]:(systemResult.data||[])).map((row:any)=>{
+        const payload=(row.payload||{}) as Record<string,unknown>;
+        const targetUrl=row.notification_type==='daily_city_digest'
+          ?'/?'+new URLSearchParams({
+            date:typeof payload.date==='string'?payload.date:'',
+            city:typeof payload.city==='string'?payload.city:'',
+            state:typeof payload.state==='string'?payload.state:''
+          }).toString()
+          :row.target_url||'/';
+        return {
+          id:row.id,
+          type:row.notification_type as AppNotification['type'],
+          actor_name:'Agenda de Mobilizações',
+          chat_message_id:'',
+          parent_message_id:'',
+          title:row.title||undefined,
+          message_preview:row.message||row.title||'Nova notificação da Agenda.',
+          created_at:row.created_at,
+          read_at:row.read_at,
+          target_url:targetUrl
+        };
+      });
+      if(active)setNotifications([...chatItems,...cityItems,...submissionItems,...systemItems].sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)).slice(0,40));
       if(active)setLoading(false);
     };
     void load();
@@ -318,7 +345,9 @@ function NotificationBell(){
       ?'city_event_notifications'
       :item.type==='submission_approved'||item.type==='submission_rejected'
         ?'event_submission_notifications'
-        :'notifications';
+        :item.type==='chat_new_message'||item.type==='event_milestone'||item.type==='daily_city_digest'
+          ?'system_notifications'
+          :'notifications';
     const{error}=await supabase.from(table).update({read_at:readAt}).eq('id',item.id).eq('user_id',user.id).is('read_at',null);
     if(!error)setNotifications(previous=>previous.map(current=>current.id===item.id&&current.type===item.type?{...current,read_at:readAt}:current));
   };
@@ -328,7 +357,8 @@ function NotificationBell(){
     await Promise.all([
       supabase.from('notifications').update({read_at:readAt}).eq('user_id',user.id).is('read_at',null),
       supabase.from('city_event_notifications').update({read_at:readAt}).eq('user_id',user.id).is('read_at',null),
-      supabase.from('event_submission_notifications').update({read_at:readAt}).eq('user_id',user.id).is('read_at',null)
+      supabase.from('event_submission_notifications').update({read_at:readAt}).eq('user_id',user.id).is('read_at',null),
+      supabase.from('system_notifications').update({read_at:readAt}).eq('user_id',user.id).is('read_at',null)
     ]);
     setNotifications(previous=>previous.map(item=>({...item,read_at:item.read_at||readAt})));
   };
@@ -343,7 +373,7 @@ function NotificationBell(){
       :loading&&notifications.length===0?<div className="notifications-empty">Carregando notificações…</div>
       :notifications.length===0?<div className="notifications-empty"><Bell size={22}/><p>Você ainda não tem notificações.</p><span>Aqui aparecem respostas do chat, atualizações sobre seus envios e novos eventos das cidades que você acompanha.</span></div>
       :<div className="notification-list">{notifications.map(item=><Link key={item.type+':'+item.id} to={item.target_url|| (item.type==='city_event'||item.type==='submission_approved'?'/evento/'+encodeURIComponent(item.event_slug||''):item.type==='submission_rejected'?'/chat?novo=1':'/chat?mensagem='+encodeURIComponent(item.chat_message_id))} className={'notification-item'+(!item.read_at?' unread':'')} onClick={()=>{setOpen(false);if(!item.read_at)void markRead(item)}}>
-        <span className="notification-dot" aria-hidden="true"/><span className="notification-copy"><strong>{item.title||(item.type==='city_event'?'Novo evento na sua cidade':item.type==='submission_approved'?'Seu evento foi aprovado':item.type==='submission_rejected'?'Seu evento não foi aprovado':item.actor_name==='Admin'?'A equipe da Agenda respondeu ao seu comentário':item.actor_name+' respondeu ao seu comentário')}</strong><span>{item.message_preview}</span><small>{new Date(item.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</small></span>
+        <span className="notification-dot" aria-hidden="true"/><span className="notification-copy"><strong>{item.title||(item.type==='city_event'?'Novo evento na sua cidade':item.type==='submission_approved'?'Seu evento foi aprovado':item.type==='submission_rejected'?'Seu evento não foi aprovado':item.actor_name==='Admin'?'A equipe da Agenda respondeu ao seu comentário':item.actor_name+' respondeu ao seu comentário')}</strong><span>{item.message_preview}</span>{(item.type==='chat_new_message'||item.type==='event_milestone'||item.type==='daily_city_digest')&&<span className="notification-action-label">{item.type==='chat_new_message'?'Ver mensagem':item.type==='event_milestone'?'Compartilhar evento':'Ver agenda'}</span>}<small>{new Date(item.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</small></span>
       </Link>)}</div>}
     </div>}
   </div>;
@@ -384,6 +414,18 @@ function Home({events}:{events:MobilizationEvent[]}){
   lastDate.setDate(lastDate.getDate()+7);
   const lastDay=localDateKey(lastDate);
   const[filters,setFilters]=useState<FiltersState>({search:'',state:'',city:'',type:'',period:'upcoming',modality:'',date:''});
+  const location=useLocation();
+  useEffect(()=>{
+    const params=new URLSearchParams(location.search);
+    if(!params.has('date')&&!params.has('city')&&!params.has('state'))return;
+    setFilters(current=>({
+      ...current,
+      city:params.get('city')||'',
+      state:params.get('state')||'',
+      date:params.get('date')||'',
+      period:params.get('date')?'selected-date':'upcoming'
+    }));
+  },[location.search]);
   const[sortBy,setSortBy]=useState<AgendaSort>('chronological');
   const cityProfile=useCityPreference();
   const[showMyCityOnly,setShowMyCityOnly]=useState(false);

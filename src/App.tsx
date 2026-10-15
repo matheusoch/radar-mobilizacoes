@@ -155,7 +155,7 @@ function agendaFilterOptions(events:MobilizationEvent[],filters:FiltersState,tod
 
 type AppNotification={
   id:string;
-  type:'chat_reply'|'city_event'|'chat_new_message'|'event_milestone'|'daily_city_digest';
+  type:'chat_reply'|'city_event'|'chat_new_message'|'event_milestone'|'daily_city_digest'|'event_relocation';
   actor_name:string;
   chat_message_id:string;
   parent_message_id:string;
@@ -249,7 +249,7 @@ function NotificationBell(){
     const readAt=new Date().toISOString();
     const table=item.type==='city_event'
       ?'city_event_notifications'
-      :item.type==='chat_new_message'||item.type==='event_milestone'||item.type==='daily_city_digest'
+      :item.type==='chat_new_message'||item.type==='event_milestone'||item.type==='daily_city_digest'||item.type==='event_relocation'
         ?'system_notifications'
         :'notifications';
     const{error}=await supabase.from(table).update({read_at:readAt}).eq('id',item.id).eq('user_id',user.id).is('read_at',null);
@@ -275,7 +275,7 @@ function NotificationBell(){
       :loading&&notifications.length===0?<div className="notifications-empty">Carregando notificações…</div>
       :notifications.length===0?<div className="notifications-empty"><Bell size={22}/><p>Você ainda não tem notificações.</p><span>Aqui aparecem respostas aos seus comentários e novos eventos da cidade cadastrada nos alertas.</span></div>
       :<div className="notification-list">{notifications.map(item=><Link key={item.type+':'+item.id} to={item.target_url||(item.type==='city_event'?'/evento/'+encodeURIComponent(item.event_slug||''):'/chat?mensagem='+encodeURIComponent(item.chat_message_id))} className={'notification-item'+(!item.read_at?' unread':'')} onClick={()=>{setOpen(false);if(!item.read_at)void markRead(item)}}>
-        <span className="notification-dot" aria-hidden="true"/><span className="notification-copy"><strong>{item.title||(item.type==='city_event'?'Novo evento na sua cidade':item.type==='chat_new_message'?'Nova mensagem no Chat':item.type==='event_milestone'?'Meta de participação alcançada':item.type==='daily_city_digest'?'Agenda de amanhã':item.actor_name==='Admin'?'A equipe da Agenda respondeu ao seu comentário':item.actor_name+' respondeu ao seu comentário')}</strong><span>{item.message_preview}</span>{(item.type==='chat_new_message'||item.type==='event_milestone'||item.type==='daily_city_digest')&&<span className="notification-action-label">{item.type==='chat_new_message'?'Ver mensagem':item.type==='event_milestone'?'Compartilhar evento':'Ver agenda'}</span>}<small>{new Date(item.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</small></span>
+        <span className="notification-dot" aria-hidden="true"/><span className="notification-copy"><strong>{item.title||(item.type==='city_event'?'Novo evento na sua cidade':item.type==='chat_new_message'?'Nova mensagem no Chat':item.type==='event_milestone'?'Meta de participação alcançada':item.type==='daily_city_digest'?'Agenda de amanhã':item.type==='event_relocation'?'Mudança de local do evento':item.actor_name==='Admin'?'A equipe da Agenda respondeu ao seu comentário':item.actor_name+' respondeu ao seu comentário')}</strong><span>{item.message_preview}</span>{(item.type==='chat_new_message'||item.type==='event_milestone'||item.type==='daily_city_digest'||item.type==='event_relocation')&&<span className="notification-action-label">{item.type==='chat_new_message'?'Ver mensagem':item.type==='event_milestone'?'Compartilhar evento':item.type==='event_relocation'?'Conferir novo local':'Ver agenda'}</span>}<small>{new Date(item.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</small></span>
       </Link>)}</div>}
     </div>}
   </div>;
@@ -647,9 +647,10 @@ function EventPage({events,sources}:{events:MobilizationEvent[];sources:EventSou
     <div className="detail-grid">
       <div className="detail-main">
         <div className="detail-state-head">
-          <div><div className="eyebrow">{event.type} · {event.state||'Brasil'}</div><p className="detail-location">{event.city}{event.state?', '+event.state:''}</p><div className="detail-status"><StatusBadge status={event.status}/></div></div>
+          <div><div className="eyebrow">{event.type} · {event.state||'Brasil'}</div><p className="detail-location">{event.city}{event.state?', '+event.state:''}</p><div className="detail-status"><StatusBadge status={event.status}/>{event.id==='convoque-sao-paulo-2026-10-18'&&<span className="new-venue-badge">Novo lugar</span>}</div></div>
         </div>
         <h1>{event.title}</h1>
+        {event.id==='convoque-sao-paulo-2026-10-18'&&<div className="venue-change-notice" role="status"><strong>📍 Novo lugar: Av. Faria Lima</strong><span>O local deste evento mudou. Confira o endereço e os detalhes antes de sair.</span></div>}
         <div className="detail-meta">
           <div>📅 {fmtDate(event.date)}</div>
           <div>🕐 {formatTimeText(event.time_label||event.time)||'Horário não informado'}</div>

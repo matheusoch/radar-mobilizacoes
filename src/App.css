@@ -1047,3 +1047,12 @@ body{background:var(--page);color:var(--ink)}
 /* Ações das notificações ficam visíveis sem alterar o layout dos cards de evento. */
 .notification-action-label{justify-self:start;display:inline-flex;align-items:center;margin-top:2px;padding:5px 9px;border:1px solid #edc3bd;border-radius:8px;background:#fff;color:var(--accent)!important;font-size:10px!important;font-weight:800;line-height:1.2}
 .notification-item:hover .notification-action-label{background:var(--accent-soft);border-color:#d98a82}
+
+
+/* Aviso de mudança de local: aplicado apenas na página de detalhes do evento. */
+.new-venue-badge{display:inline-flex;align-items:center;gap:5px;margin-left:8px;padding:5px 10px;border-radius:999px;background:#a21d35;color:#fff;font-size:11px;font-weight:900;letter-spacing:.02em;vertical-align:middle}
+.venue-change-notice{display:flex;flex-direction:column;gap:5px;margin:16px 0;padding:14px 16px;border:1px solid #e5aab4;border-left:4px solid #a21d35;border-radius:12px;background:#fff4f5;color:#5b1724;line-height:1.5}
+.venue-change-notice strong{font-size:15px}
+.venue-change-notice span{font-size:13px}
+.notification-action-label{justify-self:start;display:inline-flex;align-items:center;margin-top:2px;padding:5px 9px;border:1px solid #edc3bd;border-radius:8px;background:#fff;color:var(--accent)!important;font-size:10px!important;font-weight:800;line-height:1.2}
+.notification-item:hover .notification-action-label{background:var(--accent-soft);border-color:#d98a82}

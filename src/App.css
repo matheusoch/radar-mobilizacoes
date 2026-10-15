@@ -1071,3 +1071,46 @@ body{background:var(--page);color:var(--ink)}
 .location-suggestion-option{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:10px 12px;border:0;border-radius:8px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .location-suggestion-option:hover,.location-suggestion-option[aria-selected="true"]{background:#fbeded}
 .location-suggestion-icon{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#f8e4e6;color:#a21d35;font-size:18px;flex-shrink:0}
+
+
+/* Campos de localização da tela inicial com as mesmas dimensões dos demais filtros. */
+.filter-row>select,
+.filter-row>.clear-btn,
+.filter-row>.location-filter-field .location-filter-input{
+  height:44px;
+  min-height:44px;
+  box-sizing:border-box;
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:10px 12px;
+  font:inherit;
+  font-size:14px;
+  line-height:20px;
+}
+.filter-row>.location-filter-field{
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  gap:0;
+  min-width:0;
+}
+.filter-row>.location-filter-field>span{
+  display:none;
+}
+.filter-row>.location-filter-field .location-filter-input{
+  width:100%;
+  background:#fff;
+  color:#444;
+  font-weight:400;
+}
+@media(max-width:620px){
+  .filter-row>select,
+  .filter-row>.clear-btn,
+  .filter-row>.location-filter-field{
+    width:100%;
+    min-width:0;
+  }
+  .filter-row>.location-filter-field .location-filter-input{
+    width:100%;
+  }
+}

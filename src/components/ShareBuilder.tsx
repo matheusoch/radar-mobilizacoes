@@ -60,7 +60,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
     const q=normalize(query);
     return groupSort(upcomingEvents.filter(event=>{
       if(dateFilter&&event.date!==dateFilter)return false;
-      if(stateFilter&&event.state!==stateFilter)return false;
+      if(stateFilter&&normalizeLocationKey(event.state)!==normalizeLocationKey(stateFilter))return false;
       if(cityFilter&&normalize(event.city)!==normalize(cityFilter))return false;
       if(!q)return true;
       return normalize([event.title,event.city,event.state,event.venue,event.type].filter(Boolean).join(' ')).includes(q);

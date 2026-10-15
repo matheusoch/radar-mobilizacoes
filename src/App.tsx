@@ -22,7 +22,7 @@ import ShareSection from './components/ShareSection';
 import CityEmailDigestPreferences from './components/CityEmailDigestPreferences';
 import EmailPrivacyPage from './components/EmailPrivacyPage';
 import {BRAZILIAN_STATES} from './lib/brazilianStates';
-import {canonicalizeLocationOptions,normalizeLocationKey} from './lib/locationNormalization';
+import {canonicalizeLocationOptions,normalizeBrazilianStateKey,normalizeLocationKey} from './lib/locationNormalization';
 import {extractClockTime,formatTimeText} from './utils/formatTime';
 import {StatusBadge} from './components/Badge';
 import {getEvents,getAdminEvents,getSources,resolveImageUrl,mapDbEvent,getAttendanceStatus,toggleEventAttendance,recordPageView,recordEventAction} from './lib/data';
@@ -129,7 +129,7 @@ function matchesAgendaFilters(event:MobilizationEvent,filters:FiltersState,today
   const modality=deriveEventModality(event);
   if(skip!=='modality'&&filters.modality&&modality!==filters.modality)return false;
   const ignorePhysicalLocation=filters.modality==='Virtual'&&modality==='Virtual';
-  if(skip!=='state'&&filters.state&&!ignorePhysicalLocation&&((modality!=='Presencial'&&modality!=='Híbrido')||normalizeLocationKey(event.state)!==normalizeLocationKey(filters.state)))return false;
+  if(skip!=='state'&&filters.state&&!ignorePhysicalLocation&&((modality!=='Presencial'&&modality!=='Híbrido')||normalizeBrazilianStateKey(event.state)!==normalizeBrazilianStateKey(filters.state)))return false;
   if(skip!=='city'&&filters.city&&!ignorePhysicalLocation&&!physicalCitiesForEvent(event,modality).some(city=>normalizeLocationKey(city)===normalizeLocationKey(filters.city)))return false;
   if(skip!=='type'&&filters.type&&event.type!==filters.type)return false;
   if(filters.search&&!normalizedSearchText(`${event.title} ${event.city} ${event.state} ${event.venue} ${event.address||''} ${event.type}`).includes(normalizedSearchText(filters.search.trim())))return false;

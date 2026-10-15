@@ -8,7 +8,7 @@ import {SHARE_SHORT_URL,buildCardShareText,type ShareContent} from '../utils/soc
 import ShareCardActions from './ShareCardActions';
 import {formatTimeText} from '../utils/formatTime';
 import LocationAutocomplete from './LocationAutocomplete';
-import {canonicalizeLocationOptions,normalizeLocationKey} from '../lib/locationNormalization';
+import {canonicalizeLocationOptions,canonicalizeBrazilianState,normalizeBrazilianStateKey,stateSuggestionOptions,normalizeLocationKey} from '../lib/locationNormalization';
 
 const HASHTAGS=['AgendaDeMobilizacoes'] as const;
 
@@ -52,15 +52,15 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   const dateValues=Object.fromEntries(dateParts.map(part=>[part.type,part.value]));
   const today=dateValues.year+'-'+dateValues.month+'-'+dateValues.day;
   const upcomingEvents=useMemo(()=>events.filter(event=>event.public&&event.date>=today),[events,today]);
-  const states=useMemo(()=>canonicalizeLocationOptions(upcomingEvents.filter(event=>!dateFilter||event.date===dateFilter).map(event=>event.state).filter(Boolean)),[upcomingEvents,dateFilter]);
-  const cities=useMemo(()=>canonicalizeLocationOptions(upcomingEvents.filter(event=>(!dateFilter||event.date===dateFilter)&&(!stateFilter||normalizeLocationKey(event.state)===normalizeLocationKey(stateFilter))).map(event=>event.city).filter(city=>city&&city.trim())),[upcomingEvents,dateFilter,stateFilter]);
+  const states=useMemo(()=>stateSuggestionOptions(upcomingEvents.filter(event=>!dateFilter||event.date===dateFilter).map(event=>event.state).filter(Boolean)),[upcomingEvents,dateFilter]);
+  const cities=useMemo(()=>canonicalizeLocationOptions(upcomingEvents.filter(event=>(!dateFilter||event.date===dateFilter)&&(!stateFilter||normalizeBrazilianStateKey(event.state)===normalizeBrazilianStateKey(stateFilter))).map(event=>event.city).filter(city=>city&&city.trim())),[upcomingEvents,dateFilter,stateFilter]);
 
   const candidates=useMemo(()=>{
     const normalize=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
     const q=normalize(query);
     return groupSort(upcomingEvents.filter(event=>{
       if(dateFilter&&event.date!==dateFilter)return false;
-      if(stateFilter&&normalizeLocationKey(event.state)!==normalizeLocationKey(stateFilter))return false;
+      if(stateFilter&&normalizeBrazilianStateKey(event.state)!==normalizeBrazilianStateKey(stateFilter))return false;
       if(cityFilter&&normalize(event.city)!==normalize(cityFilter))return false;
       if(!q)return true;
       return normalize([event.title,event.city,event.state,event.venue,event.type].filter(Boolean).join(' ')).includes(q);
@@ -129,7 +129,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
           </div>
           <label className='share-builder-select'>
             <span>Estado</span>
-            <LocationAutocomplete value={stateFilter} onChange={value=>{setStateFilter(value);setCityFilter('')}} options={states} label='Filtrar por estado' placeholder='Todos os estados' className='location-filter-input'/>
+            <LocationAutocomplete value={stateFilter} onChange={value=>{setStateFilter(value);setCityFilter('')}} options={states} canonicalize={canonicalizeBrazilianState} label='Filtrar por estado' placeholder='Todos os estados' className='location-filter-input'/>
           </label>
           <label className='share-builder-select'>
             <span>Cidade</span>

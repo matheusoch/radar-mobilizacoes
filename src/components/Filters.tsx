@@ -1,6 +1,6 @@
 import {Search,X} from 'lucide-react';
 import LocationAutocomplete from './LocationAutocomplete';
-import {canonicalizeLocationOptions} from '../lib/locationNormalization';
+import {canonicalizeLocationOptions,canonicalizeBrazilianState,stateSuggestionOptions} from '../lib/locationNormalization';
 
 export interface FiltersState{
   search:string;
@@ -23,7 +23,7 @@ export default function Filters({value,onChange,states,cities,types,modalities}:
   const set=(key:keyof FiltersState,nextValue:string)=>onChange({...value,[key]:nextValue,...(key==='period'&&nextValue!=='selected-date'?{date:''}:{})});
   const clear=()=>onChange({search:'',state:'',city:'',type:'',period:'upcoming',modality:'',date:''});
   const hasFilters=Boolean(value.search.trim()||value.state||value.city||value.type||value.modality||value.date||value.period!=='upcoming');
-  const stateOptions=canonicalizeLocationOptions(states);
+  const stateOptions=stateSuggestionOptions(states);
   const cityOptions=canonicalizeLocationOptions(cities);
   const modalityLabel=(modality:string)=>({
     Presencial:'📍 Presencial',
@@ -50,7 +50,7 @@ export default function Filters({value,onChange,states,cities,types,modalities}:
       </select>
       <label className="location-filter-field">
         <span>Estado</span>
-        <LocationAutocomplete value={value.state} onChange={next=>set('state',next)} options={stateOptions} label="Filtrar por estado" placeholder="Todos os estados" className="location-filter-input"/>
+        <LocationAutocomplete value={value.state} onChange={next=>set('state',next)} options={stateOptions} canonicalize={canonicalizeBrazilianState} label="Filtrar por estado" placeholder="Todos os estados" className="location-filter-input"/>
       </label>
       <label className="location-filter-field">
         <span>Cidade</span>

@@ -61,7 +61,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
     return groupSort(upcomingEvents.filter(event=>{
       if(dateFilter&&event.date!==dateFilter)return false;
       if(stateFilter&&normalizeBrazilianStateKey(event.state)!==normalizeBrazilianStateKey(stateFilter))return false;
-      if(cityFilter&&normalize(event.city)!==normalize(cityFilter))return false;
+      if(cityFilter&&normalizeLocationKey(event.city)!==normalizeLocationKey(cityFilter))return false;
       if(!q)return true;
       return normalize([event.title,event.city,event.state,event.venue,event.type].filter(Boolean).join(' ')).includes(q);
     }));

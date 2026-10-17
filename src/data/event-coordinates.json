@@ -1,0 +1,592 @@
+[
+  {
+    "event_id": "recife-assembleia-estudantil-reitoria-07-10",
+    "latitude": -8.05244,
+    "longitude": -34.94692,
+    "matched_location": "Reitoria da UFPE (Arquibancada da Reitoria)",
+    "matched_address": "Av. Prof. Moraes Rego, 1235 - Cidade Universitária, Recife - PE, 50670-901",
+    "confidence": "high",
+    "source": "Google Maps (Reitoria da Universidade Federal de Pernambuco - UFPE)",
+    "notes": "Pôster p001: Assembleia Estudantil na Arquibancada da Reitoria da UFPE em 07/10 às 17h30."
+  },
+  {
+    "event_id": "salvador-uneb-teatro-campus-1-07-10",
+    "latitude": -12.95156,
+    "longitude": -38.45968,
+    "matched_location": "Teatro UNEB - Campus I",
+    "matched_address": "Rua Silveira Martins, 2555 - Cabula, Salvador - BA, 41150-000",
+    "confidence": "high",
+    "source": "Google Maps (Teatro UNEB - Campus I, Cabula, Salvador - BA)",
+    "notes": "Pôster p002: Mobilização estudantil no Teatro UNEB Campus 1 em 07/10 às 10h."
+  },
+  {
+    "event_id": "brasilia-birosca-do-conic-06-10",
+    "latitude": -15.79414,
+    "longitude": -47.88378,
+    "matched_location": "Birosca do Conic",
+    "matched_address": "SDS Bloco E, Loja 3 - Conic, Asa Sul, Brasília - DF, 70393-900",
+    "confidence": "high",
+    "source": "Google Maps (Birosca do Conic, Setor de Diversões Sul, Brasília - DF)",
+    "notes": "Pôster p003: Plenária de Mobilização PSOL com Lula & Leandro em 06/10 às 18h."
+  },
+  {
+    "event_id": "macapa-praca-da-bandeira-17-10",
+    "latitude": 0.03895,
+    "longitude": -51.05818,
+    "matched_location": "Praça da Bandeira",
+    "matched_address": "Av. FAB, s/n - Central, Macapá - AP, 68900-073",
+    "confidence": "high",
+    "source": "Google Maps (Praça da Bandeira, Central, Macapá - AP)",
+    "notes": "Pôsteres p004, p026, p037: Ato de Distrito 13 na Praça da Bandeira em 17/10."
+  },
+  {
+    "event_id": "curitiba-ufpr-centro-politecnico-07-10",
+    "latitude": -25.45089,
+    "longitude": -49.23194,
+    "matched_location": "Centro Politécnico da UFPR - Setor de Ciências Sociais Aplicadas (Hall de ADM)",
+    "matched_address": "Av. Cel. Francisco H. dos Santos, 100 - Jardim das Américas, Curitiba - PR, 81531-980",
+    "confidence": "high",
+    "source": "Google Maps (UFPR Centro Politécnico, Jardim das Américas, Curitiba - PR)",
+    "notes": "Pôster p006: Assembleia/mobilização DCE UFPR no Hall de ADM do Centro Politécnico em 07/10 às 18h."
+  },
+  {
+    "event_id": "porto-alegre-largo-zumbi-dos-palmares-07-10",
+    "latitude": -30.03846,
+    "longitude": -51.22485,
+    "matched_location": "Largo Zumbi dos Palmares",
+    "matched_address": "Av. Loureiro da Silva, 730 - Cidade Baixa, Porto Alegre - RS, 90050-240",
+    "confidence": "high",
+    "source": "Google Maps (Largo Zumbi dos Palmares, Cidade Baixa, Porto Alegre - RS)",
+    "notes": "Pôsteres p007 e p067: Plenária Aberta com Lula no Largo Zumbi dos Palmares em 07/10 às 18h30."
+  },
+  {
+    "event_id": "belem-caminhada-praca-da-republica-09-10",
+    "latitude": -1.45261,
+    "longitude": -48.49395,
+    "matched_location": "Praça da República (Ponto inicial da caminhada)",
+    "matched_address": "Av. Presidente Vargas, s/n - Campina, Belém - PA, 66017-000",
+    "confidence": "high",
+    "source": "Google Maps (Praça da República, Campina, Belém - PA)",
+    "notes": "PERCURSO: Pôster p008 indica caminhada Praça da República → Estação das Docas em 09/10 às 16h."
+  },
+  {
+    "event_id": "recife-ufpe-jardim-externo-cac-06-10",
+    "latitude": -8.05288,
+    "longitude": -34.95312,
+    "matched_location": "Centro de Artes e Comunicação (CAC) - UFPE",
+    "matched_address": "Av. da Arquitetura, s/n - Cidade Universitária, Recife - PE, 50740-550",
+    "confidence": "high",
+    "source": "Google Maps (Centro de Artes e Comunicação - CAC UFPE, Recife - PE)",
+    "notes": "Pôsteres p009, p029, p059 e recife-estudantes-06-10: Assembleia Geral dos Estudantes no Jardim Externo do CAC/UFPE em 06/10 às 17h."
+  },
+  {
+    "event_id": "ponta-grossa-uepg-grande-auditorio-09-10",
+    "latitude": -25.09168,
+    "longitude": -50.16104,
+    "matched_location": "Grande Auditório da UEPG - Campus Central",
+    "matched_address": "Praça Santos Andrade, 1 - Centro, Ponta Grossa - PR, 84010-919",
+    "confidence": "high",
+    "source": "Google Maps (UEPG Campus Central, Praça Santos Andrade, Ponta Grossa - PR)",
+    "notes": "Pôster p010: Evento no Grande Auditório da UEPG Central em 09/10 às 19h."
+  },
+  {
+    "event_id": "sao-joao-del-rei-ufsj-campus-dom-bosco-09-10",
+    "latitude": -21.13962,
+    "longitude": -44.27048,
+    "matched_location": "UFSJ - Campus Dom Bosco",
+    "matched_address": "Praça Dom Helvécio, 74 - Fábricas, São João del-Rei - MG, 36301-160",
+    "confidence": "high",
+    "source": "Google Maps (UFSJ Campus Dom Bosco, Fábricas, São João del-Rei - MG)",
+    "notes": "Pôster p011: Ato Público Estudantes contra o Fascismo em frente ao Campus Dom Bosco em 09/10 às 17h30."
+  },
+  {
+    "event_id": "porto-alegre-viaduto-imperatriz-leopoldina-07-10",
+    "latitude": -30.03692,
+    "longitude": -51.22634,
+    "matched_location": "Viaduto Imperatriz Leopoldina (Viaduto do Brooklyn / Av. Loureiro da Silva)",
+    "matched_address": "Av. Loureiro da Silva, 900 - Cidade Baixa, Porto Alegre - RS, 90050-240",
+    "confidence": "high",
+    "source": "Google Maps (Viaduto Imperatriz Leopoldina / Loureiro da Silva, Porto Alegre - RS)",
+    "notes": "Pôster p012: Mobilização UFRGS no Viaduto Brooklyn / Av. Loureiro da Silva em 07/10 às 17h30."
+  },
+  {
+    "event_id": "sao-cristovao-ufs-portaria-08-10",
+    "latitude": -10.92625,
+    "longitude": -37.10218,
+    "matched_location": "Pórtico / Entrada Principal da UFS - Campus São Cristóvão",
+    "matched_address": "Av. Marechal Rondon, s/n - Jardim Rosa Elze, São Cristóvão - SE, 49100-000",
+    "confidence": "high",
+    "source": "Google Maps (Universidade Federal de Sergipe - Campus São Cristóvão)",
+    "notes": "Pôster p013: Ato na entrada/portaria da UFS em 08/10 às 18h."
+  },
+  {
+    "event_id": "campinas-largo-do-rosario-11-10",
+    "latitude": -22.90389,
+    "longitude": -47.06142,
+    "matched_location": "Largo do Rosário",
+    "matched_address": "Praça Visconde de Indaiatuba (Largo do Rosário), s/n - Centro, Campinas - SP, 13010-150",
+    "confidence": "high",
+    "source": "Google Maps (Largo do Rosário, Centro, Campinas - SP)",
+    "notes": "Pôster p014: Marcha pela Democracia no Largo do Rosário em 11/10 às 10h."
+  },
+  {
+    "event_id": "seropedica-ufrrj-sala-dce-08-10",
+    "latitude": -22.76342,
+    "longitude": -43.68815,
+    "matched_location": "UFRRJ - Pavilhão Central / Sala do DCE (Campus Seropédica)",
+    "matched_address": "Rodovia BR-465, Km 7 - Campus Universitário, Seropédica - RJ, 23897-000",
+    "confidence": "medium",
+    "source": "Google Maps (Universidade Federal Rural do Rio de Janeiro - Campus Seropédica)",
+    "notes": "Pôster p015 / seropedica-trs-08-10: Evento híbrido na Sala do DCE em Seropédica em 08/10 às 18h."
+  },
+  {
+    "event_id": "uberlandia-entrada-ufu-santa-monica-08-10",
+    "latitude": -18.91861,
+    "longitude": -48.25792,
+    "matched_location": "Portaria Principal da UFU - Campus Santa Mônica",
+    "matched_address": "Av. João Naves de Ávila, 2121 - Santa Mônica, Uberlândia - MG, 38408-100",
+    "confidence": "high",
+    "source": "Google Maps (Universidade Federal de Uberlândia - Campus Santa Mônica)",
+    "notes": "Pôster p016: Universidade com Lula na entrada da UFU em 08/10 às 18h."
+  },
+  {
+    "event_id": "sao-jose-dos-campos-praca-afonso-pena-10-10",
+    "latitude": -23.18185,
+    "longitude": -45.88564,
+    "matched_location": "Praça Afonso Pena",
+    "matched_address": "Praça Afonso Pena, s/n - Centro, São José dos Campos - SP, 12210-090",
+    "confidence": "high",
+    "source": "Google Maps (Praça Afonso Pena, Centro, São José dos Campos - SP)",
+    "notes": "Pôster p018: Estudantes de SJC com Lula - Ato pela Democracia na Praça Afonso Pena em 10/10 às 9h."
+  },
+  {
+    "event_id": "manaus-av-duque-de-caxias-06-10",
+    "latitude": -3.12584,
+    "longitude": -60.01512,
+    "matched_location": "Avenida Duque de Caxias (Praça 14 de Janeiro)",
+    "matched_address": "Av. Duque de Caxias - Praça 14 de Janeiro, Manaus - AM, 69020-140",
+    "confidence": "medium",
+    "source": "Google Maps (Av. Duque de Caxias, Manaus - AM)",
+    "notes": "Pôster p019: Grande plenária contra o fascismo na Av. Duque de Caxias em 06/10 às 18h."
+  },
+  {
+    "event_id": "vitoria-passeata-praca-do-papa-11-10",
+    "latitude": -20.31568,
+    "longitude": -40.29512,
+    "matched_location": "Praça do Papa (Ponto inicial da passeata)",
+    "matched_address": "Av. Nossa Sra. dos Navegantes, s/n - Enseada do Suá, Vitória - ES, 29050-335",
+    "confidence": "high",
+    "source": "Google Maps (Praça do Papa, Enseada do Suá, Vitória - ES)",
+    "notes": "PERCURSO: Pôster p020 indica Passeata a favor do Lula saindo da Praça do Papa até a Praça dos Namorados em 11/10 às 15h."
+  },
+  {
+    "event_id": "curitiba-praca-19-de-dezembro-18-10",
+    "latitude": -25.42416,
+    "longitude": -49.26835,
+    "matched_location": "Praça 19 de Dezembro (Ponto inicial da caminhada)",
+    "matched_address": "Praça 19 de Dezembro, s/n - Centro, Curitiba - PR, 80020-260",
+    "confidence": "high",
+    "source": "Google Maps (Praça 19 de Dezembro, Centro, Curitiba - PR)",
+    "notes": "PERCURSO: Pôsteres p021, p035, p046 indicam caminhada Praça 19 de Dezembro → Palácio Iguaçu em 18/10 às 13h."
+  },
+  {
+    "event_id": "recife-marco-zero-praca-rio-branco-11-10",
+    "latitude": -8.06316,
+    "longitude": -34.87114,
+    "matched_location": "Praça Rio Branco - Marco Zero",
+    "matched_address": "Av. Alfredo Lisboa, s/n - Recife, PE, 50030-230",
+    "confidence": "high",
+    "source": "Google Maps (Praça Rio Branco - Marco Zero, Bairro do Recife, Recife - PE)",
+    "notes": "Pôster p022: Manifestação na Praça Rio Branco / Marco Zero."
+  },
+  {
+    "event_id": "sao-luis-ufma-agora-cch-08-10",
+    "latitude": -2.55824,
+    "longitude": -44.30861,
+    "matched_location": "Ágora do CCH - UFMA (Cidade Universitária Dom Delgado)",
+    "matched_address": "Av. dos Portugueses, 1966 - Vila Bacanga, São Luís - MA, 65080-805",
+    "confidence": "high",
+    "source": "Google Maps (Centro de Ciências Humanas - CCH UFMA, São Luís - MA)",
+    "notes": "Pôsteres p023 e p076: UFMA com Lula na Ágora do CCH em 08/10 às 16h."
+  },
+  {
+    "event_id": "sao-luis-uema-auditorio-ccsa-09-10",
+    "latitude": -2.58152,
+    "longitude": -44.20945,
+    "matched_location": "Auditório do CCSA - UEMA (Campus Paulo VI)",
+    "matched_address": "Cidade Universitária Paulo VI, Av. Lourenço Vieira da Silva, 1000 - Jardim São Cristóvão, São Luís - MA, 65055-310",
+    "confidence": "high",
+    "source": "Google Maps (CCSA - Universidade Estadual do Maranhão, São Luís - MA)",
+    "notes": "Pôsteres p023 e p076: UEMA com Lula no Auditório do CCSA em 09/10 às 18h."
+  },
+  {
+    "event_id": "sao-luis-praca-nauro-machado-10-10",
+    "latitude": -2.52988,
+    "longitude": -44.30654,
+    "matched_location": "Praça Nauro Machado",
+    "matched_address": "Rua da Estrela, s/n - Praia Grande (Centro Histórico), São Luís - MA, 65010-200",
+    "confidence": "high",
+    "source": "Google Maps (Praça Nauro Machado, Centro Histórico, São Luís - MA)",
+    "notes": "Pôsteres p023 e p076: Oficina de Criação e Colagem de Lambes na Praça Nauro Machado em 10/10 às 16h."
+  },
+  {
+    "event_id": "sao-luis-largo-do-carmo-11-10",
+    "latitude": -2.52762,
+    "longitude": -44.30378,
+    "matched_location": "Largo do Carmo (Praça João Lisboa)",
+    "matched_address": "Largo do Carmo, s/n - Centro, São Luís - MA, 65010-300",
+    "confidence": "high",
+    "source": "Google Maps (Largo do Carmo, Centro, São Luís - MA)",
+    "notes": "Pôsteres p023 e p076: Ato no Largo do Carmo em 11/10 a partir das 9h."
+  },
+  {
+    "event_id": "sao-luis-praca-joao-lisboa-17-10",
+    "latitude": -2.52785,
+    "longitude": -44.30345,
+    "matched_location": "Praça João Lisboa",
+    "matched_address": "Praça João Lisboa, s/n - Centro, São Luís - MA, 65010-310",
+    "confidence": "high",
+    "source": "Google Maps (Praça João Lisboa, Centro, São Luís - MA)",
+    "notes": "Pôsteres p023 e p076: Samba do Caim com Lula na Praça João Lisboa em 17/10 às 16h30."
+  },
+  {
+    "event_id": "feira-de-santana-uefs-plenaria-06-10",
+    "latitude": -12.20084,
+    "longitude": -38.97156,
+    "matched_location": "Universidade Estadual de Feira de Santana (UEFS)",
+    "matched_address": "Av. Transnordestina, s/n - Novo Horizonte, Feira de Santana - BA, 44036-900",
+    "confidence": "high",
+    "source": "Google Maps (UEFS - Campus Universitário, Feira de Santana - BA)",
+    "notes": "Pôster p024: Plenária da Juventude Feirense com Lula na UEFS em 06/10 às 15h30."
+  },
+  {
+    "event_id": "vitoria-colegio-estadual-13-10",
+    "latitude": -20.31982,
+    "longitude": -40.33065,
+    "matched_location": "Colégio Estadual do Espírito Santo (antigo Gastão)",
+    "matched_address": "Av. Vitória, 1344 - Forte São João, Vitória - ES, 29017-900",
+    "confidence": "high",
+    "source": "Google Maps (Colégio Estadual do Espírito Santo, Forte São João, Vitória - ES)",
+    "notes": "Pôster p025: Ato pelas liberdades democráticas em 13/10 às 16h."
+  },
+  {
+    "event_id": "sao-paulo-masp-11-10-11h",
+    "latitude": -23.56141,
+    "longitude": -46.65588,
+    "matched_location": "Museu de Arte de São Paulo Assis Chateaubriand (Vão Livre do MASP)",
+    "matched_address": "Av. Paulista, 1578 - Bela Vista, São Paulo - SP, 01310-200",
+    "confidence": "high",
+    "source": "Google Maps (MASP, Av. Paulista, 1578, São Paulo - SP)",
+    "notes": "Pôster sao-paulo-masp-11-10: Marcha pela Democracia no MASP em 11/10 às 11h."
+  },
+  {
+    "event_id": "sao-paulo-masp-fandoms-11-10-13h",
+    "latitude": -23.56141,
+    "longitude": -46.65588,
+    "matched_location": "Museu de Arte de São Paulo Assis Chateaubriand (Vão Livre do MASP)",
+    "matched_address": "Av. Paulista, 1578 - Bela Vista, São Paulo - SP, 01310-200",
+    "confidence": "high",
+    "source": "Google Maps (MASP, Av. Paulista, 1578, São Paulo - SP)",
+    "notes": "Pôster p027: Marcha pela Democracia - Fandoms na Rua com Lula no MASP em 11/10 às 13h."
+  },
+  {
+    "event_id": "maringa-uem-auditorio-ney-marques-06-10",
+    "latitude": -23.40468,
+    "longitude": -51.93925,
+    "matched_location": "Auditório Ney Marques (Bloco D03) - UEM",
+    "matched_address": "Av. Colombo, 5790 - Zona 7, Maringá - PR, 87020-900",
+    "confidence": "high",
+    "source": "Google Maps (Auditório Ney Marques - UEM, Zona 7, Maringá - PR)",
+    "notes": "Pôster p028: Mobilização no Auditório Ney Marques (Bloco D03) da UEM em 06/10 às 18h30."
+  },
+  {
+    "event_id": "joao-pessoa-ufpb-dce-07-10",
+    "latitude": -7.13684,
+    "longitude": -34.84592,
+    "matched_location": "DCE da UFPB - Campus I",
+    "matched_address": "Cidade Universitária, s/n - Castelo Branco, João Pessoa - PB, 58051-900",
+    "confidence": "high",
+    "source": "Google Maps (UFPB Campus I - Castelo Branco, João Pessoa - PB)",
+    "notes": "Pôster p031: Convocação da juventude no DCE/UFPB em 07/10 às 15h."
+  },
+  {
+    "event_id": "feira-de-santana-uefs-modulo-4-06-10",
+    "latitude": -12.19982,
+    "longitude": -38.97084,
+    "matched_location": "Módulo 4 - UEFS",
+    "matched_address": "Av. Transnordestina, s/n - Novo Horizonte, Feira de Santana - BA, 44036-900",
+    "confidence": "high",
+    "source": "Google Maps (Módulo 4 - Universidade Estadual de Feira de Santana, BA)",
+    "notes": "Pôster p032: Roda de Conversa dos Estudantes de Direito no Módulo 4 da UEFS em 06/10 às 18h45."
+  },
+  {
+    "event_id": "rio-de-janeiro-candelaria-07-10",
+    "latitude": -22.90075,
+    "longitude": -43.17764,
+    "matched_location": "Igreja de Nossa Senhora da Candelária (Ponto inicial do ato)",
+    "matched_address": "Praça Pio X, s/n - Centro, Rio de Janeiro - RJ, 20040-020",
+    "confidence": "high",
+    "source": "Google Maps (Igreja da Candelária, Praça Pio X, Centro, Rio de Janeiro - RJ)",
+    "notes": "PERCURSO: Pôsteres p033, p036, p039, p050, p057 indicam Ato dos Estudantes saindo da Candelária em 07/10 às 12h."
+  },
+  {
+    "event_id": "vitoria-ufes-ru-goiabeiras-06-10",
+    "latitude": -20.27688,
+    "longitude": -40.30452,
+    "matched_location": "Restaurante Universitário da UFES - Campus Goiabeiras",
+    "matched_address": "Av. Fernando Ferrari, 514 - Goiabeiras, Vitória - ES, 29075-910",
+    "confidence": "high",
+    "source": "Google Maps (Restaurante Universitário UFES Goiabeiras, Vitória - ES)",
+    "notes": "Pôster p034: Primeira reunião Vira Voto no RU da UFES Goiabeiras em 06/10 às 20h."
+  },
+  {
+    "event_id": "brasilia-teatro-dos-bancarios-07-10",
+    "latitude": -15.80865,
+    "longitude": -47.90024,
+    "matched_location": "Teatro dos Bancários",
+    "matched_address": "EQS 314/315 Bloco A - Asa Sul, Brasília - DF, 70383-400",
+    "confidence": "high",
+    "source": "Google Maps (Teatro dos Bancários, EQS 314/315, Asa Sul, Brasília - DF)",
+    "notes": "Pôster p038: Esplanada com Lula no Teatro dos Bancários em 07/10 às 18h30."
+  },
+  {
+    "event_id": "fortaleza-casa-mercurio-06-10",
+    "latitude": -3.73812,
+    "longitude": -38.53642,
+    "matched_location": "Casa Mercúrio (Benfica)",
+    "matched_address": "Av. da Universidade - Benfica, Fortaleza - CE, 60020-181",
+    "confidence": "medium",
+    "source": "Google Maps (Benfica / Av. da Universidade, Fortaleza - CE)",
+    "notes": "Pôster p043: Plenária da Cultura na Casa Mercúrio em Fortaleza em 06/10 às 18h."
+  },
+  {
+    "event_id": "fortaleza-hotel-sonata-de-iracema-08-10",
+    "latitude": -3.71968,
+    "longitude": -38.51054,
+    "matched_location": "Hotel Sonata de Iracema",
+    "matched_address": "Av. Beira Mar, 848 - Praia de Iracema, Fortaleza - CE, 60060-000",
+    "confidence": "high",
+    "source": "Google Maps (Hotel Sonata de Iracema, Av. Beira Mar, 848, Fortaleza - CE)",
+    "notes": "Pôster p044: Bloco da Educação com Lula no Hotel Sonata em 08/10 às 18h."
+  },
+  {
+    "event_id": "fortaleza-praca-da-gentilandia-09-10",
+    "latitude": -3.74295,
+    "longitude": -38.53728,
+    "matched_location": "Praça da Gentilândia",
+    "matched_address": "Rua Paulino Nogueira, s/n - Benfica, Fortaleza - CE, 60020-270",
+    "confidence": "high",
+    "source": "Google Maps (Praça da Gentilândia, Benfica, Fortaleza - CE)",
+    "notes": "Pôster p045: Plenária Presencial na Praça da Gentilândia em 09/10 às 19h."
+  },
+  {
+    "event_id": "palmas-uft-bloco-1-sala-107-08-10",
+    "latitude": -10.17745,
+    "longitude": -48.35962,
+    "matched_location": "UFT - Campus Palmas (Bloco 1, Sala 107 - LAHAC)",
+    "matched_address": "Quadra 109 Norte, Av. NS-15, ALCNO-14 - Plano Diretor Norte, Palmas - TO, 77001-090",
+    "confidence": "high",
+    "source": "Google Maps (Universidade Federal do Tocantins - Campus Palmas)",
+    "notes": "Pôster p048 / palmas-uft-08-10: Plenária UFT com Lula na Sala 107 (LAHAC), Bloco 1 em 08/10 às 16h."
+  },
+  {
+    "event_id": "recife-parque-13-de-maio-11-10",
+    "latitude": -8.05752,
+    "longitude": -34.88196,
+    "matched_location": "Parque 13 de Maio (Ponto inicial da caminhada)",
+    "matched_address": "Rua Mamede Simões, s/n - Santo Amaro, Recife - PE, 50050-570",
+    "confidence": "high",
+    "source": "Google Maps (Parque 13 de Maio, Santo Amaro, Recife - PE)",
+    "notes": "PERCURSO: Pôster p049 indica caminhada Juntos contra o Bolsonarismo saindo do Parque 13 de Maio em 11/10 às 14h."
+  },
+  {
+    "event_id": "vitoria-assembleia-legislativa-11-10",
+    "latitude": -20.31442,
+    "longitude": -40.29688,
+    "matched_location": "Assembleia Legislativa do Estado do Espírito Santo (ALES)",
+    "matched_address": "Av. Américo Buaiz, 205 - Enseada do Suá, Vitória - ES, 29050-950",
+    "confidence": "high",
+    "source": "Google Maps (Assembleia Legislativa do Espírito Santo, Vitória - ES)",
+    "notes": "Pôsteres p051 e p055: Ato/Passeata na Assembleia Legislativa (ALES) em 11/10 às 15h."
+  },
+  {
+    "event_id": "vitoria-ufes-teatro-universitario-13-10",
+    "latitude": -20.27845,
+    "longitude": -40.30264,
+    "matched_location": "Teatro Universitário da UFES",
+    "matched_address": "Av. Fernando Ferrari, 514 - Goiabeiras, Vitória - ES, 29075-910",
+    "confidence": "high",
+    "source": "Google Maps (Teatro Universitário - UFES, Goiabeiras, Vitória - ES)",
+    "notes": "Pôster p051: Ato #BoraLula no Teatro Universitário (UFES) em 13/10 às 16h30."
+  },
+  {
+    "event_id": "braganca-praca-das-bandeiras-08-10",
+    "latitude": -1.05664,
+    "longitude": -46.76618,
+    "matched_location": "Praça das Bandeiras",
+    "matched_address": "Praça das Bandeiras, s/n - Centro, Bragança - PA, 68600-000",
+    "confidence": "high",
+    "source": "Google Maps (Praça das Bandeiras, Centro, Bragança - PA)",
+    "notes": "Pôster p052: Mobilização na Praça das Bandeiras em Bragança/PA em 08/10 às 18h."
+  },
+  {
+    "event_id": "recife-calcadao-boa-vista-unifafire-14-10",
+    "latitude": -8.05928,
+    "longitude": -34.89065,
+    "matched_location": "UniFAFIRE / Calçadão da Boa Vista",
+    "matched_address": "Av. Conde da Boa Vista, 921 - Boa Vista, Recife - PE, 50060-002",
+    "confidence": "high",
+    "source": "Google Maps (Centro Universitário Frassinetti do Recife - UniFAFIRE, Av. Conde da Boa Vista, 921)",
+    "notes": "Pôster p054: Estudantes UNI-VOS no Calçadão da Boa Vista / UniFafire em 14/10 às 18h."
+  },
+  {
+    "event_id": "belo-horizonte-praca-afonso-arinos-09-10",
+    "latitude": -19.92458,
+    "longitude": -43.93724,
+    "matched_location": "Praça Afonso Arinos",
+    "matched_address": "Av. Augusto de Lima, s/n - Centro, Belo Horizonte - MG, 30190-000",
+    "confidence": "high",
+    "source": "Google Maps (Praça Afonso Arinos, Centro, Belo Horizonte - MG)",
+    "notes": "Pôster p056: Ato Estudantes na Praça Afonso Arinos em 09/10 às 17h."
+  },
+  {
+    "event_id": "goiania-praca-universitaria-07-10",
+    "latitude": -16.67762,
+    "longitude": -49.24354,
+    "matched_location": "Praça Universitária",
+    "matched_address": "Praça Honório Monteiro (Praça Universitária), Setor Leste Universitário, Goiânia - GO, 74605-220",
+    "confidence": "high",
+    "source": "Google Maps (Praça Universitária, Setor Leste Universitário, Goiânia - GO)",
+    "notes": "Pôsteres p058, p077 e goiania-07-10: Plenária pela Democracia e Soberania do Brasil na Praça Universitária em 07/10 às 18h30."
+  },
+  {
+    "event_id": "manaus-largo-de-sao-sebastiao-11-10",
+    "latitude": -3.13038,
+    "longitude": -60.02324,
+    "matched_location": "Largo de São Sebastião",
+    "matched_address": "Rua 10 de Julho, s/n - Centro, Manaus - AM, 69010-060",
+    "confidence": "high",
+    "source": "Google Maps (Largo de São Sebastião, Centro, Manaus - AM)",
+    "notes": "Pôsteres p041 e p060: Vira Vira Lula no Largo de São Sebastião em 11/10 às 16h."
+  },
+  {
+    "event_id": "manaus-ufam-fca-08-10",
+    "latitude": -3.09115,
+    "longitude": -59.97682,
+    "matched_location": "Faculdade de Ciências Agrárias (FCA I) - UFAM",
+    "matched_address": "Av. General Rodrigo Octávio Jordão Ramos, 1200 - Coroado I, Manaus - AM, 69067-005",
+    "confidence": "high",
+    "source": "Google Maps (Faculdade de Ciências Agrárias - UFAM Setor Sul, Manaus - AM)",
+    "notes": "Pôsteres p041 e p061: UFAM em Defesa da Universidade na FCA I em 08/10 às 8h."
+  },
+  {
+    "event_id": "macapa-espaco-nobre-recepcoes-06-10",
+    "latitude": 0.03214,
+    "longitude": -51.06642,
+    "matched_location": "Espaço Nobre Recepções",
+    "matched_address": "Rua Leopoldo Machado, 1602 - Central, Macapá - AP, 68900-067",
+    "confidence": "high",
+    "source": "Google Maps (Rua Leopoldo Machado, 1602, Central, Macapá - AP)",
+    "notes": "Pôster p063: Mobilização no Espaço Nobre Recepções em 06/10 às 18h30."
+  },
+  {
+    "event_id": "belem-ufpa-mirante-do-rio-07-10",
+    "latitude": -1.47462,
+    "longitude": -48.45528,
+    "matched_location": "Mirante do Rio - UFPA (Campus Guamá)",
+    "matched_address": "Rua Augusto Corrêa, 1 - Guamá, Belém - PA, 66075-110",
+    "confidence": "high",
+    "source": "Google Maps (Mirante do Rio - UFPA Campus Básico, Guamá, Belém - PA)",
+    "notes": "Pôster p064: Mobilização no Hall do Mirante da UFPA em 07/10 às 16h."
+  },
+  {
+    "event_id": "florianopolis-escadaria-do-rosario-07-10",
+    "latitude": -27.59514,
+    "longitude": -48.54942,
+    "matched_location": "Escadaria Nossa Senhora do Rosário",
+    "matched_address": "Rua Marechal Guilherme, 60 - Centro, Florianópolis - SC, 88010-000",
+    "confidence": "high",
+    "source": "Google Maps (Escadaria do Rosário, Centro, Florianópolis - SC)",
+    "notes": "Pôster p065: Plenária do PSOL 2º Turno na Escadaria em frente à sede."
+  },
+  {
+    "event_id": "palhoca-sitrampa-07-10",
+    "latitude": -27.64582,
+    "longitude": -48.66914,
+    "matched_location": "SITRAMPA - Sindicato dos Trabalhadores no Serviço Público Municipal de Palhoça",
+    "matched_address": "Rua Najla Carone Goedert, 46 - Pagani, Palhoça - SC, 88132-150",
+    "confidence": "high",
+    "source": "Google Maps (SITRAMPA, Pagani, Palhoça - SC)",
+    "notes": "Pôsteres p065 e p066: Plenária de mobilização no SITRAMPA em 07/10 às 19h."
+  },
+  {
+    "event_id": "teresina-portico-da-ufpi-08-10",
+    "latitude": -5.05812,
+    "longitude": -42.79325,
+    "matched_location": "Pórtico da UFPI - Campus Ministro Petrônio Portella",
+    "matched_address": "Av. Universitária - Ininga, Teresina - PI, 64049-550",
+    "confidence": "high",
+    "source": "Google Maps (Pórtico da UFPI, Ininga, Teresina - PI)",
+    "notes": "Pôster p068: Ato no Pórtico da UFPI em 08/10 às 7h30."
+  },
+  {
+    "event_id": "campo-grande-two-brothers-09-10",
+    "latitude": -20.46385,
+    "longitude": -54.61142,
+    "matched_location": "Two Brothers Cervejaria / Bar",
+    "matched_address": "Rua 15 de Novembro - Centro, Campo Grande - MS, 79002-141",
+    "confidence": "medium",
+    "source": "Google Maps (Two Brothers, Campo Grande - MS)",
+    "notes": "Pôster p069: Encontro de mobilização no Two Brothers em Campo Grande em 09/10 às 19h."
+  },
+  {
+    "event_id": "sorocaba-sede-do-pt-07-10",
+    "latitude": -23.50154,
+    "longitude": -47.45812,
+    "matched_location": "Diretório Municipal do PT de Sorocaba",
+    "matched_address": "Centro, Sorocaba - SP",
+    "confidence": "medium",
+    "source": "Google Maps (Diretório Municipal do PT, Centro, Sorocaba - SP)",
+    "notes": "Pôster p070: Plenária na Sede do PT de Sorocaba em 07/10 às 18h30."
+  },
+  {
+    "event_id": "ouro-preto-ufop-09-10-17h",
+    "latitude": -20.39824,
+    "longitude": -43.51348,
+    "matched_location": "UFOP - Campus Morro do Cruzeiro",
+    "matched_address": "Rua Diogo de Vasconcelos, 122 - Pilar, Ouro Preto - MG, 35400-000",
+    "confidence": "high",
+    "source": "Google Maps (Universidade Federal de Ouro Preto - Campus Morro do Cruzeiro)",
+    "notes": "Pôster p071: Mobilização estudantil na UFOP em 09/10 às 17h."
+  },
+  {
+    "event_id": "ouro-preto-assufop-09-10-19h",
+    "latitude": -20.39652,
+    "longitude": -43.51218,
+    "matched_location": "Sede do Sindsfop / ASSUFOP",
+    "matched_address": "Campus Universitário Morro do Cruzeiro - Bauxita, Ouro Preto - MG, 35400-000",
+    "confidence": "high",
+    "source": "Google Maps (ASSUFOP - Campus Morro do Cruzeiro, Ouro Preto - MG)",
+    "notes": "Pôster p071: Plenária na ASSUFOP em 09/10 às 19h."
+  },
+  {
+    "event_id": "sao-goncalo-praca-ex-combatentes-09-10",
+    "latitude": -22.82564,
+    "longitude": -43.05812,
+    "matched_location": "Praça dos Ex-Combatentes (Ponto inicial da caminhada)",
+    "matched_address": "Rua Francisco Portela - Patronato, São Gonçalo - RJ, 24435-000",
+    "confidence": "high",
+    "source": "Google Maps (Praça dos Ex-Combatentes, Patronato, São Gonçalo - RJ)",
+    "notes": "PERCURSO: Pôster p072 indica caminhada Praça dos Ex-Combatentes → Praça Zé Garoto em 09/10 às 16h."
+  },
+  {
+    "event_id": "toledo-unioeste-sala-dce-07-10",
+    "latitude": -24.77784,
+    "longitude": -53.75912,
+    "matched_location": "UNIOESTE - Campus de Toledo (Sala do DCE)",
+    "matched_address": "Rua da Faculdade, 645 - Jardim La Salle, Toledo - PR, 85903-000",
+    "confidence": "high",
+    "source": "Google Maps (UNIOESTE Campus de Toledo, Jardim La Salle, Toledo - PR)",
+    "notes": "Pôster toledo-unioeste-07-10: Assembleia UNIOESTE com Lula na Sala do DCE em 07/10 às 19h."
+  }
+]

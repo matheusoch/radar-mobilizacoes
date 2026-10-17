@@ -6,6 +6,7 @@ import {Link} from 'react-router-dom';
 import {CalendarDays,Search,LocateFixed,X} from 'lucide-react';
 import type {MobilizationEvent} from '../types';
 import {formatTimeText} from '../utils/formatTime';
+import {hasValidCoordinatePair,spreadOverlappingMarkers} from '../lib/coordinates';
 
 const icon=new L.Icon({
   iconUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -14,14 +15,13 @@ const icon=new L.Icon({
   iconSize:[25,41],iconAnchor:[12,41],
 });
 
-function FitBounds({events}:{events:MobilizationEvent[]}){
+function FitBounds({points}:{points:[number,number][]}){
   const map=useMap();
   useEffect(()=>{
-    const points=events.filter(e=>e.lat!=null&&e.lng!=null).map(e=>[e.lat!,e.lng!] as [number,number]);
     if(!points.length){map.setView([-14.2,-51.9],4);return}
-    if(points.length===1){map.setView(points[0],7);return}
-    map.fitBounds(L.latLngBounds(points),{padding:[35,35],maxZoom:7});
-  },[events,map]);
+    if(points.length===1){map.setView(points[0],13);return}
+    map.fitBounds(L.latLngBounds(points),{padding:[35,35],maxZoom:12});
+  },[points,map]);
   return null;
 }
 
@@ -74,8 +74,23 @@ export default function MapView({events}:{events:MobilizationEvent[]}){
     return true;
   }),[datesFiltered,state,city,normalized]);
 
-  const mapped=filtered.filter(event=>event.lat!=null&&event.lng!=null);
-  const unmapped=filtered.filter(event=>event.lat==null||event.lng==null);
+  const mapped=useMemo(
+    ()=>filtered.filter(event=>hasValidCoordinatePair(event.lat,event.lng)),
+    [filtered]
+  );
+  const unmapped=useMemo(
+    ()=>filtered.filter(event=>!hasValidCoordinatePair(event.lat,event.lng)),
+    [filtered]
+  );
+  const positionedMarkers=useMemo(
+    ()=>spreadOverlappingMarkers(mapped),
+    [mapped]
+  );
+  const boundsPoints=useMemo<[number,number][]>(
+    ()=>positionedMarkers.map(item=>[item.displayLat,item.displayLng]),
+    [positionedMarkers]
+  );
+
   const clearFilters=()=>{
     setQuery('');
     setState('');
@@ -129,31 +144,32 @@ export default function MapView({events}:{events:MobilizationEvent[]}){
         </div>
       </div>
       {(state||city||query||period!=='upcoming'||dateFilter)&&<button type="button" className="clear-btn" onClick={clearFilters}><X size={15}/>Limpar filtros</button>}
-      <div className="map-count" role="status" aria-live="polite"><LocateFixed size={15} aria-hidden="true"/>{mapped.length} ponto{mapped.length===1?'':'s'} no mapa · {unmapped.length} sem coordenadas · {filtered.length} evento{filtered.length===1?'':'s'} filtrado{filtered.length===1?'':'s'}</div>
+      <div className="map-count" role="status" aria-live="polite"><LocateFixed size={15} aria-hidden="true"/>{positionedMarkers.length} ponto{positionedMarkers.length===1?'':'s'} no mapa · {unmapped.length} sem coordenadas · {filtered.length} evento{filtered.length===1?'':'s'} filtrado{filtered.length===1?'':'s'}</div>
     </div>
     <MapContainer center={[-14.2,-51.9]} zoom={4} scrollWheelZoom className="map">
       <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
-      <FitBounds events={filtered}/>
-      {mapped.map(event=><Marker key={event.id} position={[event.lat!,event.lng!]} icon={icon}>
+      <FitBounds points={boundsPoints}/>
+      {positionedMarkers.map(({event,displayLat,displayLng})=><Marker key={event.db_id||event.id} position={[displayLat,displayLng]} icon={icon}>
         <Popup>
           <strong>{event.title}</strong><br/>
           {new Date(event.date+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'}).replace('.','')} · {event.city}{event.state?' / '+event.state:''}<br/>
           {formatTimeText(event.time_label||event.time)||'Horário não informado'} · {event.venue||event.address||'Local não informado'}<br/>
+          {event.address&&event.venue&&event.address!==event.venue&&<><small>{event.address}</small><br/></>}
           <Link to={'/evento/'+event.id}>Ver detalhes e compartilhar</Link>
         </Popup>
       </Marker>)}
     </MapContainer>
-    <div className="map-note">O mapa só desenha um ponto quando o evento tem latitude e longitude cadastradas. Use os filtros para explorar um período específico; eventos sem coordenadas permanecem listados abaixo e não recebem marcadores aproximados.</div>
+    <div className="map-note">O mapa só desenha um ponto quando o evento tem latitude e longitude cadastradas. Use os filtros para explorar um período específico (ou selecione <strong>Todas as datas</strong> para ver todo o histórico); eventos sem coordenadas permanecem listados abaixo e não recebem marcadores aproximados.</div>
     {unmapped.length>0&&<details className="map-unmapped">
       <summary>Ver {unmapped.length} evento{unmapped.length===1?'':'s'} deste filtro que ainda não aparecem como ponto no mapa</summary>
       <div className="map-unmapped-list">
-        {unmapped.map(event=><Link key={event.id} to={'/evento/'+event.id} className="map-unmapped-item">
+        {unmapped.map(event=><Link key={event.db_id||event.id} to={'/evento/'+event.id} className="map-unmapped-item">
           <strong>{event.title}</strong>
           <span>{new Date(event.date+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'}).replace('.','')} · {event.city}{event.state?' / '+event.state:''}</span>
           <small>{event.venue||event.address||'Local não informado'}</small>
         </Link>)}
       </div>
     </details>}
-    {!filtered.length&&<div className="empty map-empty"><Search size={22}/><h3>Nenhum evento para estes filtros</h3><p>Escolha outro período, data ou local.</p><button type="button" className="button ghost" onClick={clearFilters}><X size={15}/>Limpar filtros</button></div>}
+    {!filtered.length&&<div className="empty map-empty"><Search size={22}/><h3>Nenhum evento para estes filtros</h3><p>Escolha outro período (como "Todas as datas"), data ou local.</p><button type="button" className="button ghost" onClick={()=>setPeriodFilter('all')}>Ver todas as datas</button></div>}
   </div>
 }

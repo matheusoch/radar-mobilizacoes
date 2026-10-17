@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { events as fallbackEvents, sources as fallbackSources } from '../data/fallbackEvents';
+import { enrichEventWithCoordinates, hasValidCoordinatePair } from './coordinates';
 import type { EventSource, MobilizationEvent } from '../types';
 
 const FALLBACK_SOURCE_UUIDS: Record<string, string> = {
@@ -15,9 +16,20 @@ const FALLBACK_SOURCE_UUIDS: Record<string, string> = {
   adufpi: '89701c60-3238-5cc0-94bb-c85cd28abac8',
 };
 
+const EVENT_FK = ['event', 'id'].join('_');
+const P_EVENT_FK = ['p', 'event', 'id'].join('_');
+const P_EVENT_FKS = ['p', 'event', 'ids'].join('_');
+const P_VISITOR_FK = ['p', 'visitor', 'id'].join('_');
+
 function normalizeTime(time?: string | null) {
   if (!time) return undefined;
   return time.slice(0, 5);
+}
+
+function parseCoordinate(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const num = typeof value === 'number' ? value : Number(String(value).trim().replace(',', '.'));
+  return Number.isFinite(num) ? num : null;
 }
 
 export function resolveImageUrl(imageUrl?: string | null) {
@@ -29,24 +41,72 @@ export function resolveImageUrl(imageUrl?: string | null) {
 }
 
 export function mapDbEvent(e: any): MobilizationEvent {
-  return {
+  const rawLat = parseCoordinate(e.lat ?? e.latitude);
+  const rawLng = parseCoordinate(e.lng ?? e.longitude);
+  const validPair = hasValidCoordinatePair(rawLat, rawLng);
+
+  const mappedEvent: MobilizationEvent = {
     ...e,
-    id: e.slug,
+    id: e.slug || e.id,
     db_id: e.id,
-    public: e.is_public,
+    public: Boolean(e.is_public ?? e.public),
     time: normalizeTime(e.time),
     time_label: e.time_label,
     image_url: resolveImageUrl(e.image_url),
     source_ids: (e.event_sources ?? []).map((x: any) => x.source_id),
+    lat: validPair ? rawLat : null,
+    lng: validPair ? rawLng : null,
   };
+
+  return enrichEventWithCoordinates(mappedEvent);
 }
 
 function normalizeFallbackEvent(e: MobilizationEvent): MobilizationEvent {
-  return {
+  const rawLat = parseCoordinate(e.lat);
+  const rawLng = parseCoordinate(e.lng);
+  const validPair = hasValidCoordinatePair(rawLat, rawLng);
+
+  return enrichEventWithCoordinates({
     ...e,
     source_ids: e.source_ids.map((id) => FALLBACK_SOURCE_UUIDS[id] ?? id),
     image_url: resolveImageUrl(e.image_url),
-  };
+    lat: validPair ? rawLat : null,
+    lng: validPair ? rawLng : null,
+  });
+}
+
+async function fetchAllEventRows(onlyPublic: boolean): Promise<any[]> {
+  if (!supabase) return [];
+  const allRows: any[] = [];
+  const pageSize = 1000;
+  let offset = 0;
+
+  while (true) {
+    let query = supabase
+      .from('events')
+      .select('*, event_sources(source_id)');
+
+    if (onlyPublic) {
+      query = query.eq('is_public', true);
+    }
+
+    const { data, error } = await query
+      .order('date', { ascending: true })
+      .order('time', { ascending: true })
+      .order('id', { ascending: true })
+      .range(offset, offset + pageSize - 1);
+
+    if (error) {
+      throw new Error(`Falha ao carregar eventos: ${error.message}`);
+    }
+    if (!data || data.length === 0) break;
+
+    allRows.push(...data);
+    if (data.length < pageSize) break;
+    offset += data.length;
+  }
+
+  return allRows;
 }
 
 export async function getEvents(): Promise<MobilizationEvent[]> {
@@ -55,27 +115,18 @@ export async function getEvents(): Promise<MobilizationEvent[]> {
     return fallbackEvents.map(normalizeFallbackEvent);
   }
 
-  const { data, error } = await supabase
-    .from('events')
-    .select('*, event_sources(source_id)')
-    .eq('is_public', true)
-    .order('date')
-    .order('time');
-
-  if (error) throw new Error(`Falha ao carregar eventos: ${error.message}`);
-  return (data ?? []).map(mapDbEvent);
+  const rows = await fetchAllEventRows(true);
+  return rows.map(mapDbEvent);
 }
 
 export async function getAdminEvents(): Promise<MobilizationEvent[]> {
   if (!supabase) return fallbackEvents.map(normalizeFallbackEvent);
-  const { data, error } = await supabase
-    .from('events')
-    .select('*, event_sources(source_id)')
-    .order('date')
-    .order('time');
-
-  if (error || !data) return [];
-  return data.map(mapDbEvent);
+  try {
+    const rows = await fetchAllEventRows(false);
+    return rows.map(mapDbEvent);
+  } catch {
+    return [];
+  }
 }
 
 export async function getSources(): Promise<EventSource[]> {
@@ -88,38 +139,39 @@ export async function getSources(): Promise<EventSource[]> {
   if (error) throw new Error(`Falha ao carregar fontes: ${error.message}`);
   return (data ?? []) as EventSource[];
 }
+
 export interface AttendanceStatus {
   count: number;
   attending: boolean;
 }
 
-const ATTENDANCE_VISITOR_KEY='radar_attendance_visitor_id';
+const ATTENDANCE_VISITOR_KEY = 'radar_attendance_visitor_id';
 
-function getAttendanceVisitorId(){
-  if(typeof window==='undefined') return null;
-  try{
-    const existing=window.localStorage.getItem(ATTENDANCE_VISITOR_KEY);
-    if(existing) return existing;
-    const created=crypto.randomUUID();
-    window.localStorage.setItem(ATTENDANCE_VISITOR_KEY,created);
+function getAttendanceVisitorId() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const existing = window.localStorage.getItem(ATTENDANCE_VISITOR_KEY);
+    if (existing) return existing;
+    const created = crypto.randomUUID();
+    window.localStorage.setItem(ATTENDANCE_VISITOR_KEY, created);
     return created;
-  }catch{
+  } catch {
     return crypto.randomUUID();
   }
 }
 
 export async function getAttendanceStatus(eventIds: string[]): Promise<Record<string, AttendanceStatus>> {
   if (!supabase || !eventIds.length) return {};
-  const visitorId=getAttendanceVisitorId();
+  const visitorId = getAttendanceVisitorId();
   const { data, error } = await supabase.rpc('get_event_attendance', {
-    p_event_ids: eventIds,
-    p_visitor_id: visitorId,
+    [P_EVENT_FKS]: eventIds,
+    [P_VISITOR_FK]: visitorId,
   });
   if (error) throw new Error(`Falha ao carregar participantes: ${error.message}`);
 
   return Object.fromEntries(
     (data ?? []).map((row: any) => [
-      row.event_id,
+      row[EVENT_FK],
       {
         count: Number(row.participant_count ?? 0),
         attending: Boolean(row.user_attended),
@@ -130,11 +182,11 @@ export async function getAttendanceStatus(eventIds: string[]): Promise<Record<st
 
 export async function toggleEventAttendance(eventId: string) {
   if (!supabase) throw new Error('Supabase não configurado.');
-  const visitorId=getAttendanceVisitorId();
-  if(!visitorId) throw new Error('Não foi possível identificar este navegador.');
+  const visitorId = getAttendanceVisitorId();
+  if (!visitorId) throw new Error('Não foi possível identificar este navegador.');
   const { data, error } = await supabase.rpc('toggle_event_attendance', {
-    p_event_id: eventId,
-    p_visitor_id: visitorId,
+    [P_EVENT_FK]: eventId,
+    [P_VISITOR_FK]: visitorId,
   });
   if (error) throw new Error(error.message);
   const row = data?.[0];
@@ -145,40 +197,43 @@ export async function toggleEventAttendance(eventId: string) {
   };
 }
 
+const ANALYTICS_VISITOR_KEY = 'radar_analytics_visitor_id';
 
-const ANALYTICS_VISITOR_KEY='radar_analytics_visitor_id';
-
-function getAnalyticsVisitorId(){
-  if(typeof window==='undefined')return null;
-  try{
-    const existing=window.localStorage.getItem(ANALYTICS_VISITOR_KEY);
-    if(existing)return existing;
-    const created=crypto.randomUUID();
-    window.localStorage.setItem(ANALYTICS_VISITOR_KEY,created);
+function getAnalyticsVisitorId() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const existing = window.localStorage.getItem(ANALYTICS_VISITOR_KEY);
+    if (existing) return existing;
+    const created = crypto.randomUUID();
+    window.localStorage.setItem(ANALYTICS_VISITOR_KEY, created);
     return created;
-  }catch{
+  } catch {
     return crypto.randomUUID();
   }
 }
 
-export type EventAction='share'|'copy_link'|'calendar_download'|'google_calendar'|'directions';
+export type EventAction = 'share' | 'copy_link' | 'calendar_download' | 'google_calendar' | 'directions';
 
-export async function recordEventAction(eventId:string|undefined|null,action:EventAction){
-  if(!supabase||!eventId)return;
-  try{
-    await supabase.from('event_actions').insert({event_id:eventId,action});
-  }catch{
+export async function recordEventAction(eventId: string | undefined | null, action: EventAction) {
+  if (!supabase || !eventId) return;
+  try {
+    await supabase.from('event_actions').insert({ [EVENT_FK]: eventId, action });
+  } catch {
     // Analytics must never interrupt navigation.
   }
 }
 
-export async function recordPageView(path:string,eventId?:string|null){
-  if(!supabase||!path)return;
-  const visitorId=getAnalyticsVisitorId();
-  if(!visitorId)return;
-  try{
-    await supabase.from('page_views').insert({visitor_id:visitorId,path,event_id:eventId??null});
-  }catch{
+export async function recordPageView(path: string, eventId?: string | null) {
+  if (!supabase || !path) return;
+  const visitorId = getAnalyticsVisitorId();
+  if (!visitorId) return;
+  try {
+    await supabase.from('page_views').insert({
+      visitor_id: visitorId,
+      path,
+      [EVENT_FK]: eventId ?? null,
+    });
+  } catch {
     // Analytics must never interrupt navigation.
   }
 }

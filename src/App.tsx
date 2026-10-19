@@ -32,7 +32,6 @@ import type {EventSource,MobilizationEvent} from './types';
 
 const ADMIN_STORAGE_BUCKET='event_posters';
 const SUBMISSION_STORAGE_BUCKET='submission_posters';
-const EMAIL_DIGEST_ENABLED=import.meta.env.VITE_EMAIL_DIGEST_ENABLED==='true';
 
 type Submission={
   id:string; user_id:string; display_name:string; title:string; date:string|null; time:string|null; time_label:string|null;

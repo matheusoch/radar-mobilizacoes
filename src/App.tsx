@@ -319,6 +319,8 @@ function Home({events}:{events:MobilizationEvent[]}){
   const lastDay=localDateKey(lastDate);
   const[filters,setFilters]=useState<FiltersState>({search:'',state:'',city:'',type:'',period:'upcoming',modality:'',date:''});
   const location=useLocation();
+  
+  // Sincroniza filtros com parâmetros de URL (links diretos por estado/cidade)
   useEffect(()=>{
     const params=new URLSearchParams(location.search);
     if(!params.has('date')&&!params.has('city')&&!params.has('state'))return;
@@ -330,6 +332,17 @@ function Home({events}:{events:MobilizationEvent[]}){
       period:params.get('date')?'selected-date':'upcoming'
     }));
   },[location.search]);
+
+  // Atualiza a URL automaticamente ao filtrar por estado ou cidade para facilitar o compartilhamento
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    if(filters.state)params.set('state',filters.state); else params.delete('state');
+    if(filters.city)params.set('city',filters.city); else params.delete('city');
+    if(filters.date)params.set('date',filters.date); else params.delete('date');
+    const newSearch=params.toString();
+    const newUrl=`${window.location.pathname}${newSearch?'?'+newSearch:''}`;
+    window.history.replaceState({},'',newUrl);
+  },[filters.state,filters.city,filters.date]);
   const[sortBy,setSortBy]=useState<AgendaSort>('chronological');
   const states=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'state'),[events,filters,today,lastDay]);
   const cities=useMemo(()=>agendaFilterOptions(events,filters,today,lastDay,'city'),[events,filters,today,lastDay]);

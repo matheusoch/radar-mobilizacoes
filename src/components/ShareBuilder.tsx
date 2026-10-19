@@ -1,5 +1,5 @@
 import {useEffect,useMemo,useState} from 'react';
-import {CalendarDays,Check,Image as ImageIcon,Star,X} from 'lucide-react';
+import {CalendarDays,Check,Image as ImageIcon,Star,X,Copy} from 'lucide-react';
 import {CARD_FORMAT_KEYS,IMAGE_FORMATS,type CardFormatKey} from '../config/site';
 import type {MobilizationEvent} from '../types';
 import {MAX_EVENTS_PER_CARD,generateShareCard,svgToDataUrl} from '../utils/shareCardGenerator';
@@ -9,6 +9,7 @@ import ShareCardActions from './ShareCardActions';
 import {formatTimeText} from '../utils/formatTime';
 import LocationAutocomplete from './LocationAutocomplete';
 import {canonicalizeLocationOptions,canonicalizeBrazilianState,normalizeBrazilianStateKey,stateSuggestionOptions,normalizeLocationKey} from '../lib/locationNormalization';
+import {formatEventsForWhatsApp, copyTextToClipboard} from '../utils/shareUtils';
 
 const HASHTAGS=['AgendaDeMobilizacoes'] as const;
 
@@ -46,6 +47,7 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
   const[cityFilter,setCityFilter]=useState('');
   const[selected,setSelected]=useState<string[]>(initialIds);
   const[format,setFormat]=useState<CardFormatKey>('feed');
+  const[copyFeedback,setCopyFeedback]=useState(false);
   const assets=useShareCardAssets();
 
   const dateParts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
@@ -87,6 +89,19 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
 
   const toggle=(id:string)=>{
     setSelected(current=>current.includes(id)?current.filter(item=>item!==id):[...current,id]);
+  };
+
+  const handleWhatsAppCopy = async () => {
+    const text = formatEventsForWhatsApp(chosen.length ? chosen : candidates, {
+      state: stateFilter,
+      city: cityFilter,
+      date: dateFilter,
+    });
+    const success = await copyTextToClipboard(text);
+    if (success) {
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 3000);
+    }
   };
 
   const content=useMemo<ShareContent>(()=>({
@@ -250,6 +265,13 @@ export default function ShareBuilder({events}:{events:MobilizationEvent[]}) {
           content={content}
           shareTitle='Agenda de Mobilizações'
         />
+
+        <div style={{ marginTop: '14px' }}>
+          <button type='button' className='button ghost' style={{ width: '100%', justifyContent: 'center' }} onClick={handleWhatsAppCopy}>
+            <Copy size={16}/> Copiar resumo para WhatsApp / Telegram
+          </button>
+          {copyFeedback && <small style={{ display: 'block', textAlign: 'center', marginTop: '6px', color: '#16a34a' }}>✨ Resumo copiado para a área de transferência!</small>}
+        </div>
 
         <p className='share-help'>
           O painel é gerado em vetor (SVG) com a identidade visual da Agenda e fica vinculado a um link próprio,

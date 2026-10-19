@@ -25,7 +25,7 @@ import {BRAZILIAN_STATES} from './lib/brazilianStates';
 import {canonicalizeLocationOptions,normalizeBrazilianStateKey,normalizeLocationKey} from './lib/locationNormalization';
 import {extractClockTime,formatTimeText} from './utils/formatTime';
 import {StatusBadge} from './components/Badge';
-import {getEvents,getAdminEvents,getSources,resolveImageUrl,mapDbEvent,getAttendanceStatus,toggleEventAttendance,recordPageView,recordEventAction} from './lib/data';
+import {getEvents,getAdminEvents,getSources,resolveImageUrl,mapDbEvent,getAttendanceStatus,toggleEventAttendance,recordPageView,recordEventAction,recordConversion} from './lib/data';
 import {supabase} from './lib/supabase';
 import type {EventSource,MobilizationEvent} from './types';
 
@@ -864,9 +864,12 @@ function AuthPage(){
           else navigate(next);
         }
       }else if(mode==='login'){
-        const{error}=await db.auth.signInWithPassword({email,password});
+        const{data:loginData,error}=await db.auth.signInWithPassword({email,password});
         if(error)setMsg(error.message);
-        else navigate(next);
+        else {
+          void recordConversion('login_success',window.location.pathname,loginData.user?.id);
+          navigate(next);
+        }
       }else{
         if(digestSignup&&digestOptIn&&(!digestCity.trim()||!digestState)){
           setMsg('Para receber os alertas, informe sua cidade e estado. Você também pode criar a conta sem aderir aos e-mails.');
@@ -890,10 +893,14 @@ function AuthPage(){
           },
         });
         if(error)setMsg(error.message);
-        else if(data.session)navigate(next);
-        else setMsg(digestSignup&&digestOptIn
-          ?'Conta criada. Confirme seu e-mail; depois abra as preferências de alertas para salvar sua adesão.'
-          :'Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre na Agenda.');
+        else {
+          if(data.user)void recordConversion('signup_success',window.location.pathname,data.user.id);
+          if(digestSignup&&digestOptIn&&data.user)void recordConversion('digest_opt_in',window.location.pathname,data.user.id);
+          if(data.session)navigate(next);
+          else setMsg(digestSignup&&digestOptIn
+            ?'Conta criada. Confirme seu e-mail; depois abra as preferências de alertas para salvar sua adesão.'
+            :'Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre na Agenda.');
+        }
       }
     }catch(error){
       setMsg(error instanceof Error?error.message:'Não foi possível concluir a operação. Tente novamente.');

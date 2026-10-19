@@ -4,6 +4,7 @@ import {Bell,CheckCircle2,Info,LogIn,Mail,MapPin,ShieldCheck,XCircle} from 'luci
 import {Link,useLocation} from 'react-router-dom';
 import {BRAZILIAN_STATES} from '../lib/brazilianStates';
 import {supabase} from '../lib/supabase';
+import {recordAnalyticsEvent} from '../lib/data';
 import LocationAutocomplete from './LocationAutocomplete';
 import {canonicalizeLocation,canonicalizeLocationOptions} from '../lib/locationNormalization';
 
@@ -110,6 +111,7 @@ export default function CityEmailDigestPreferences(){
 
   const save=async()=>{
     if(!supabase||!user)return;
+    const wasEmailEnabled=settings.enabled;
     setBusy(true);setError('');setMessage('');
     try{
       if((settings.enabled||settings.in_app_enabled)&&(!settings.city.trim()||!settings.state)){
@@ -143,7 +145,7 @@ export default function CityEmailDigestPreferences(){
         consent_at:saved?.consent_at??null,
         unsubscribed_at:saved?.unsubscribed_at??null,
       }));
-      setMessage(settings.in_app_enabled&&settings.enabled
+      if(settings.enabled&&!wasEmailEnabled)void recordAnalyticsEvent('email_alert_opt_in',{source:'preferences'});\n      if(!settings.enabled&&wasEmailEnabled)void recordAnalyticsEvent('email_alert_opt_out',{source:'preferences'});\n      setMessage(settings.in_app_enabled&&settings.enabled
         ?'Preferências salvas. Você receberá notificações no site e, quando o serviço estiver ativo, resumos por e-mail.'
         :settings.in_app_enabled
           ?'Preferência salva. Você receberá notificações dentro do site para eventos da sua cidade.'

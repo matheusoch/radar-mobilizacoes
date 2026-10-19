@@ -1,5 +1,5 @@
 type Subscription = { user_id:string; city:string; state:string; enabled:boolean; email_format:"resumo"|"cards"|"ambos"; last_sent_on:string|null };
-type DigestEvent = { id:string; title:string; date:string; time:string|null; time_label:string|null; city:string; state:string; venue:string; address:string|null; type:string };
+type DigestEvent = { id:string; title:string; date:string; time:string|null; time_label:string|null; city:string; state:string; venue:string; address:string|null; type:string; image_url:string|null };
 const enc = new TextEncoder();
 const MAX_EVENTS_IN_EMAIL = 20;
 const CONCURRENCY = 4;
@@ -44,7 +44,7 @@ function htmlBody(city:string,state:string,events:DigestEvent[],format:Subscript
     const details=e.city+"/"+e.state+" · "+(e.venue||e.address||"Local não informado");
     return `<article style="border:1px solid #e5ddd9;border-radius:12px;padding:14px;margin:0 0 10px;background:#fff;">
       <div style="font-size:12px;font-weight:800;color:#a21d35;">${esc(dateLabel(e.date))} · ${esc(timeLabel(e))}</div>
-      <h2 style="font-size:18px;line-height:1.3;margin:7px 0;color:#171717;">${esc(e.title)}</h2>
+      ${posterHtml}\n      <h2 style="font-size:18px;line-height:1.3;margin:7px 0;color:#171717;">${esc(e.title)}</h2>
       <p style="font-size:13px;line-height:1.5;color:#56514f;margin:0 0 10px;">${esc(details)}</p>
       ${e.type?`<p style="font-size:11px;color:#686d74;margin:0 0 10px;">${esc(e.type)}</p>`:""}
       <a href="${esc(site+"/evento/"+encodeURIComponent(e.id))}" style="display:inline-block;background:#a21d35;color:#fff;text-decoration:none;font-size:12px;font-weight:800;padding:9px 12px;border-radius:8px;">Ver evento</a>
@@ -86,7 +86,7 @@ Deno.serve(async(request)=>{
   subUrl.searchParams.set("select","user_id,city,state,enabled,email_format,last_sent_on");
   subUrl.searchParams.set("enabled","eq.true"); subUrl.searchParams.set("order","user_id.asc");
   const eventsUrl=new URL(base+"/rest/v1/events");
-  eventsUrl.searchParams.set("select","id,title,date,time,time_label,city,state,venue,address,type");
+  eventsUrl.searchParams.set("select","id,title,date,time,time_label,city,state,venue,address,type,image_url");
   eventsUrl.searchParams.set("is_public","eq.true"); eventsUrl.searchParams.set("and","(date.gte."+today+",date.lte."+end+")");
   eventsUrl.searchParams.set("order","date.asc"); eventsUrl.searchParams.set("limit","1000");
   try {

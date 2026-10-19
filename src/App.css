@@ -1114,3 +1114,14 @@ body{background:var(--page);color:var(--ink)}
     width:100%;
   }
 }
+
+
+.email-digest-check-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:10px;margin-top:16px}
+.email-digest-check{display:flex;align-items:flex-start;gap:10px;border:1px solid var(--border,#e5e5e5);border-radius:10px;padding:12px;background:var(--surface,#fff)}
+.email-digest-check svg{flex:0 0 auto;margin-top:2px}
+.email-digest-check:has(svg.lucide-circle-check-big) svg{color:#18864b}
+.email-digest-check>div{display:grid;gap:4px;min-width:0}
+.email-digest-check strong{font-size:.88rem}
+.email-digest-check span{font-size:.82rem;line-height:1.45;color:var(--muted,#626262)}
+.email-digest-diagnostics .page-lead{max-width:850px}
+.email-digest-diagnostics .city-digest-actions{margin:14px 0}

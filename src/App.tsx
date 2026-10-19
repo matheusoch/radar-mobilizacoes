@@ -839,7 +839,6 @@ function NearbyMapPage({events}:{events:MobilizationEvent[]}){
       const{data:{user:currentUser}}=await supabase.auth.getUser();
       if(!active)return;
       if(!currentUser){
-        void recordConversion('nearby_click','/mapa-perto-de-mim');
         navigate('/entrar?next='+encodeURIComponent('/mapa-perto-de-mim'),{replace:true});
         return;
       }
@@ -1638,6 +1637,7 @@ export default function App(){
       eventId=events.find(e=>e.id===slug)?.db_id??null;
     }
     recordPageView(location.pathname,eventId);
+    if(eventId)void recordConversion('event_detail_view',location.pathname);
   },[location.pathname,loading,loadError,events]);
 
   const reload=()=>Promise.all([getEvents(),getSources()])

@@ -1,6 +1,6 @@
 -- Traffic attribution and conversion funnel analytics.
 alter table public.page_views
-  add column if not exists traffic_source text not null default 'Direto / desconhecido',
+  add column if not exists traffic_source text,
   add column if not exists referrer_host text,
   add column if not exists utm_source text,
   add column if not exists utm_medium text,
@@ -14,7 +14,7 @@ create table if not exists public.analytics_events (
     'signup_started','signup_completed','email_alert_opt_in',
     'nearby_clicked','nearby_viewed','login_completed','digest_preferences_saved'
   )),
-  traffic_source text not null default 'Direto / desconhecido',
+  traffic_source text,
   utm_source text,
   utm_medium text,
   utm_campaign text,
@@ -82,7 +82,7 @@ begin
     'traffic_sources_30d', coalesce((
       select jsonb_agg(jsonb_build_object('source', source, 'views', views) order by views desc)
       from (
-        select coalesce(nullif(traffic_source,''),'Direto / desconhecido') as source, count(*) as views
+        select coalesce(nullif(traffic_source,''),'Origem não registrada') as source, count(*) as views
         from public.page_views where created_at >= now() - interval '30 days'
         group by 1 order by count(*) desc limit 10
       ) src

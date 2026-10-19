@@ -199,17 +199,43 @@ export async function toggleEventAttendance(eventId: string) {
 
 const ANALYTICS_VISITOR_KEY = 'radar_analytics_visitor_id';
 
-function getAnalyticsVisitorId() {
-  if (typeof window === 'undefined') return null;
+function getAnalyticsVisitor() {
+  if (typeof window === 'undefined') return { id: null as string | null, returning: false };
   try {
     const existing = window.localStorage.getItem(ANALYTICS_VISITOR_KEY);
-    if (existing) return existing;
+    if (existing) return { id: existing, returning: true };
     const created = crypto.randomUUID();
     window.localStorage.setItem(ANALYTICS_VISITOR_KEY, created);
-    return created;
+    return { id: created, returning: false };
   } catch {
-    return crypto.randomUUID();
+    return { id: crypto.randomUUID(), returning: false };
   }
+}
+
+function getAttribution() {
+  if (typeof window === 'undefined') return {};
+  const url = new URL(window.location.href);
+  const params = url.searchParams;
+  const cleanHost = (value: string) => {
+    try { return new URL(value).hostname.toLowerCase().replace(/^www\\./, ''); } catch { return null; }
+  };
+  const referrerHost = document.referrer ? cleanHost(document.referrer) : null;
+  const utmSource = params.get('utm_source')?.slice(0, 120) || null;
+  const utmMedium = params.get('utm_medium')?.slice(0, 120) || null;
+  const utmCampaign = params.get('utm_campaign')?.slice(0, 160) || null;
+  const utmContent = params.get('utm_content')?.slice(0, 160) || null;
+  let sourcePlatform = utmSource || '';
+  if (!sourcePlatform && referrerHost) {
+    if (/instagram\\.com$/.test(referrerHost)) sourcePlatform = 'instagram';
+    else if (/(^|\\.)tiktok\\.com$/.test(referrerHost)) sourcePlatform = 'tiktok';
+    else if (/(^|\\.)(x|twitter)\\.com$/.test(referrerHost)) sourcePlatform = 'x';
+    else if (/(^|\\.)facebook\\.com$/.test(referrerHost)) sourcePlatform = 'facebook';
+    else if (/(^|\\.)google\\./.test(referrerHost)) sourcePlatform = 'google';
+    else if (/(^|\\.)whatsapp\\.com$/.test(referrerHost) || referrerHost === 'wa.me') sourcePlatform = 'whatsapp';
+    else sourcePlatform = 'referral';
+  }
+  if (!sourcePlatform) sourcePlatform = 'direct';
+  return { source_platform: sourcePlatform, utm_source: utmSource, utm_medium: utmMedium, utm_campaign: utmCampaign, utm_content: utmContent, referrer_host: referrerHost };
 }
 
 export type EventAction = 'share' | 'copy_link' | 'calendar_download' | 'google_calendar' | 'directions';
@@ -225,15 +251,39 @@ export async function recordEventAction(eventId: string | undefined | null, acti
 
 export async function recordPageView(path: string, eventId?: string | null) {
   if (!supabase || !path) return;
-  const visitorId = getAnalyticsVisitorId();
-  if (!visitorId) return;
+  const visitor = getAnalyticsVisitor();
+  if (!visitor.id) return;
   try {
     await supabase.from('page_views').insert({
-      visitor_id: visitorId,
+      visitor_id: visitor.id,
       path,
       [EVENT_FK]: eventId ?? null,
+      ...getAttribution(),
+      is_returning: visitor.returning,
     });
   } catch {
     // Analytics must never interrupt navigation.
+  }
+}
+
+export type AnalyticsEventName =
+  | 'signup_started' | 'signup_completed' | 'login_completed'
+  | 'nearby_clicked' | 'nearby_viewed' | 'alert_preferences_opened'
+  | 'email_alert_opt_in' | 'email_alert_opt_out' | 'event_opened'
+  | 'calendar_opened' | 'map_opened';
+
+export async function recordAnalyticsEvent(eventName: AnalyticsEventName, metadata: Record<string, unknown> = {}) {
+  if (!supabase || typeof window === 'undefined') return;
+  const visitor = getAnalyticsVisitor();
+  if (!visitor.id) return;
+  try {
+    await supabase.from('analytics_events').insert({
+      visitor_id: visitor.id,
+      event_name: eventName,
+      path: window.location.pathname,
+      metadata: { ...metadata, ...getAttribution(), is_returning: visitor.returning },
+    });
+  } catch {
+    // Analytics must never interrupt the user flow.
   }
 }

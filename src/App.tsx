@@ -901,7 +901,7 @@ function AuthPage(){
         else {void recordAnalyticsEvent('login_completed');navigate(next);}
       }else{
         void recordAnalyticsEvent('signup_started');
-        if(digestSignup&&digestOptIn&&(!digestCity.trim()||!digestState)){
+        if(digestOptIn&&(!digestCity.trim()||!digestState)){
           setMsg('Para receber os alertas, informe sua cidade e estado. Você também pode criar a conta sem aderir aos e-mails.');
           return;
         }
@@ -953,7 +953,7 @@ function AuthPage(){
       {mode!=='reset'&&<label className="auth-field"><span>E-mail</span><input type="email" placeholder="voce@exemplo.com" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete={mode==='recover'?'email':'username'}/></label>}
       {(mode==='login'||mode==='signup'||mode==='reset')&&<label className="auth-field"><span>Senha</span><input type="password" placeholder="Pelo menos 6 caracteres" value={password} onChange={e=>setPassword(e.target.value)} minLength={6} required autoComplete={mode==='reset'?'new-password':mode==='login'?'current-password':'new-password'}/></label>}
       {mode==='reset'&&<label className="auth-field"><span>Confirme a nova senha</span><input type="password" placeholder="Repita sua nova senha" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} minLength={6} required autoComplete="new-password"/></label>}
-      {digestSignup&&mode==='signup'&&<section className="auth-digest-fields" aria-labelledby="auth-digest-title">
+      {mode==='signup'&&<section className="auth-digest-fields" aria-labelledby="auth-digest-title">
         <div><div className="eyebrow">OPCIONAL</div><h2 id="auth-digest-title">Alertas da sua cidade</h2><p>Receba às 8h, no horário de Brasília, um resumo dos eventos de hoje e dos próximos sete dias na região informada.</p></div>
         <label className="auth-field"><span>Cidade</span><input value={digestCity} onChange={e=>setDigestCity(e.target.value)} maxLength={100} autoComplete="address-level2" placeholder="Ex.: Fortaleza" required={digestOptIn} disabled={busy}/></label>
         <label className="auth-field"><span>Estado</span><select value={digestState} onChange={e=>setDigestState(e.target.value)} autoComplete="address-level1" required={digestOptIn} disabled={busy}><option value="">Selecione a UF</option>{BRAZILIAN_STATES.map(state=><option key={state.code} value={state.code}>{state.name} ({state.code})</option>)}</select></label>

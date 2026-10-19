@@ -829,8 +829,17 @@ function NearbyPage({events}:{events:MobilizationEvent[]}){
       setUser(data.user);
       const{data:preference,error:preferenceError}=await supabase.from('city_email_digest_subscriptions').select('city,state').eq('user_id',data.user.id).maybeSingle();
       if(!active)return;
+      const metadata=(data.user.user_metadata||{}) as Record<string,unknown>;
       if(preferenceError){setError('Não foi possível carregar a cidade do seu perfil.');}
       else if(preference?.city&&preference?.state){setCity(preference.city);setState(preference.state);}
+      else if(typeof metadata.digest_city==='string'&&typeof metadata.digest_state==='string'){
+        setCity(metadata.digest_city);setState(metadata.digest_state);
+        if(metadata.email_digest_opt_in===true&&data.user.email_confirmed_at){
+          const format=metadata.email_digest_format==='resumo'||metadata.email_digest_format==='cards'?metadata.email_digest_format:'ambos';
+          const{error:saveError}=await supabase.rpc('save_city_alert_preferences',{p_city:metadata.digest_city,p_state:metadata.digest_state,p_in_app_enabled:false,p_email_enabled:true,p_email_format:format});
+          if(saveError)console.warn('Não foi possível concluir a adesão aos alertas após o login.',saveError.message);
+        }
+      }
       setLoading(false);
     }).catch(()=>{if(active){setError('Não foi possível verificar sua sessão.');setLoading(false)}});
     const{data:listener}=supabase.auth.onAuthStateChange((_event,session)=>{if(active)setUser(session?.user??null)});

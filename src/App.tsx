@@ -25,7 +25,7 @@ import {BRAZILIAN_STATES} from './lib/brazilianStates';
 import {canonicalizeLocationOptions,normalizeBrazilianStateKey,normalizeLocationKey} from './lib/locationNormalization';
 import {extractClockTime,formatTimeText} from './utils/formatTime';
 import {StatusBadge} from './components/Badge';
-import {getEvents,getAdminEvents,getSources,resolveImageUrl,mapDbEvent,getAttendanceStatus,toggleEventAttendance,recordPageView,recordEventAction} from './lib/data';
+import {getEvents,getAdminEvents,getSources,resolveImageUrl,mapDbEvent,getAttendanceStatus,toggleEventAttendance,recordPageView,recordEventAction,recordConversion} from './lib/data';
 import {supabase} from './lib/supabase';
 import type {EventSource,MobilizationEvent} from './types';
 
@@ -41,7 +41,8 @@ type Submission={
 type ChatMessageParent={id:string;display_name:string;content:string;author_role?:'user'|'admin'|null};
 type ChatMessage={id:string;user_id:string;display_name:string;author_role?:'user'|'admin'|null;content:string;attachment_path:string|null;status:string;created_at:string;reviewed_at:string|null;reviewed_by:string|null;parent_message_id?:string|null;parent_message?:ChatMessageParent|null};
 function chatAuthorName(message:{display_name:string;author_role?:'user'|'admin'|null}){return message.author_role==='admin'?'Admin':message.display_name||'Participante';}
-type PageViewRow={path:string;event_id:string|null;visitor_id:string;created_at:string};
+type PageViewRow={path:string;event_id:string|null;visitor_id:string;created_at:string;session_id?:string|null;is_returning?:boolean;source?:string|null;campaign_source?:string|null;campaign_medium?:string|null;campaign_name?:string|null;first_source?:string|null};
+type ConversionRow={event_name:string;visitor_id:string;session_id:string;source:string|null;first_source:string|null;created_at:string;is_returning:boolean};
 type EventActionRow={event_id:string;action:'share'|'copy_link'|'calendar_download'|'google_calendar'|'directions';created_at:string};
 
 class AppErrorBoundary extends React.Component<{children:ReactNode},{error:Error|null}>{
@@ -812,14 +813,61 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
     {!groups.length&&<div className="empty calendar-empty"><Search/><h3>Nenhum evento encontrado</h3><p>{query||stateFilter||cityFilter||typeFilter?'Tente alterar ou limpar os filtros.':'Não há eventos públicos nesta data.'}</p>{(query||stateFilter||cityFilter||typeFilter||showAllDates)&&<button type="button" className="button ghost" onClick={clearFilters}><X size={15}/>Limpar filtros</button>}</div>}
   </div>
 }
-function MapPage({events}:{events:MobilizationEvent[]}){return <div className="container page"><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> MAPA DE MOBILIZAÇÕES</div><h1>Mobilizações no Brasil</h1><p className="page-lead">Visualize as mobilizações por data, estado ou cidade. Escolha um período ou um dia específico, explore os pontos disponíveis e abra cada evento para conferir horário, local e fontes.</p><MapView events={events.filter(e=>e.public)}/></div>}
+function MapPage({events}:{events:MobilizationEvent[]}){
+  return <div className="container page">
+    <div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> MAPA DE MOBILIZAÇÕES</div>
+    <h1>Mobilizações no Brasil</h1>
+    <p className="page-lead">Visualize as mobilizações por data, estado ou cidade. Escolha um período ou um dia específico, explore os pontos disponíveis e abra cada evento para conferir horário, local e fontes.</p>
+    <div className="callout info" style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:16,flexWrap:'wrap'}}>
+      <span><strong>Quer ver o que acontece perto de você?</strong><br/>Entre na sua conta e use a cidade cadastrada para filtrar o mapa.</span>
+      <Link className="button primary" to="/mapa-perto-de-mim" onClick={()=>void recordConversion('nearby_click','/mapa')}>Mobilizações perto de mim</Link>
+    </div>
+    <MapView events={events.filter(e=>e.public)}/>
+  </div>;
+}
+
+function NearbyMapPage({events}:{events:MobilizationEvent[]}){
+  const navigate=useNavigate();
+  const[user,setUser]=useState<any>(null);
+  const[city,setCity]=useState('');
+  const[state,setState]=useState('');
+  const[loadingNearby,setLoadingNearby]=useState(true);
+  const[error,setError]=useState('');
+  useEffect(()=>{
+    if(!supabase){setLoadingNearby(false);setError('O serviço de conta não está disponível.');return}
+    let active=true;
+    (async()=>{
+      const{data:{user:currentUser}}=await supabase.auth.getUser();
+      if(!active)return;
+      if(!currentUser){
+        navigate('/entrar?next='+encodeURIComponent('/mapa-perto-de-mim'),{replace:true});
+        return;
+      }
+      setUser(currentUser);
+      const{data,error:preferenceError}=await supabase.from('city_email_digest_subscriptions').select('city,state').eq('user_id',currentUser.id).maybeSingle();
+      if(!active)return;
+      if(preferenceError)setError('Não foi possível carregar a cidade da sua conta.');
+      else if(data){setCity(data.city||'');setState(data.state||'');}
+      if(data?.city&&data?.state)void recordConversion('nearby_view','/mapa-perto-de-mim',currentUser.id);
+      setLoadingNearby(false);
+    })();
+    return()=>{active=false};
+  },[navigate]);
+  const normalized=(value:string)=>normalizedSearchText(value).trim();
+  if(loadingNearby)return <div className="loading"><div className="spinner"/>Preparando o mapa da sua região…</div>;
+  if(error)return <div className="container page narrow"><div className="callout warning"><Info/><span>{error}</span></div></div>;
+  if(!user)return <div className="container page narrow"><h1>Entre para ver as mobilizações perto de você</h1><p className="page-lead">Depois do login, mostraremos no mapa os eventos da cidade que você cadastrou.</p></div>;
+  if(!city||!state)return <div className="container page narrow"><div className="eyebrow"><MapPinned size={15}/> MAPA PERSONALIZADO</div><h1>Cadastre sua cidade</h1><p className="page-lead">Para filtrar o mapa por região, escolha sua cidade e estado nas preferências. Você não precisa compartilhar a localização precisa do celular.</p><Link className="button primary" to="/preferencias-alertas">Configurar minha cidade</Link></div>;
+  const localEvents=events.filter(event=>event.public&&normalized(event.city)===normalized(city)&&normalized(event.state)===normalized(state));
+  return <div className="container page"><div className="eyebrow"><MapPinned size={15}/> MAPA PERSONALIZADO</div><h1>Mobilizações perto de você</h1><p className="page-lead">Eventos cadastrados em {city}, {state}. A busca usa a cidade escolhida na sua conta, não o GPS do dispositivo.</p>{localEvents.length?<MapView events={localEvents}/>:<div className="empty"><MapPinned/><h3>Ainda não encontramos mobilizações nessa cidade</h3><p>Você pode explorar o mapa completo enquanto novos eventos são cadastrados.</p><Link className="button ghost" to="/mapa">Ver mapa do Brasil</Link></div>}</div>;
+}
 function AboutPage(){return <div className="container page narrow"><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> SOBRE A AGENDA</div><h1>Uma agenda pública de mobilizações eleitorais.</h1><p className="page-lead">A Agenda reúne eventos e mobilizações em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, transformando informações espalhadas em uma agenda navegável, fácil de conferir e de atualizar.</p><div className="about-grid"><div><h2>Como funciona</h2><p>Cada evento tem data, horário, cidade, local, tipo e links para as fontes usadas na conferência.</p></div><div><h2>O que “verificado” significa</h2><p>Os campos essenciais foram comparados com uma ou mais publicações ou fontes identificáveis. Isso não substitui a checagem no dia do evento.</p></div><div><h2>Independente</h2><p>Este projeto não é oficial de campanha, partido, governo ou organização.</p></div><div><h2>Base editorial</h2><p>A primeira carga foi montada a partir das threads, pôsteres e fontes complementares identificadas na pesquisa.</p></div></div></div>}
 
 function AuthPage(){
   const location=useLocation();
   const params=new URLSearchParams(location.search);
   const next=params.get('next')||'/chat';
-  const digestSignup=EMAIL_DIGEST_ENABLED&&params.get('digest')==='1';
+  const digestSignup=params.get('digest')==='1';
   const[mode,setMode]=useState<'login'|'signup'|'recover'|'reset'>(()=>params.get('mode')==='signup'?'signup':'login');
   const[email,setEmail]=useState('');
   const[password,setPassword]=useState('');
@@ -864,9 +912,12 @@ function AuthPage(){
           else navigate(next);
         }
       }else if(mode==='login'){
-        const{error}=await db.auth.signInWithPassword({email,password});
+        const{data:loginData,error}=await db.auth.signInWithPassword({email,password});
         if(error)setMsg(error.message);
-        else navigate(next);
+        else {
+          void recordConversion('login_success',window.location.pathname,loginData.user?.id);
+          navigate(next);
+        }
       }else{
         if(digestSignup&&digestOptIn&&(!digestCity.trim()||!digestState)){
           setMsg('Para receber os alertas, informe sua cidade e estado. Você também pode criar a conta sem aderir aos e-mails.');
@@ -890,10 +941,14 @@ function AuthPage(){
           },
         });
         if(error)setMsg(error.message);
-        else if(data.session)navigate(next);
-        else setMsg(digestSignup&&digestOptIn
-          ?'Conta criada. Confirme seu e-mail; depois abra as preferências de alertas para salvar sua adesão.'
-          :'Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre na Agenda.');
+        else {
+          if(data.user)void recordConversion('signup_success',window.location.pathname,data.user.id);
+          if(digestSignup&&digestOptIn&&data.user)void recordConversion('digest_opt_in',window.location.pathname,data.user.id);
+          if(data.session)navigate(next);
+          else setMsg(digestSignup&&digestOptIn
+            ?'Conta criada. Confirme seu e-mail; depois abra as preferências de alertas para salvar sua adesão.'
+            :'Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre na Agenda.');
+        }
       }
     }catch(error){
       setMsg(error instanceof Error?error.message:'Não foi possível concluir a operação. Tente novamente.');
@@ -917,6 +972,7 @@ function AuthPage(){
       {(mode==='login'||mode==='signup'||mode==='reset')&&<label className="auth-field"><span>Senha</span><input type="password" placeholder="Pelo menos 6 caracteres" value={password} onChange={e=>setPassword(e.target.value)} minLength={6} required autoComplete={mode==='reset'?'new-password':mode==='login'?'current-password':'new-password'}/></label>}
       {mode==='reset'&&<label className="auth-field"><span>Confirme a nova senha</span><input type="password" placeholder="Repita sua nova senha" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} minLength={6} required autoComplete="new-password"/></label>}
       {digestSignup&&mode==='signup'&&<section className="auth-digest-fields" aria-labelledby="auth-digest-title">
+        {!EMAIL_DIGEST_ENABLED&&<div className="callout info"><Info size={18}/><span>Você já pode registrar sua preferência, mas o envio automático por e-mail ainda não está ativo. A opção não é obrigatória e poderá ser alterada depois.</span></div>}
         <div><div className="eyebrow">OPCIONAL</div><h2 id="auth-digest-title">Alertas da sua cidade</h2><p>Receba às 8h, no horário de Brasília, um resumo dos eventos de hoje e dos próximos sete dias na região informada.</p></div>
         <label className="auth-field"><span>Cidade</span><input value={digestCity} onChange={e=>setDigestCity(e.target.value)} maxLength={100} autoComplete="address-level2" placeholder="Ex.: Fortaleza" required={digestOptIn} disabled={busy}/></label>
         <label className="auth-field"><span>Estado</span><select value={digestState} onChange={e=>setDigestState(e.target.value)} autoComplete="address-level1" required={digestOptIn} disabled={busy}><option value="">Selecione a UF</option>{BRAZILIAN_STATES.map(state=><option key={state.code} value={state.code}>{state.name} ({state.code})</option>)}</select></label>
@@ -1030,7 +1086,7 @@ async function indexSubmissionPoster(db:any,eventId:string,storagePath:string,im
 function AdminPage(){
   const db=supabase!;
   const[subLoadError,setSubLoadError]=useState('');
-  const[user,setUser]=useState<any>(null);const[loading,setLoading]=useState(true);const[authorized,setAuthorized]=useState(false);const[events,setEvents]=useState<MobilizationEvent[]>([]);const[sources,setSources]=useState<EventSource[]>([]);const[submissions,setSubmissions]=useState<Submission[]>([]);const[chatPending,setChatPending]=useState<ChatMessage[]>([]);const[chatApproved,setChatApproved]=useState<ChatMessage[]>([]);const[editing,setEditing]=useState<MobilizationEvent|null>(null);const[posterFile,setPosterFile]=useState<File|null>(null);const[posterPreview,setPosterPreview]=useState<string|null>(null);const[indexingPosters,setIndexingPosters]=useState(false);const[posterIndexProgress,setPosterIndexProgress]=useState('');const[message,setMessage]=useState('');const[saving,setSaving]=useState(false);const[submitting,setSubmitting]=useState<string|null>(null);const[subPosterUrls,setSubPosterUrls]=useState<Record<string,string>>({});const[adminQuery,setAdminQuery]=useState('');const[adminDate,setAdminDate]=useState('');const[adminStatus,setAdminStatus]=useState('');const[adminMedia,setAdminMedia]=useState<'all'|'missing'|'attached'>('all');const[adminSort,setAdminSort]=useState<'recent'|'city'|'state'>('recent');const[analyticsRows,setAnalyticsRows]=useState<PageViewRow[]>([]);const[analyticsActionRows,setAnalyticsActionRows]=useState<EventActionRow[]>([]);const[adminAnalyticsMetrics,setAdminAnalyticsMetrics]=useState<any>(null);const[adminAnalyticsError,setAdminAnalyticsError]=useState('');const[geoBusy,setGeoBusy]=useState(false);const[geoOptions,setGeoOptions]=useState<any[]>([]);
+  const[user,setUser]=useState<any>(null);const[loading,setLoading]=useState(true);const[authorized,setAuthorized]=useState(false);const[events,setEvents]=useState<MobilizationEvent[]>([]);const[sources,setSources]=useState<EventSource[]>([]);const[submissions,setSubmissions]=useState<Submission[]>([]);const[chatPending,setChatPending]=useState<ChatMessage[]>([]);const[chatApproved,setChatApproved]=useState<ChatMessage[]>([]);const[editing,setEditing]=useState<MobilizationEvent|null>(null);const[posterFile,setPosterFile]=useState<File|null>(null);const[posterPreview,setPosterPreview]=useState<string|null>(null);const[indexingPosters,setIndexingPosters]=useState(false);const[posterIndexProgress,setPosterIndexProgress]=useState('');const[message,setMessage]=useState('');const[saving,setSaving]=useState(false);const[submitting,setSubmitting]=useState<string|null>(null);const[subPosterUrls,setSubPosterUrls]=useState<Record<string,string>>({});const[adminQuery,setAdminQuery]=useState('');const[adminDate,setAdminDate]=useState('');const[adminStatus,setAdminStatus]=useState('');const[adminMedia,setAdminMedia]=useState<'all'|'missing'|'attached'>('all');const[adminSort,setAdminSort]=useState<'recent'|'city'|'state'>('recent');const[analyticsRows,setAnalyticsRows]=useState<PageViewRow[]>([]);const[analyticsActionRows,setAnalyticsActionRows]=useState<EventActionRow[]>([]);const[conversionRows,setConversionRows]=useState<ConversionRow[]>([]);const[adminAnalyticsMetrics,setAdminAnalyticsMetrics]=useState<any>(null);const[adminAnalyticsError,setAdminAnalyticsError]=useState('');const[geoBusy,setGeoBusy]=useState(false);const[geoOptions,setGeoOptions]=useState<any[]>([]);
   const[showNewSource,setShowNewSource]=useState(false);const[sourceQuery,setSourceQuery]=useState('');const[sourcePage,setSourcePage]=useState(0);const[savingSource,setSavingSource]=useState(false);const[newSource,setNewSource]=useState({url:'',platform:'',account_name:'',account_handle:'',note:''});
 const blank=():MobilizationEvent=>({
   id:'',
@@ -1096,7 +1152,7 @@ const blank=():MobilizationEvent=>({
       let analyticsHasMore=true;
       while(analyticsHasMore){
         const{data:analyticsData,error:analyticsError}=await db.from('page_views')
-          .select('id,path,event_id,visitor_id,created_at')
+          .select('id,path,event_id,visitor_id,created_at,session_id,is_returning,source,campaign_source,campaign_medium,campaign_name,first_source')
           .gte('created_at',cutoff)
           .order('created_at',{ascending:false})
           .order('id',{ascending:false})
@@ -1117,6 +1173,12 @@ const blank=():MobilizationEvent=>({
         .order('created_at',{ascending:false})
         .limit(5000);
       if(!actionError)setAnalyticsActionRows((actionData||[]) as EventActionRow[]);
+      const{data:conversionData,error:conversionError}=await db.from('conversion_events')
+        .select('event_name,visitor_id,session_id,source,first_source,created_at,is_returning')
+        .gte('created_at',cutoff)
+        .order('created_at',{ascending:false})
+        .limit(5000);
+      if(!conversionError)setConversionRows((conversionData||[]) as ConversionRow[]);
       for(const item of (subData||[]) as Submission[]){
         if(item.poster_path&&!subPosterUrls[item.id]){
           const{data}=await db.storage.from(SUBMISSION_STORAGE_BUCKET).createSignedUrl(item.poster_path,3600);
@@ -1528,7 +1590,7 @@ const blank=():MobilizationEvent=>({
       setPosterIndexProgress('');
     }
   };
-  return <div className="container page"><div className="admin-top"><div><div className="eyebrow">ADMIN</div><h1>Painel editorial</h1><p className="page-lead">Cadastre, revise, publique, anexe pôsteres e faça a triagem de envios.</p></div><div className="admin-actions"><button className="button primary" onClick={newEvent}>＋ Adicionar evento</button><button className="button ghost" disabled={indexingPosters} onClick={indexExistingPosters}>{indexingPosters?'Indexando pôsteres…':'Indexar pôsteres antigos'}{indexingPosters&&posterIndexProgress?' (' + posterIndexProgress + ')':''}</button><button className="button ghost" onClick={()=>db.auth.signOut()}>Sair</button></div></div>{message&&<div className="callout info"><Info/><span>{message}</span></div>}<section className="admin-section analytics-panel"><div className="section-head compact"><div><div className="eyebrow">ANALYTICS</div><h2>Visão da Agenda</h2></div><span className="analytics-note">histórico geral + últimos 7 dias · sem IP ou conta de usuário</span></div>{adminAnalyticsError&&<div className="callout warning"><Info/><span>Não foi possível carregar os totais gerais. Aplique a migration de métricas e recarregue o painel: {adminAnalyticsError}</span></div>}<div className="analytics-stats"><div className="analytics-stat"><Eye size={18}/><strong>{Number(adminAnalyticsMetrics?.total_page_views??0).toLocaleString('pt-BR')}</strong><span>visualizações totais registradas</span></div><div className="analytics-stat"><Users size={18}/><strong>{Number(adminAnalyticsMetrics?.unique_visitors??0).toLocaleString('pt-BR')}</strong><span>visitantes únicos totais (por navegador)</span></div><div className="analytics-stat"><UserRound size={18}/><strong>{Number(adminAnalyticsMetrics?.registered_accounts??0).toLocaleString('pt-BR')}</strong><span>contas cadastradas</span></div><div className="analytics-stat"><MailCheck size={18}/><strong>{Number(adminAnalyticsMetrics?.accounts_with_email??0).toLocaleString('pt-BR')}</strong><span>contas com e-mail cadastrado</span></div><div className="analytics-stat"><MailCheck size={18}/><strong>{Number(adminAnalyticsMetrics?.email_confirmed??0).toLocaleString('pt-BR')}</strong><span>e-mails confirmados</span></div><div className="analytics-stat"><KeyRound size={18}/><strong>{Number(adminAnalyticsMetrics?.password_set??0).toLocaleString('pt-BR')}</strong><span>contas com senha definida</span></div><div className="analytics-stat"><LogIn size={18}/><strong>{Number(adminAnalyticsMetrics?.signed_in??0).toLocaleString('pt-BR')}</strong><span>contas que já entraram</span></div><div className="analytics-stat"><UserPlus size={18}/><strong>{Number(adminAnalyticsMetrics?.signups_7d??0).toLocaleString('pt-BR')}</strong><span>cadastros nos últimos 7 dias</span></div><div className="analytics-stat"><UserPlus size={18}/><strong>{Number(adminAnalyticsMetrics?.signups_30d??0).toLocaleString('pt-BR')}</strong><span>cadastros nos últimos 30 dias</span></div><div className="analytics-stat"><Eye size={18}/><strong>{analyticsSummary.today}</strong><span>visualizações hoje</span></div><div className="analytics-stat"><Eye size={18}/><strong>{analyticsSummary.last7}</strong><span>visualizações em 7 dias</span></div><div className="analytics-stat"><BarChart3 size={18}/><strong>{analyticsSummary.uniqueVisitors}</strong><span>visitantes em 7 dias</span></div><div className="analytics-stat"><Share2 size={18}/><strong>{analyticsActionSummary.shares}</strong><span>compartilhamentos e links copiados em 7 dias</span></div><div className="analytics-stat"><CalendarPlus size={18}/><strong>{analyticsActionSummary.calendar}</strong><span>ações de calendário em 7 dias</span></div><div className="analytics-stat"><MapPinned size={18}/><strong>{analyticsActionSummary.directions}</strong><span>cliques em como chegar em 7 dias</span></div></div><div className="analytics-trend"><h3>Ritmo de acessos</h3><div className="analytics-bars" aria-label="Visualizações por dia nos últimos sete dias">{dailyAnalytics.map(day=><div className="analytics-bar-col" key={day.date}><div className="analytics-bar-track"><div className="analytics-bar" style={{height:Math.max(8,(day.count/maxDaily)*100)+'%'}} title={day.count+' visualizações'}/></div><strong>{day.count}</strong><span>{day.label}<br/>{day.date}</span></div>)}</div></div><div className="analytics-columns"><div><h3>Páginas mais acessadas</h3><div className="analytics-list">{analyticsSummary.topPages.length?analyticsSummary.topPages.map(([path,count])=><div key={path}><span>{path}</span><strong>{count}</strong></div>):<p>Nenhum acesso registrado ainda.</p>}</div></div><div><h3>Eventos mais acessados</h3><div className="analytics-list">{analyticsSummary.topEvents.length?analyticsSummary.topEvents.map(item=><div key={item.eventId}><span>{item.title}{item.city?' · '+item.city:''}</span><strong>{item.count}</strong></div>):<p>Nenhum evento acessado ainda.</p>}</div></div></div></section>
+  return <div className="container page"><div className="admin-top"><div><div className="eyebrow">ADMIN</div><h1>Painel editorial</h1><p className="page-lead">Cadastre, revise, publique, anexe pôsteres e faça a triagem de envios.</p></div><div className="admin-actions"><button className="button primary" onClick={newEvent}>＋ Adicionar evento</button><button className="button ghost" disabled={indexingPosters} onClick={indexExistingPosters}>{indexingPosters?'Indexando pôsteres…':'Indexar pôsteres antigos'}{indexingPosters&&posterIndexProgress?' (' + posterIndexProgress + ')':''}</button><button className="button ghost" onClick={()=>db.auth.signOut()}>Sair</button></div></div>{message&&<div className="callout info"><Info/><span>{message}</span></div>}<section className="admin-section analytics-panel"><div className="section-head compact"><div><div className="eyebrow">ANALYTICS</div><h2>Visão da Agenda</h2></div><span className="analytics-note">histórico geral + últimos 7 dias · sem IP ou conta de usuário</span></div>{adminAnalyticsError&&<div className="callout warning"><Info/><span>Não foi possível carregar os totais gerais. Aplique a migration de métricas e recarregue o painel: {adminAnalyticsError}</span></div>}<div className="analytics-stats"><div className="analytics-stat"><Eye size={18}/><strong>{Number(adminAnalyticsMetrics?.total_page_views??0).toLocaleString('pt-BR')}</strong><span>visualizações totais registradas</span></div><div className="analytics-stat"><Users size={18}/><strong>{Number(adminAnalyticsMetrics?.unique_visitors??0).toLocaleString('pt-BR')}</strong><span>visitantes únicos totais (por navegador)</span></div><div className="analytics-stat"><UserRound size={18}/><strong>{Number(adminAnalyticsMetrics?.registered_accounts??0).toLocaleString('pt-BR')}</strong><span>contas cadastradas</span></div><div className="analytics-stat"><MailCheck size={18}/><strong>{Number(adminAnalyticsMetrics?.accounts_with_email??0).toLocaleString('pt-BR')}</strong><span>contas com e-mail cadastrado</span></div><div className="analytics-stat"><MailCheck size={18}/><strong>{Number(adminAnalyticsMetrics?.email_confirmed??0).toLocaleString('pt-BR')}</strong><span>e-mails confirmados</span></div><div className="analytics-stat"><KeyRound size={18}/><strong>{Number(adminAnalyticsMetrics?.password_set??0).toLocaleString('pt-BR')}</strong><span>contas com senha definida</span></div><div className="analytics-stat"><LogIn size={18}/><strong>{Number(adminAnalyticsMetrics?.signed_in??0).toLocaleString('pt-BR')}</strong><span>contas que já entraram</span></div><div className="analytics-stat"><UserPlus size={18}/><strong>{Number(adminAnalyticsMetrics?.signups_7d??0).toLocaleString('pt-BR')}</strong><span>cadastros nos últimos 7 dias</span></div><div className="analytics-stat"><UserPlus size={18}/><strong>{Number(adminAnalyticsMetrics?.signups_30d??0).toLocaleString('pt-BR')}</strong><span>cadastros nos últimos 30 dias</span></div><div className="analytics-stat"><Eye size={18}/><strong>{analyticsSummary.today}</strong><span>visualizações hoje</span></div><div className="analytics-stat"><Eye size={18}/><strong>{analyticsSummary.last7}</strong><span>visualizações em 7 dias</span></div><div className="analytics-stat"><BarChart3 size={18}/><strong>{analyticsSummary.uniqueVisitors}</strong><span>visitantes em 7 dias</span></div><div className="analytics-stat"><Share2 size={18}/><strong>{analyticsActionSummary.shares}</strong><span>compartilhamentos e links copiados em 7 dias</span></div><div className="analytics-stat"><CalendarPlus size={18}/><strong>{analyticsActionSummary.calendar}</strong><span>ações de calendário em 7 dias</span></div><div className="analytics-stat"><MapPinned size={18}/><strong>{analyticsActionSummary.directions}</strong><span>cliques em como chegar em 7 dias</span></div></div><div className="analytics-stats"><div className="analytics-stat"><Users size={18}/><strong>{new Set(analyticsRows.filter(row=>row.is_returning).map(row=>row.visitor_id)).size.toLocaleString('pt-BR')}</strong><span>visitantes que retornaram (30 dias)</span></div><div className="analytics-stat"><Users size={18}/><strong>{new Set(analyticsRows.map(row=>row.session_id).filter(Boolean)).size.toLocaleString('pt-BR')}</strong><span>sessões registradas (30 dias)</span></div><div className="analytics-stat"><UserPlus size={18}/><strong>{new Set(conversionRows.filter(row=>row.event_name==='signup_success').map(row=>row.visitor_id)).size.toLocaleString('pt-BR')}</strong><span>visitantes que concluíram cadastro (30 dias)</span></div><div className="analytics-stat"><LogIn size={18}/><strong>{conversionRows.filter(row=>row.event_name==='login_success').length.toLocaleString('pt-BR')}</strong><span>logins registrados (30 dias)</span></div><div className="analytics-stat"><MapPinned size={18}/><strong>{conversionRows.filter(row=>row.event_name==='nearby_view').length.toLocaleString('pt-BR')}</strong><span>aberturas do mapa personalizado</span></div><div className="analytics-stat"><Bell size={18}/><strong>{conversionRows.filter(row=>row.event_name==='digest_opt_in').length.toLocaleString('pt-BR')}</strong><span>adesões ao alerta iniciadas no cadastro</span></div></div><div className="analytics-columns"><div><h3>Origem dos acessos (30 dias)</h3><div className="analytics-list">{Object.entries(analyticsRows.reduce((acc:Record<string,number>,row)=>{const key=row.source||'Origem não identificada';acc[key]=(acc[key]||0)+1;return acc;},{})).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([source,count])=><div key={source}><span>{source}</span><strong>{count}</strong></div>)}</div></div><div><h3>Campanhas UTM (30 dias)</h3><div className="analytics-list">{Object.entries(analyticsRows.reduce((acc:Record<string,number>,row)=>{const key=row.campaign_name||row.campaign_source;if(key)acc[key]=(acc[key]||0)+1;return acc;},{})).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([campaign,count])=><div key={campaign}><span>{campaign}</span><strong>{count}</strong></div>)}{!analyticsRows.some(row=>row.campaign_name||row.campaign_source)&&<p>As campanhas aparecerão depois que os links com parâmetros UTM começarem a circular.</p>}</div></div></div><div className="analytics-trend"><h3>Ritmo de acessos</h3><div className="analytics-bars" aria-label="Visualizações por dia nos últimos sete dias">{dailyAnalytics.map(day=><div className="analytics-bar-col" key={day.date}><div className="analytics-bar-track"><div className="analytics-bar" style={{height:Math.max(8,(day.count/maxDaily)*100)+'%'}} title={day.count+' visualizações'}/></div><strong>{day.count}</strong><span>{day.label}<br/>{day.date}</span></div>)}</div></div><div className="analytics-columns"><div><h3>Páginas mais acessadas</h3><div className="analytics-list">{analyticsSummary.topPages.length?analyticsSummary.topPages.map(([path,count])=><div key={path}><span>{path}</span><strong>{count}</strong></div>):<p>Nenhum acesso registrado ainda.</p>}</div></div><div><h3>Eventos mais acessados</h3><div className="analytics-list">{analyticsSummary.topEvents.length?analyticsSummary.topEvents.map(item=><div key={item.eventId}><span>{item.title}{item.city?' · '+item.city:''}</span><strong>{item.count}</strong></div>):<p>Nenhum evento acessado ainda.</p>}</div></div></div></section>
     <EditorialAuditPanel db={db} onOpenEvent={(id)=>{const found=events.find(event=>event.db_id===id);if(found)setEditing(found);else setMessage('Evento não encontrado no cadastro atual. Atualize o painel.')}}/>
     <BulkPosterImporter db={db} onComplete={loadAdmin}/>
     <PosterReviewPanel db={db} userId={user?.id} onChanged={loadAdmin}/>
@@ -1582,6 +1644,7 @@ export default function App(){
       eventId=events.find(e=>e.id===slug)?.db_id??null;
     }
     recordPageView(location.pathname,eventId);
+    if(eventId)void recordConversion('event_detail_view',location.pathname);
   },[location.pathname,loading,loadError,events]);
 
   const reload=()=>Promise.all([getEvents(),getSources()])
@@ -1594,5 +1657,5 @@ export default function App(){
 
   if(loadError)return <div className="loading"><div className="empty"><Info/><h3>Não foi possível carregar os dados</h3><p>{loadError}</p><button className="button primary" onClick={()=>{setLoading(true);reload()}}><RefreshCw size={16}/>Tentar novamente</button></div></div>;
 
-  return <AppErrorBoundary><Layout><Routes><Route path="/" element={<Home events={events}/>}/><Route path="/evento/:id" element={<EventPage events={events} sources={sources}/>}/><Route path="/calendario" element={<CalendarPage events={events}/>}/><Route path="/mapa" element={<MapPage events={events}/>}/><Route path="/divulgar" element={<ShareBuilder events={events}/>}/><Route path="/sobre" element={<AboutPage/>}/><Route path="/chat" element={<ChatPage/>}/><Route path="/entrar" element={<AuthPage/>}/><Route path="/preferencias-alertas" element={<CityEmailDigestPreferences/>}/><Route path="/privacidade" element={<EmailPrivacyPage/>}/><Route path="/admin" element={<AdminPage/>}/><Route path="/admin/moderacao" element={<EventModerationPage/>}/></Routes></Layout></AppErrorBoundary>
+  return <AppErrorBoundary><Layout><Routes><Route path="/" element={<Home events={events}/>}/><Route path="/evento/:id" element={<EventPage events={events} sources={sources}/>}/><Route path="/calendario" element={<CalendarPage events={events}/>}/><Route path="/mapa" element={<MapPage events={events}/>}/><Route path="/mapa-perto-de-mim" element={<NearbyMapPage events={events}/>}/><Route path="/divulgar" element={<ShareBuilder events={events}/>}/><Route path="/sobre" element={<AboutPage/>}/><Route path="/chat" element={<ChatPage/>}/><Route path="/entrar" element={<AuthPage/>}/><Route path="/preferencias-alertas" element={<CityEmailDigestPreferences/>}/><Route path="/privacidade" element={<EmailPrivacyPage/>}/><Route path="/admin" element={<AdminPage/>}/><Route path="/admin/moderacao" element={<EventModerationPage/>}/></Routes></Layout></AppErrorBoundary>
 }

@@ -953,7 +953,7 @@ function AuthPage(){
             }
             navigate(next);
           }else setMsg(digestOptIn
-          ?'Conta criada. Confirme seu e-mail; depois entre para concluir a ativação dos alertas.'
+          ?'Conta criada. Confirme seu e-mail. Sua autorização ficará salva; os boletins só serão enviados quando o serviço estiver ativado.'
           :'Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre na Agenda.');
         }
       }

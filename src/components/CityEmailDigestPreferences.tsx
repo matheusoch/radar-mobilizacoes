@@ -6,6 +6,7 @@ import {BRAZILIAN_STATES} from '../lib/brazilianStates';
 import {supabase} from '../lib/supabase';
 import LocationAutocomplete from './LocationAutocomplete';
 import {canonicalizeLocation,canonicalizeLocationOptions} from '../lib/locationNormalization';
+import {recordAnalyticsEvent} from '../lib/data';
 
 type EmailFormat='resumo'|'cards'|'ambos';
 type DigestSettings={
@@ -143,6 +144,7 @@ export default function CityEmailDigestPreferences(){
         consent_at:saved?.consent_at??null,
         unsubscribed_at:saved?.unsubscribed_at??null,
       }));
+      void recordAnalyticsEvent('digest_preferences_saved');
       setMessage(settings.in_app_enabled&&settings.enabled
         ?'Preferências salvas. Você receberá notificações no site e, quando o serviço estiver ativo, resumos por e-mail.'
         :settings.in_app_enabled

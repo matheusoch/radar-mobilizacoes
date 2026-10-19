@@ -71,10 +71,23 @@ async function concurrent<T>(items:T[],limit:number,work:(item:T)=>Promise<void>
 
 Deno.serve(async(request)=>{
   if(request.method!=="POST") return new Response("Method not allowed",{status:405});
-  const cron=Deno.env.get("DIGEST_CRON_SECRET")||"";
-  if(cron.length<32||request.headers.get("authorization")!=="Bearer "+cron) return new Response("Unauthorized",{status:401});
-  const base=Deno.env.get("SUPABASE_URL")||"";
+  const base=(Deno.env.get("SUPABASE_URL")||"").replace(/\/+$/,"");
   const service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
+  const authorization=request.headers.get("authorization")||"";
+  const supplied=authorization.toLowerCase().startsWith("bearer ")?authorization.slice(7).trim():"";
+  const cron=Deno.env.get("DIGEST_CRON_SECRET")||"";
+  let authorized=cron.length>=32&&authorization==="Bearer "+cron;
+  if(!authorized&&base&&service&&supplied.length>=32){
+    try{
+      const verification=await fetch(base+"/rest/v1/rpc/verify_digest_cron_secret",{
+        method:"POST",
+        headers:{apikey:service,Authorization:"Bearer "+service,"Content-Type":"application/json",Accept:"application/json"},
+        body:JSON.stringify({p_candidate:supplied})
+      });
+      if(verification.ok)authorized=(await verification.json())===true;
+    }catch{/* An invalid or unavailable verification response must fail closed. */}
+  }
+  if(!authorized)return new Response("Unauthorized",{status:401});
   const resend=Deno.env.get("RESEND_API_KEY")||"";
   const from=Deno.env.get("EMAIL_FROM")||"";
   const postal=Deno.env.get("EMAIL_POSTAL_ADDRESS")||"";

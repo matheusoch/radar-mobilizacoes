@@ -32,7 +32,6 @@ import type {EventSource,MobilizationEvent} from './types';
 
 const ADMIN_STORAGE_BUCKET='event_posters';
 const SUBMISSION_STORAGE_BUCKET='submission_posters';
-const EMAIL_DIGEST_ENABLED=import.meta.env.VITE_EMAIL_DIGEST_ENABLED==='true';
 
 type Submission={
   id:string; user_id:string; display_name:string; title:string; date:string|null; time:string|null; time_label:string|null;
@@ -913,9 +912,19 @@ function AuthPage(){
           void recordAnalyticsEvent('login_completed');
           const metadata=(data.user?.user_metadata||{}) as Record<string,unknown>;
           if(metadata.email_digest_opt_in===true&&data.user?.email_confirmed_at&&typeof metadata.digest_city==='string'&&typeof metadata.digest_state==='string'){
-            const format=metadata.email_digest_format==='resumo'||metadata.email_digest_format==='cards'?metadata.email_digest_format:'ambos';
-            const{error:preferenceError}=await db.rpc('save_city_alert_preferences',{p_city:metadata.digest_city,p_state:metadata.digest_state,p_in_app_enabled:false,p_email_enabled:true,p_email_format:format});
-            if(preferenceError)console.warn('Não foi possível concluir a adesão aos alertas após o login.',preferenceError.message);
+            const{data:existingPreference,error:existingPreferenceError}=await db
+              .from('city_email_digest_subscriptions')
+              .select('enabled,consent_at,unsubscribed_at')
+              .eq('user_id',data.user.id)
+              .maybeSingle();
+            // Complete a signup opt-in only once. Never resubscribe a person who explicitly cancelled.
+            const firstSignupConsent=!existingPreferenceError&&(!existingPreference||
+              (!existingPreference.enabled&&!existingPreference.consent_at&&!existingPreference.unsubscribed_at));
+            if(firstSignupConsent){
+              const format=metadata.email_digest_format==='resumo'||metadata.email_digest_format==='cards'?metadata.email_digest_format:'ambos';
+              const{error:preferenceError}=await db.rpc('save_city_alert_preferences',{p_city:metadata.digest_city,p_state:metadata.digest_state,p_in_app_enabled:false,p_email_enabled:true,p_email_format:format});
+              if(preferenceError)console.warn('Não foi possível concluir a adesão aos alertas após o login.',preferenceError.message);
+            }
           }
           navigate(next);
         }
@@ -953,7 +962,7 @@ function AuthPage(){
             }
             navigate(next);
           }else setMsg(digestOptIn
-          ?'Conta criada. Confirme seu e-mail; depois entre para concluir a ativação dos alertas.'
+          ?'Conta criada. Confirme seu e-mail. Sua autorização ficará salva; os boletins só serão enviados quando o serviço estiver ativado.'
           :'Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre na Agenda.');
         }
       }
@@ -966,7 +975,7 @@ function AuthPage(){
 
   const title=mode==='login'?'Entre para participar.':mode==='signup'?'Crie sua conta.':mode==='recover'?'Recupere sua senha.':'Defina uma nova senha.';
   const lead=mode==='reset'?'Use uma senha nova para voltar à Agenda.':digestSignup&&mode==='signup'
-    ?'Crie sua conta e, se desejar, ative um resumo diário de mobilizações da sua cidade. A adesão é opcional.'
+    ?'Crie sua conta e, se desejar, autorize o resumo diário de mobilizações da sua cidade. A adesão é opcional.'
     :'O chat exige login para reduzir spam e manter as sugestões sob moderação.';
 
   return <div className="container page narrow">
@@ -979,7 +988,7 @@ function AuthPage(){
       {(mode==='login'||mode==='signup'||mode==='reset')&&<label className="auth-field"><span>Senha</span><input type="password" placeholder="Pelo menos 6 caracteres" value={password} onChange={e=>setPassword(e.target.value)} minLength={6} required autoComplete={mode==='reset'?'new-password':mode==='login'?'current-password':'new-password'}/></label>}
       {mode==='reset'&&<label className="auth-field"><span>Confirme a nova senha</span><input type="password" placeholder="Repita sua nova senha" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} minLength={6} required autoComplete="new-password"/></label>}
       {mode==='signup'&&<section className="auth-digest-fields" aria-labelledby="auth-digest-title">
-        <div><div className="eyebrow">OPCIONAL</div><h2 id="auth-digest-title">Alertas da sua cidade</h2><p>Receba às 8h, no horário de Brasília, um resumo dos eventos de hoje e dos próximos sete dias na região informada.</p></div>
+        <div><div className="eyebrow">OPCIONAL</div><h2 id="auth-digest-title">Alertas da sua cidade</h2><p>Quando os boletins estiverem ativados, receba às 8h (horário de Brasília) um resumo dos eventos de hoje e dos próximos sete dias na região informada.</p></div>
         <label className="auth-field"><span>Cidade</span><input value={digestCity} onChange={e=>setDigestCity(e.target.value)} maxLength={100} autoComplete="address-level2" placeholder="Ex.: Fortaleza" required={digestOptIn} disabled={busy}/></label>
         <label className="auth-field"><span>Estado</span><select value={digestState} onChange={e=>setDigestState(e.target.value)} autoComplete="address-level1" required={digestOptIn} disabled={busy}><option value="">Selecione a UF</option>{BRAZILIAN_STATES.map(state=><option key={state.code} value={state.code}>{state.name} ({state.code})</option>)}</select></label>
         <fieldset className="auth-digest-format"><legend>Formato do e-mail</legend>
@@ -987,7 +996,7 @@ function AuthPage(){
           <label><input type="radio" name="signup-digest-format" value="cards" checked={digestFormat==='cards'} onChange={()=>setDigestFormat('cards')} disabled={busy}/>Cards por evento</label>
           <label><input type="radio" name="signup-digest-format" value="ambos" checked={digestFormat==='ambos'} onChange={()=>setDigestFormat('ambos')} disabled={busy}/>Resumo + cards</label>
         </fieldset>
-        <label className="auth-digest-consent"><input type="checkbox" checked={digestOptIn} onChange={e=>setDigestOptIn(e.target.checked)} disabled={busy}/><span><strong>Quero receber os alertas diários por e-mail.</strong><small>Esta autorização é opcional e separada da conta. Só ativará o envio depois que você confirmar o e-mail e salvar a preferência. É possível cancelar quando quiser. <Link to="/privacidade" target="_blank" rel="noreferrer">Saiba como os dados serão usados.</Link></small></span></label>
+        <label className="auth-digest-consent"><input type="checkbox" checked={digestOptIn} onChange={e=>setDigestOptIn(e.target.checked)} disabled={busy}/><span><strong>Quero receber os alertas diários por e-mail.</strong><small>Esta autorização é opcional e separada da conta. Depois de confirmar o e-mail, sua preferência fica salva; os envios começam quando a rotina de boletins for ativada. É possível cancelar quando quiser. <Link to="/privacidade" target="_blank" rel="noreferrer">Saiba como os dados serão usados.</Link></small></span></label>
       </section>}
       <button className="button primary" disabled={busy}>{busy?'Aguarde…':mode==='login'?'Entrar':mode==='signup'?'Criar conta':mode==='recover'?'Enviar link de recuperação':'Salvar nova senha'}</button>
       {msg&&<div className="callout info" role="status"><Info size={18}/><span>{msg}</span></div>}

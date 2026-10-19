@@ -27,7 +27,6 @@ const DEFAULT_SETTINGS:DigestSettings={
   consent_at:null,
   unsubscribed_at:null,
 };
-const EMAIL_DIGEST_ENABLED=import.meta.env.VITE_EMAIL_DIGEST_ENABLED==='true';
 
 export default function CityEmailDigestPreferences(){
   const location=useLocation();
@@ -101,7 +100,7 @@ export default function CityEmailDigestPreferences(){
           ...DEFAULT_SETTINGS,
           city:typeof metadata.digest_city==='string'?metadata.digest_city:(typeof metadata.city==='string'?metadata.city:''),
           state:typeof metadata.digest_state==='string'?metadata.digest_state:(typeof metadata.state==='string'?metadata.state:''),
-          enabled:EMAIL_DIGEST_ENABLED&&activationRequested&&hasSignupConsent,
+          enabled:activationRequested&&hasSignupConsent,
           email_format:(metadata.email_digest_format==='resumo'||metadata.email_digest_format==='cards'||metadata.email_digest_format==='ambos'?metadata.email_digest_format:'ambos') as EmailFormat,
         });
       }
@@ -117,7 +116,7 @@ export default function CityEmailDigestPreferences(){
         setError('Informe sua cidade e seu estado para receber apenas os eventos da sua região.');
         return;
       }
-      if(settings.enabled&&EMAIL_DIGEST_ENABLED&&!user.email_confirmed_at){
+      if(settings.enabled&&!user.email_confirmed_at){
         setError('Confirme primeiro o e-mail da sua conta. Depois volte aqui para ativar os resumos.');
         return;
       }
@@ -189,7 +188,7 @@ export default function CityEmailDigestPreferences(){
           <option value="">Selecione a UF</option>{BRAZILIAN_STATES.map(state=><option key={state.code} value={state.code}>{state.name} ({state.code})</option>)}
         </select>
       </label>
-      <fieldset className="city-digest-format" disabled={busy||!EMAIL_DIGEST_ENABLED}>
+      <fieldset className="city-digest-format" disabled={busy}>
         <legend>Formato do e-mail</legend>
         <label><input type="radio" name="digest-format" value="resumo" checked={settings.email_format==='resumo'} onChange={()=>setSettings(current=>({...current,email_format:'resumo'}))} disabled={busy}/>Resumo de texto</label>
         <label><input type="radio" name="digest-format" value="cards" checked={settings.email_format==='cards'} onChange={()=>setSettings(current=>({...current,email_format:'cards'}))} disabled={busy}/>Cards por evento</label>
@@ -200,10 +199,10 @@ export default function CityEmailDigestPreferences(){
         <span><strong>Quero receber notificações dentro do site.</strong><small>O sino no topo mostrará novos eventos públicos da cidade e do estado escolhidos. Você pode desativar a qualquer momento.</small></span>
       </label>
       <label className="city-digest-consent">
-        <input type="checkbox" checked={settings.enabled} onChange={event=>setSettings(current=>({...current,enabled:event.target.checked}))} disabled={busy||!EMAIL_DIGEST_ENABLED}/>
+        <input type="checkbox" checked={settings.enabled} onChange={event=>setSettings(current=>({...current,enabled:event.target.checked}))} disabled={busy}/>
         <span><strong>Quero receber o resumo diário por e-mail.</strong><small>É um consentimento separado. Usaremos seu e-mail somente para estes avisos; você pode cancelar a qualquer momento.</small></span>
       </label>
-      {!EMAIL_DIGEST_ENABLED&&<div className="callout info"><Info size={18}/><span>O envio por e-mail ainda não foi ativado. Você já pode configurar notificações dentro do site; o e-mail só poderá ser habilitado depois que o remetente, os segredos e o agendamento forem testados.</span></div>}
+      {!settings.enabled&&<div className="callout info"><Info size={18}/><span>A autorização por e-mail é opcional e pode ser salva agora. Os boletins só serão enviados depois que a equipe administrativa validar o remetente e ativar o serviço.</span></div>}
       <p className="city-digest-privacy">Ao ativar, você confirma uma preferência de comunicação específica da Agenda. <Link to="/privacidade">Leia como os dados serão usados.</Link></p>
       {settings.in_app_enabled&&<div className="city-digest-status"><ShieldCheck size={16}/>Notificações dentro do site serão ativadas após salvar.</div>}
       {settings.enabled&&<div className="city-digest-status"><ShieldCheck size={16}/>Consentimento para e-mail ativo somente após salvar.</div>}

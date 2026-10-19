@@ -50,11 +50,10 @@ Deno.serve(async(request:Request)=>{
 
   let payload:any={};
   try { payload=await request.json(); } catch {}
-  const action=payload?.action==="send_test"?"send_test":"check";
+  const action=["send_test","enable_sending","disable_sending"].includes(payload?.action)?payload.action:"check";
   const resendKey=Deno.env.get("RESEND_API_KEY")||"";
   const from=Deno.env.get("EMAIL_FROM")||"";
   const postal=Deno.env.get("EMAIL_POSTAL_ADDRESS")||"";
-  const cronSecret=Deno.env.get("DIGEST_CRON_SECRET")||"";
   const unsubSecret=Deno.env.get("EMAIL_UNSUBSCRIBE_SECRET")||"";
   const site=(Deno.env.get("PUBLIC_SITE_URL")||"").replace(/\/+$/,"");
   const domain=fromDomain(from);
@@ -64,11 +63,33 @@ Deno.serve(async(request:Request)=>{
     sender_configured:{ok:Boolean(from&&domain),detail:from&&domain?"O remetente está preenchido.":"Defina EMAIL_FROM com um endereço remetente válido."},
     postal_address:{ok:postal.trim().length>=8,detail:postal.trim().length>=8?"O endereço postal está preenchido.":"Defina EMAIL_POSTAL_ADDRESS com o endereço postal público do projeto."},
     unsubscribe_secret:{ok:unsubSecret.length>=32,detail:unsubSecret.length>=32?"A chave de cancelamento tem tamanho suficiente.":"Defina EMAIL_UNSUBSCRIBE_SECRET com pelo menos 32 caracteres aleatórios."},
-    cron_secret:{ok:cronSecret.length>=32,detail:cronSecret.length>=32?"A chave de agendamento está configurada.":"Defina DIGEST_CRON_SECRET com pelo menos 32 caracteres aleatórios."},
     public_site_url:{ok:site.startsWith("https://"),detail:site.startsWith("https://")?"A URL pública HTTPS está configurada.":"Defina PUBLIC_SITE_URL com a URL HTTPS do Radar."},
     resend_api_key:{ok:Boolean(resendKey),detail:resendKey?"A chave do provedor foi encontrada; o valor não é exibido.":"Defina RESEND_API_KEY nos segredos da função."},
     sender_domain_verified:{ok:false,detail:"Aguarda a consulta ao provedor de e-mail."},
   };
+
+  let cronSecretConfigured=false;
+  let schedulerInstalled=false;
+  let dispatchEnabled=false;
+  let lastTestAt:string|null=null;
+  try {
+    const [secretStatus,schedulerStatus,controlStatus]=await Promise.all([
+      fetch(base+"/rest/v1/rpc/is_digest_cron_secret_configured",{method:"POST",headers:{apikey:service,Authorization:"Bearer "+service,"Content-Type":"application/json"},body:"{}"}),
+      fetch(base+"/rest/v1/rpc/is_city_digest_job_scheduled",{method:"POST",headers:{apikey:service,Authorization:"Bearer "+service,"Content-Type":"application/json"},body:"{}"}),
+      fetch(base+"/rest/v1/city_email_digest_dispatch_control?select=enabled,last_test_at&id=eq.true",{headers:{apikey:service,Authorization:"Bearer "+service,Accept:"application/json"}})
+    ]);
+    if(secretStatus.ok)cronSecretConfigured=(await secretStatus.json())===true;
+    if(schedulerStatus.ok)schedulerInstalled=(await schedulerStatus.json())===true;
+    if(controlStatus.ok){
+      const rows=await controlStatus.json();
+      if(Array.isArray(rows)&&rows[0]){
+        dispatchEnabled=Boolean(rows[0].enabled);
+        lastTestAt=rows[0].last_test_at||null;
+      }
+    }
+  } catch {/* Missing scheduler status fails closed; the diagnostic page reports it. */}
+  checks.cron_secret={ok:cronSecretConfigured,detail:cronSecretConfigured?"Chave de agendamento armazenada na Vault.":"Não foi encontrada uma chave de agendamento válida na Vault."};
+  checks.scheduler_installed={ok:schedulerInstalled,detail:schedulerInstalled?"Agendamento diário encontrado no Supabase.":"Agendamento diário ainda não encontrado."};
 
   let providerResponse:any=null;
   if(resendKey) {
@@ -90,12 +111,30 @@ Deno.serve(async(request:Request)=>{
     checks.sender_domain_verified={ok:false,detail:"A verificação do domínio exige RESEND_API_KEY."};
   }
 
-  const testReady=Object.entries(checks).filter(([key])=>key!=="cron_secret").every(([,item])=>item.ok);
-  const automationPrerequisitesReady=testReady&&checks.cron_secret.ok;
-  if(action==="check")return reply({ok:true,ready:testReady,automation_prerequisites_ready:automationPrerequisitesReady,scheduler_verified:false,checks,from_domain:domain||null,admin_email:user.email||null});
+  const testReady=Object.entries(checks).filter(([key])=>key!=="cron_secret"&&key!=="scheduler_installed").every(([,item])=>item.ok);
+  const automationPrerequisitesReady=testReady&&checks.cron_secret.ok&&checks.scheduler_installed.ok;
+  const statePayload={ready:testReady,automation_prerequisites_ready:automationPrerequisitesReady,scheduler_verified:schedulerInstalled,scheduler_enabled:dispatchEnabled,last_test_at:lastTestAt,checks,from_domain:domain||null,admin_email:user.email||null};
+  if(action==="check")return reply({ok:true,...statePayload});
 
-  if(!testReady)return reply({ok:false,ready:false,error:"EMAIL_DIGEST_NOT_READY",checks,from_domain:domain||null},409);
-  if(!user.email||!user.email_confirmed_at)return reply({ok:false,error:"ADMIN_EMAIL_NOT_CONFIRMED"},409);
+  if(action==="enable_sending"||action==="disable_sending"){
+    if(action==="enable_sending"&&(!testReady||!automationPrerequisitesReady))return reply({ok:false,error:"EMAIL_DIGEST_NOT_READY",...statePayload},409);
+    if(action==="enable_sending"&&(!lastTestAt||Date.now()-new Date(lastTestAt).getTime()>24*60*60*1000))return reply({ok:false,error:"EMAIL_DIGEST_TEST_REQUIRED",detail:"Envie um teste bem-sucedido nas últimas 24 horas antes de ativar os boletins.",...statePayload},409);
+    try{
+      const response=await fetch(base+"/rest/v1/rpc/set_admin_city_digest_dispatch_enabled",{
+        method:"POST",
+        headers:{apikey:anon,Authorization:authorization,"Content-Type":"application/json",Accept:"application/json"},
+        body:JSON.stringify({p_enabled:action==="enable_sending"})
+      });
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)return reply({ok:false,error:"DIGEST_DISPATCH_UPDATE_FAILED",detail:"O banco recusou a alteração do envio automático.",...statePayload},response.status===401||response.status===403?403:502);
+      return reply({ok:true,...statePayload,scheduler_enabled:Boolean(data?.enabled),last_test_at:data?.last_test_at||lastTestAt});
+    }catch{
+      return reply({ok:false,error:"DIGEST_DISPATCH_UPDATE_FAILED",detail:"Não foi possível alterar o estado do envio automático.",...statePayload},502);
+    }
+  }
+
+  if(!testReady)return reply({ok:false,error:"EMAIL_DIGEST_NOT_READY",...statePayload},409);
+  if(!user.email||!user.email_confirmed_at)return reply({ok:false,error:"ADMIN_EMAIL_NOT_CONFIRMED",...statePayload},409);
 
   try {
     const response=await fetch("https://api.resend.com/emails",{
@@ -110,9 +149,18 @@ Deno.serve(async(request:Request)=>{
       })
     });
     const result=await response.json().catch(()=>({}));
-    if(!response.ok)return reply({ok:false,error:"TEST_EMAIL_REJECTED",provider_status:response.status,detail:"O provedor rejeitou o envio. Confira o domínio, remetente e os limites da conta."},502);
-    return reply({ok:true,sent:true,recipient:user.email,message_id:result.id||null});
+    if(!response.ok)return reply({ok:false,error:"TEST_EMAIL_REJECTED",provider_status:response.status,detail:"O provedor rejeitou o envio. Confira o domínio, remetente e os limites da conta.",...statePayload},502);
+    const testedAt=new Date().toISOString();
+    const controlUrl=new URL(base+"/rest/v1/city_email_digest_dispatch_control");
+    controlUrl.searchParams.set("id","eq.true");
+    const saved=await fetch(controlUrl,{
+      method:"PATCH",
+      headers:{apikey:service,Authorization:"Bearer "+service,"Content-Type":"application/json",Prefer:"return=representation"},
+      body:JSON.stringify({last_test_at:testedAt,last_test_by:user.id,updated_at:testedAt})
+    });
+    if(!saved.ok)return reply({ok:true,sent:true,test_recorded:false,recipient:user.email,message_id:result.id||null,detail:"O provedor aceitou o teste, mas o banco não registrou a confirmação. Verifique o painel antes de ativar os boletins.",...statePayload},200);
+    return reply({ok:true,sent:true,test_recorded:true,recipient:user.email,message_id:result.id||null,ready:testReady,automation_prerequisites_ready:automationPrerequisitesReady,scheduler_verified:schedulerInstalled,scheduler_enabled:dispatchEnabled,last_test_at:testedAt,checks,from_domain:domain||null,admin_email:user.email||null});
   } catch {
-    return reply({ok:false,error:"TEST_EMAIL_FAILED",detail:"Não foi possível conectar ao provedor de e-mail."},502);
+    return reply({ok:false,error:"TEST_EMAIL_FAILED",detail:"Não foi possível conectar ao provedor de e-mail.",...statePayload},502);
   }
 });

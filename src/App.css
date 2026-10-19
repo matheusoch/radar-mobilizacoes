@@ -1114,3 +1114,6 @@ body{background:var(--page);color:var(--ink)}
     width:100%;
   }
 }
+
+
+.nearby-cta{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:20px 0 24px;padding:16px 18px;border:1px solid var(--line);border-radius:14px;background:#fffefa}.nearby-cta>div{display:flex;flex-direction:column;gap:4px}.nearby-cta>div span,.nearby-cta>span{color:var(--muted);font-size:14px}.nearby-cta .button{flex:none}@media(max-width:640px){.nearby-cta{align-items:stretch}.nearby-cta .button{width:100%;justify-content:center}}

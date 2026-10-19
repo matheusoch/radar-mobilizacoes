@@ -926,9 +926,14 @@ function AuthPage(){
         else {
           void recordAnalyticsEvent('signup_completed');
           if(digestOptIn)void recordAnalyticsEvent('email_alert_opt_in');
-          if(data.session)navigate(next);
-          else setMsg(digestSignup&&digestOptIn
-          ?'Conta criada. Confirme seu e-mail; depois abra as preferências de alertas para salvar sua adesão.'
+          if(data.session){
+            if(digestOptIn){
+              const{error:preferenceError}=await db.rpc('save_city_alert_preferences',{p_city:digestCity.trim(),p_state:digestState,p_in_app_enabled:false,p_email_enabled:true,p_email_format:digestFormat});
+              if(preferenceError)setMsg('Conta criada, mas os alertas não foram salvos. Você pode ativá-los em Preferências de alertas.');
+            }
+            navigate(next);
+          }else setMsg(digestOptIn
+          ?'Conta criada. Confirme seu e-mail; depois entre para concluir a ativação dos alertas.'
           :'Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre na Agenda.');
         }
       }

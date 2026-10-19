@@ -282,7 +282,7 @@ export async function recordAnalyticsEvent(eventName: 'signup_started'|'signup_c
   try {
     await supabase.from('analytics_events').insert({
       visitor_id:visitorId,event_name:eventName,traffic_source:attribution.traffic_source,
-      utm_source:attribution.utm_source,utm_medium:attribution.utm_medium,utm_campaign:attribution.utm_campaign
+      utm_source:attribution.utm_source,utm_medium:attribution.utm_medium,utm_campaign:attribution.utm_campaign,session_id:attribution.session_id
     });
   } catch {
     // Analytics must never interrupt the user's action.

@@ -41,10 +41,12 @@ function plainText(city:string,state:string,events:DigestEvent[],site:string,uns
 }
 function htmlBody(city:string,state:string,events:DigestEvent[],format:Subscription["email_format"],site:string,unsub:string,address:string) {
   const cards=events.map((e)=> {
+    const posterHtml = e.image_url && /^https:\/\//i.test(e.image_url) ? `<img src="${esc(e.image_url)}" alt="Cartaz de ${esc(e.title)}" style="display:block;width:100%;height:auto;max-height:360px;object-fit:contain;border-radius:8px;margin:0 0 12px;background:#f7f4f1;" />` : "";
     const details=e.city+"/"+e.state+" · "+(e.venue||e.address||"Local não informado");
     return `<article style="border:1px solid #e5ddd9;border-radius:12px;padding:14px;margin:0 0 10px;background:#fff;">
       <div style="font-size:12px;font-weight:800;color:#a21d35;">${esc(dateLabel(e.date))} · ${esc(timeLabel(e))}</div>
-      ${posterHtml}\n      <h2 style="font-size:18px;line-height:1.3;margin:7px 0;color:#171717;">${esc(e.title)}</h2>
+      ${posterHtml}
+      <h2 style="font-size:18px;line-height:1.3;margin:7px 0;color:#171717;">${esc(e.title)}</h2>
       <p style="font-size:13px;line-height:1.5;color:#56514f;margin:0 0 10px;">${esc(details)}</p>
       ${e.type?`<p style="font-size:11px;color:#686d74;margin:0 0 10px;">${esc(e.type)}</p>`:""}
       <a href="${esc(site+"/evento/"+encodeURIComponent(e.id))}" style="display:inline-block;background:#a21d35;color:#fff;text-decoration:none;font-size:12px;font-weight:800;padding:9px 12px;border-radius:8px;">Ver evento</a>

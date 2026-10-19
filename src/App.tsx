@@ -823,11 +823,11 @@ function NearbyPage({events}:{events:MobilizationEvent[]}){
   useEffect(()=>{
     if(!supabase){setLoading(false);return}
     let active=true;
-    supabase.auth.getUser().then(async({data})=>{
+    db.auth.getUser().then(async({data})=>{
       if(!active)return;
       if(!data.user){navigate('/entrar?mode=signup&next='+encodeURIComponent('/perto-de-mim'),{replace:true});return}
       setUser(data.user);
-      const{data:preference,error:preferenceError}=await supabase.from('city_email_digest_subscriptions').select('city,state').eq('user_id',data.user.id).maybeSingle();
+      const{data:preference,error:preferenceError}=await db.from('city_email_digest_subscriptions').select('city,state').eq('user_id',data.user.id).maybeSingle();
       if(!active)return;
       const metadata=(data.user.user_metadata||{}) as Record<string,unknown>;
       if(preferenceError){setError('Não foi possível carregar a cidade do seu perfil.');}
@@ -836,13 +836,13 @@ function NearbyPage({events}:{events:MobilizationEvent[]}){
         setCity(metadata.digest_city);setState(metadata.digest_state);
         if(metadata.email_digest_opt_in===true&&data.user.email_confirmed_at){
           const format=metadata.email_digest_format==='resumo'||metadata.email_digest_format==='cards'?metadata.email_digest_format:'ambos';
-          const{error:saveError}=await supabase.rpc('save_city_alert_preferences',{p_city:metadata.digest_city,p_state:metadata.digest_state,p_in_app_enabled:false,p_email_enabled:true,p_email_format:format});
+          const{error:saveError}=await db.rpc('save_city_alert_preferences',{p_city:metadata.digest_city,p_state:metadata.digest_state,p_in_app_enabled:false,p_email_enabled:true,p_email_format:format});
           if(saveError)console.warn('Não foi possível concluir a adesão aos alertas após o login.',saveError.message);
         }
       }
       setLoading(false);
     }).catch(()=>{if(active){setError('Não foi possível verificar sua sessão.');setLoading(false)}});
-    const{data:listener}=supabase.auth.onAuthStateChange((_event,session)=>{if(active)setUser(session?.user??null)});
+    const{data:listener}=db.auth.onAuthStateChange((_event,session)=>{if(active)setUser(session?.user??null)});
     return()=>{active=false;listener.subscription.unsubscribe()};
   },[navigate]);
   useEffect(()=>{if(user&&city&&state)void recordAnalyticsEvent('nearby_viewed')},[user?.id,city,state]);

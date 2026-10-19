@@ -3,7 +3,7 @@ import {CheckCircle2,Info,MailCheck,RefreshCw,Send,ShieldCheck} from 'lucide-rea
 import {supabase} from '../lib/supabase';
 
 type CheckResult={ok:boolean;detail:string};
-type DiagnosticResult={ok:boolean;ready:boolean;checks?:Record<string,CheckResult>;from_domain?:string|null;admin_email?:string|null;recipient?:string;sent?:boolean;message_id?:string|null;error?:string;detail?:string};
+type DiagnosticResult={ok:boolean;ready:boolean;automation_prerequisites_ready?:boolean;scheduler_verified?:boolean;checks?:Record<string,CheckResult>;from_domain?:string|null;admin_email?:string|null;recipient?:string;sent?:boolean;message_id?:string|null;error?:string;detail?:string};
 
 const LABELS:Record<string,string>={
   user_email_confirmed:'E-mail da conta administradora confirmado',
@@ -61,7 +61,7 @@ export default function EmailDigestAdminDiagnostics(){
         <div><strong>{LABELS[key]||key}</strong><span>{item.detail}</span></div>
       </div>)}
       {result.from_domain&&<p className="analytics-note">Domínio avaliado: {result.from_domain}</p>}
-      {result.ready?<p className="analytics-note"><ShieldCheck size={15} style={{display:'inline',verticalAlign:'text-bottom'}}/> Configuração pronta para enviar um e-mail de teste; o agendamento de produção ainda precisa ser conferido separadamente.</p>:<p className="analytics-note">Os valores dos segredos nunca são exibidos nesta tela.</p>}
+      {result.ready?<p className="analytics-note"><ShieldCheck size={15} style={{display:'inline',verticalAlign:'text-bottom'}}/> A configuração do remetente está pronta para testar o envio. O agendamento diário ainda precisa ser validado separadamente; esta tela não envia mensagens aos inscritos.</p>:<p className="analytics-note">Os valores dos segredos nunca são exibidos nesta tela.</p>}
     </div>}
     {result?.sent&&<div className="callout info"><MailCheck size={18}/><span>Teste aceito pelo provedor. ID da mensagem: {result.message_id||'não informado'}.</span></div>}
   </section>;

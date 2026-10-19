@@ -822,6 +822,7 @@ function NearbyPage({events}:{events:MobilizationEvent[]}){
   const[error,setError]=useState('');
   useEffect(()=>{
     if(!supabase){setLoading(false);return}
+    const db=supabase;
     let active=true;
     db.auth.getUser().then(async({data})=>{
       if(!active)return;

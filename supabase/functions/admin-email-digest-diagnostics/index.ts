@@ -50,11 +50,10 @@ Deno.serve(async(request:Request)=>{
 
   let payload:any={};
   try { payload=await request.json(); } catch {}
-  const action=payload?.action==="send_test"?"send_test":"check";
+  const action=["send_test","enable_sending","disable_sending"].includes(payload?.action)?payload.action:"check";
   const resendKey=Deno.env.get("RESEND_API_KEY")||"";
   const from=Deno.env.get("EMAIL_FROM")||"";
   const postal=Deno.env.get("EMAIL_POSTAL_ADDRESS")||"";
-  const cronSecret=Deno.env.get("DIGEST_CRON_SECRET")||"";
   const unsubSecret=Deno.env.get("EMAIL_UNSUBSCRIBE_SECRET")||"";
   const site=(Deno.env.get("PUBLIC_SITE_URL")||"").replace(/\/+$/,"");
   const domain=fromDomain(from);
@@ -64,11 +63,33 @@ Deno.serve(async(request:Request)=>{
     sender_configured:{ok:Boolean(from&&domain),detail:from&&domain?"O remetente está preenchido.":"Defina EMAIL_FROM com um endereço remetente válido."},
     postal_address:{ok:postal.trim().length>=8,detail:postal.trim().length>=8?"O endereço postal está preenchido.":"Defina EMAIL_POSTAL_ADDRESS com o endereço postal público do projeto."},
     unsubscribe_secret:{ok:unsubSecret.length>=32,detail:unsubSecret.length>=32?"A chave de cancelamento tem tamanho suficiente.":"Defina EMAIL_UNSUBSCRIBE_SECRET com pelo menos 32 caracteres aleatórios."},
-    cron_secret:{ok:cronSecret.length>=32,detail:cronSecret.length>=32?"A chave de agendamento está configurada.":"Defina DIGEST_CRON_SECRET com pelo menos 32 caracteres aleatórios."},
     public_site_url:{ok:site.startsWith("https://"),detail:site.startsWith("https://")?"A URL pública HTTPS está configurada.":"Defina PUBLIC_SITE_URL com a URL HTTPS do Radar."},
     resend_api_key:{ok:Boolean(resendKey),detail:resendKey?"A chave do provedor foi encontrada; o valor não é exibido.":"Defina RESEND_API_KEY nos segredos da função."},
     sender_domain_verified:{ok:false,detail:"Aguarda a consulta ao provedor de e-mail."},
   };
+
+  let cronSecretConfigured=false;
+  let schedulerInstalled=false;
+  let dispatchEnabled=false;
+  let lastTestAt:string|null=null;
+  try {
+    const [secretStatus,schedulerStatus,controlStatus]=await Promise.all([
+      fetch(base+"/rest/v1/rpc/is_digest_cron_secret_configured",{method:"POST",headers:{apikey:service,Authorization:"Bearer "+service,"Content-Type":"application/json"},body:"{}"}),
+      fetch(base+"/rest/v1/rpc/is_city_digest_job_scheduled",{method:"POST",headers:{apikey:service,Authorization:"Bearer "+service,"Content-Type":"application/json"},body:"{}"}),
+      fetch(base+"/rest/v1/city_email_digest_dispatch_control?select=enabled,last_test_at&id=eq.true",{headers:{apikey:service,Authorization:"Bearer "+service,Accept:"application/json"}})
+    ]);
+    if(secretStatus.ok)cronSecretConfigured=(await secretStatus.json())===true;
+    if(schedulerStatus.ok)schedulerInstalled=(await schedulerStatus.json())===true;
+    if(controlStatus.ok){
+      const rows=await controlStatus.json();
+      if(Array.isArray(rows)&&rows[0]){
+        dispatchEnabled=Boolean(rows[0].enabled);
+        lastTestAt=rows[0].last_test_at||null;
+      }
+    }
+  } catch {/* Missing scheduler status fails closed; the diagnostic page reports it. */}
+  checks.cron_secret={ok:cronSecretConfigured,detail:cronSecretConfigured?"Chave de agendamento armazenada na Vault.":"Não foi encontrada uma chave de agendamento válida na Vault."};
+  checks.scheduler_installed={ok:schedulerInstalled,detail:schedulerInstalled?"Agendamento diário encontrado no Supabase.":"Agendamento diário ainda não encontrado."};
 
   let providerResponse:any=null;
   if(resendKey) {

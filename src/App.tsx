@@ -905,9 +905,18 @@ function AuthPage(){
           else navigate(next);
         }
       }else if(mode==='login'){
-        const{error}=await db.auth.signInWithPassword({email,password});
+        const{data,error}=await db.auth.signInWithPassword({email,password});
         if(error)setMsg(error.message);
-        else {void recordAnalyticsEvent('login_completed');navigate(next);}
+        else {
+          void recordAnalyticsEvent('login_completed');
+          const metadata=(data.user?.user_metadata||{}) as Record<string,unknown>;
+          if(metadata.email_digest_opt_in===true&&data.user?.email_confirmed_at&&typeof metadata.digest_city==='string'&&typeof metadata.digest_state==='string'){
+            const format=metadata.email_digest_format==='resumo'||metadata.email_digest_format==='cards'?metadata.email_digest_format:'ambos';
+            const{error:preferenceError}=await db.rpc('save_city_alert_preferences',{p_city:metadata.digest_city,p_state:metadata.digest_state,p_in_app_enabled:false,p_email_enabled:true,p_email_format:format});
+            if(preferenceError)console.warn('Não foi possível concluir a adesão aos alertas após o login.',preferenceError.message);
+          }
+          navigate(next);
+        }
       }else{
         void recordAnalyticsEvent('signup_started');
         if(digestOptIn&&(!digestCity.trim()||!digestState)){

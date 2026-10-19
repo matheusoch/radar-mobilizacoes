@@ -90,10 +90,11 @@ Deno.serve(async(request:Request)=>{
     checks.sender_domain_verified={ok:false,detail:"A verificação do domínio exige RESEND_API_KEY."};
   }
 
-  const ready=Object.values(checks).every(item=>item.ok);
-  if(action==="check")return reply({ok:true,ready,checks,from_domain:domain||null,admin_email:user.email||null});
+  const testReady=Object.entries(checks).filter(([key])=>key!=="cron_secret").every(([,item])=>item.ok);
+  const automationPrerequisitesReady=testReady&&checks.cron_secret.ok;
+  if(action==="check")return reply({ok:true,ready:testReady,automation_prerequisites_ready:automationPrerequisitesReady,scheduler_verified:false,checks,from_domain:domain||null,admin_email:user.email||null});
 
-  if(!ready)return reply({ok:false,ready:false,error:"EMAIL_DIGEST_NOT_READY",checks,from_domain:domain||null},409);
+  if(!testReady)return reply({ok:false,ready:false,error:"EMAIL_DIGEST_NOT_READY",checks,from_domain:domain||null},409);
   if(!user.email||!user.email_confirmed_at)return reply({ok:false,error:"ADMIN_EMAIL_NOT_CONFIRMED"},409);
 
   try {

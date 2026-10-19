@@ -78,7 +78,7 @@ begin
     'signup_completed_30d', (select count(*) from public.analytics_events where event_name='signup_completed' and created_at >= now() - interval '30 days'),
     'nearby_clicked_30d', (select count(*) from public.analytics_events where event_name='nearby_clicked' and created_at >= now() - interval '30 days'),
     'digest_subscribers', (select count(*) from public.city_email_digest_subscriptions where enabled),
-    'digest_subscribers_30d', (select count(*) from public.city_email_digest_subscriptions where enabled and updated_at >= now() - interval '30 days'),
+    'digest_subscribers_30d', (select count(*) from public.city_email_digest_subscriptions where enabled and consent_at >= now() - interval '30 days'),
     'traffic_sources_30d', coalesce((
       select jsonb_agg(jsonb_build_object('source', source, 'views', views) order by views desc)
       from (

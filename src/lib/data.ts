@@ -205,12 +205,13 @@ function getAnalyticsIdentity() {
   if (typeof window === 'undefined') return null;
   try {
     let visitorId = window.localStorage.getItem(ANALYTICS_VISITOR_KEY);
-    const isReturning = Boolean(visitorId);
+    const existingSessionId = window.sessionStorage.getItem(ANALYTICS_SESSION_KEY);
+    const isReturning = Boolean(visitorId && !existingSessionId);
     if (!visitorId) {
       visitorId = crypto.randomUUID();
       window.localStorage.setItem(ANALYTICS_VISITOR_KEY, visitorId);
     }
-    let sessionId = window.sessionStorage.getItem(ANALYTICS_SESSION_KEY);
+    let sessionId = existingSessionId;
     if (!sessionId) {
       sessionId = crypto.randomUUID();
       window.sessionStorage.setItem(ANALYTICS_SESSION_KEY, sessionId);

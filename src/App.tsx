@@ -25,7 +25,7 @@ import {BRAZILIAN_STATES} from './lib/brazilianStates';
 import {canonicalizeLocationOptions,normalizeBrazilianStateKey,normalizeLocationKey} from './lib/locationNormalization';
 import {extractClockTime,formatTimeText} from './utils/formatTime';
 import {StatusBadge} from './components/Badge';
-import {getEvents,getAdminEvents,getSources,resolveImageUrl,mapDbEvent,getAttendanceStatus,toggleEventAttendance,recordPageView,recordEventAction} from './lib/data';
+import {getEvents,getAdminEvents,getSources,resolveImageUrl,mapDbEvent,getAttendanceStatus,toggleEventAttendance,recordPageView,recordEventAction,recordAnalyticsEvent} from './lib/data';
 import {supabase} from './lib/supabase';
 import type {EventSource,MobilizationEvent} from './types';
 
@@ -812,14 +812,42 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
     {!groups.length&&<div className="empty calendar-empty"><Search/><h3>Nenhum evento encontrado</h3><p>{query||stateFilter||cityFilter||typeFilter?'Tente alterar ou limpar os filtros.':'Não há eventos públicos nesta data.'}</p>{(query||stateFilter||cityFilter||typeFilter||showAllDates)&&<button type="button" className="button ghost" onClick={clearFilters}><X size={15}/>Limpar filtros</button>}</div>}
   </div>
 }
-function MapPage({events}:{events:MobilizationEvent[]}){return <div className="container page"><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> MAPA DE MOBILIZAÇÕES</div><h1>Mobilizações no Brasil</h1><p className="page-lead">Visualize as mobilizações por data, estado ou cidade. Escolha um período ou um dia específico, explore os pontos disponíveis e abra cada evento para conferir horário, local e fontes.</p><MapView events={events.filter(e=>e.public)}/></div>}
+function MapPage({events}:{events:MobilizationEvent[]}){
+  const location=useLocation();
+  useEffect(()=>{void recordAnalyticsEvent('map_opened')},[]);
+  return <div className="container page"><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> MAPA DE MOBILIZAÇÕES</div><h1>Mobilizações no Brasil</h1><p className="page-lead">Visualize as mobilizações por data, estado ou cidade. Escolha um período ou um dia específico, explore os pontos disponíveis e abra cada evento para conferir horário, local e fontes.</p><div className="hero-actions"><Link to={'/entrar?mode=signup&digest=1&next='+encodeURIComponent('/perto-de-mim')} className="button primary" onClick={()=>void recordAnalyticsEvent('nearby_clicked',{source:'map'})}><MapPinned size={17}/>Mobilizações perto de mim</Link><Link to="/preferencias-alertas" className="button ghost" onClick={()=>void recordAnalyticsEvent('alert_preferences_opened',{source:'map'})}><Bell size={17}/>Configurar alertas por cidade</Link></div><MapView events={events.filter(e=>e.public)}/></div>
+}
+function NearbyPage({events}:{events:MobilizationEvent[]}){
+  const[user,setUser]=useState<any>(null);
+  const[loading,setLoading]=useState(true);
+  const[city,setCity]=useState('');
+  const[state,setState]=useState('');
+  const navigate=useNavigate();
+  useEffect(()=>{
+    if(!supabase){setLoading(false);return}
+    supabase.auth.getUser().then(async({data})=>{
+      const current=data.user;
+      if(!current){navigate('/entrar?mode=signup&digest=1&next='+encodeURIComponent('/perto-de-mim'),{replace:true});return}
+      setUser(current);
+      const{data:preferences}=await supabase.from('city_email_digest_subscriptions').select('city,state').eq('user_id',current.id).maybeSingle();
+      if(preferences?.city&&preferences?.state){setCity(preferences.city);setState(preferences.state)}
+      setLoading(false);
+    });
+  },[navigate]);
+  useEffect(()=>{if(user)void recordAnalyticsEvent('nearby_viewed',{has_city:Boolean(city&&state)})},[user?.id,city,state]);
+  if(loading)return <div className="loading"><div className="spinner"/>Carregando mobilizações da sua região…</div>;
+  if(!user)return <div className="container page narrow"><h1>Entre para ver mobilizações perto de você</h1><Link className="button primary" to={'/entrar?mode=signup&digest=1&next='+encodeURIComponent('/perto-de-mim')}>Criar conta ou entrar</Link></div>;
+  if(!city||!state)return <div className="container page narrow"><div className="eyebrow"><MapPinned size={15}/> PERTO DE MIM</div><h1>Escolha sua cidade</h1><p className="page-lead">Para mostrar as mobilizações da sua região, primeiro informe sua cidade e estado. Não precisamos da localização exata do aparelho.</p><Link className="button primary" to="/preferencias-alertas">Informar minha cidade</Link></div>;
+  const nearby=events.filter(event=>event.public&&normalizeLocationKey(event.city)===normalizeLocationKey(city)&&normalizeBrazilianStateKey(event.state)===normalizeBrazilianStateKey(state));
+  return <div className="container page"><div className="eyebrow"><MapPinned size={15}/> PERTO DE MIM</div><h1>Mobilizações em {city} ({state})</h1><p className="page-lead">Eventos públicos na cidade informada no seu perfil. O filtro usa cidade e estado, não GPS.</p>{nearby.length?<MapView events={nearby}/>:<div className="empty"><MapPinned/><h3>Ainda não encontramos mobilizações cadastradas nessa cidade</h3><p>Você pode consultar o mapa completo ou alterar a cidade nas preferências.</p><div className="hero-actions"><Link className="button primary" to="/mapa">Ver mapa completo</Link><Link className="button ghost" to="/preferencias-alertas">Alterar cidade</Link></div></div>}</div>
+}
 function AboutPage(){return <div className="container page narrow"><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> SOBRE A AGENDA</div><h1>Uma agenda pública de mobilizações eleitorais.</h1><p className="page-lead">A Agenda reúne eventos e mobilizações em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, transformando informações espalhadas em uma agenda navegável, fácil de conferir e de atualizar.</p><div className="about-grid"><div><h2>Como funciona</h2><p>Cada evento tem data, horário, cidade, local, tipo e links para as fontes usadas na conferência.</p></div><div><h2>O que “verificado” significa</h2><p>Os campos essenciais foram comparados com uma ou mais publicações ou fontes identificáveis. Isso não substitui a checagem no dia do evento.</p></div><div><h2>Independente</h2><p>Este projeto não é oficial de campanha, partido, governo ou organização.</p></div><div><h2>Base editorial</h2><p>A primeira carga foi montada a partir das threads, pôsteres e fontes complementares identificadas na pesquisa.</p></div></div></div>}
 
 function AuthPage(){
   const location=useLocation();
   const params=new URLSearchParams(location.search);
   const next=params.get('next')||'/chat';
-  const digestSignup=EMAIL_DIGEST_ENABLED&&params.get('digest')==='1';
+  const digestSignup=params.get('digest')==='1';
   const[mode,setMode]=useState<'login'|'signup'|'recover'|'reset'>(()=>params.get('mode')==='signup'?'signup':'login');
   const[email,setEmail]=useState('');
   const[password,setPassword]=useState('');
@@ -849,6 +877,7 @@ function AuthPage(){
 
   const submit=async(e:FormEvent)=>{
     e.preventDefault();
+    if(mode==='signup')void recordAnalyticsEvent('signup_started');
     setBusy(true);
     setMsg('');
     try{
@@ -890,7 +919,7 @@ function AuthPage(){
           },
         });
         if(error)setMsg(error.message);
-        else if(data.session)navigate(next);
+        else if(data.session){ void recordAnalyticsEvent('signup_completed'); if(digestOptIn)void recordAnalyticsEvent('email_alert_opt_in',{source:'signup'}); navigate(next); }
         else setMsg(digestSignup&&digestOptIn
           ?'Conta criada. Confirme seu e-mail; depois abra as preferências de alertas para salvar sua adesão.'
           :'Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre na Agenda.');
@@ -931,7 +960,7 @@ function AuthPage(){
       {msg&&<div className="callout info" role="status"><Info size={18}/><span>{msg}</span></div>}
     </form>
     {mode==='login'&&<button className="auth-forgot" onClick={()=>{setMode('recover');setMsg('')}}><KeyRound size={16}/>Esqueci minha senha</button>}
-    {mode==='login'&&<button className="mode-switch" onClick={()=>{setMode('signup');setMsg('')}}><UserPlus size={16}/>Criar uma conta</button>}
+    {mode==='login'&&<button className="mode-switch" onClick={()=>{setMode('signup');setMsg('');void recordAnalyticsEvent('signup_started',{source:'login_switch'})}}><UserPlus size={16}/>Criar uma conta</button>}
     {mode==='signup'&&<button className="mode-switch" onClick={()=>{setMode('login');setMsg('')}}><LogIn size={16}/>Já tenho uma conta</button>}
     {(mode==='recover'||mode==='reset')&&<button className="mode-switch" onClick={()=>{setMode('login');setMsg('')}}><LogIn size={16}/>Voltar para entrar</button>}
   </div>;
@@ -1581,7 +1610,7 @@ export default function App(){
       const slug=decodeURIComponent(match[1]);
       eventId=events.find(e=>e.id===slug)?.db_id??null;
     }
-    recordPageView(location.pathname,eventId);
+    recordPageView(location.pathname,eventId);\n    if(location.pathname.startsWith('/evento/'))void recordAnalyticsEvent('event_opened');\n    if(location.pathname==='/calendario')void recordAnalyticsEvent('calendar_opened');\n    if(location.pathname==='/preferencias-alertas')void recordAnalyticsEvent('alert_preferences_opened');
   },[location.pathname,loading,loadError,events]);
 
   const reload=()=>Promise.all([getEvents(),getSources()])
@@ -1594,5 +1623,5 @@ export default function App(){
 
   if(loadError)return <div className="loading"><div className="empty"><Info/><h3>Não foi possível carregar os dados</h3><p>{loadError}</p><button className="button primary" onClick={()=>{setLoading(true);reload()}}><RefreshCw size={16}/>Tentar novamente</button></div></div>;
 
-  return <AppErrorBoundary><Layout><Routes><Route path="/" element={<Home events={events}/>}/><Route path="/evento/:id" element={<EventPage events={events} sources={sources}/>}/><Route path="/calendario" element={<CalendarPage events={events}/>}/><Route path="/mapa" element={<MapPage events={events}/>}/><Route path="/divulgar" element={<ShareBuilder events={events}/>}/><Route path="/sobre" element={<AboutPage/>}/><Route path="/chat" element={<ChatPage/>}/><Route path="/entrar" element={<AuthPage/>}/><Route path="/preferencias-alertas" element={<CityEmailDigestPreferences/>}/><Route path="/privacidade" element={<EmailPrivacyPage/>}/><Route path="/admin" element={<AdminPage/>}/><Route path="/admin/moderacao" element={<EventModerationPage/>}/></Routes></Layout></AppErrorBoundary>
+  return <AppErrorBoundary><Layout><Routes><Route path="/" element={<Home events={events}/>}/><Route path="/evento/:id" element={<EventPage events={events} sources={sources}/>}/><Route path="/calendario" element={<CalendarPage events={events}/>}/><Route path="/mapa" element={<MapPage events={events}/>}/><Route path="/perto-de-mim" element={<NearbyPage events={events}/>}/><Route path="/divulgar" element={<ShareBuilder events={events}/>}/><Route path="/sobre" element={<AboutPage/>}/><Route path="/chat" element={<ChatPage/>}/><Route path="/entrar" element={<AuthPage/>}/><Route path="/preferencias-alertas" element={<CityEmailDigestPreferences/>}/><Route path="/privacidade" element={<EmailPrivacyPage/>}/><Route path="/admin" element={<AdminPage/>}/><Route path="/admin/moderacao" element={<EventModerationPage/>}/></Routes></Layout></AppErrorBoundary>
 }

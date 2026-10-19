@@ -921,10 +921,9 @@ function AuthPage(){
           },
         });
         if(error)setMsg(error.message);
-        else if(data.session){ void recordAnalyticsEvent('signup_completed'); if(digestOptIn)void recordAnalyticsEvent('email_alert_opt_in',{source:'signup'}); navigate(next); }
-        else setMsg(digestSignup&&digestOptIn
+        else if(data.user){ void recordAnalyticsEvent('signup_completed'); if(digestOptIn)void recordAnalyticsEvent('email_alert_opt_in',{source:'signup'}); if(data.session)navigate(next); else setMsg(digestSignup&&digestOptIn
           ?'Conta criada. Confirme seu e-mail; depois abra as preferências de alertas para salvar sua adesão.'
-          :'Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre na Agenda.');
+          :'Conta criada. Verifique seu e-mail para confirmar o cadastro e depois entre na Agenda.'); }
       }
     }catch(error){
       setMsg(error instanceof Error?error.message:'Não foi possível concluir a operação. Tente novamente.');

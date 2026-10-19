@@ -233,28 +233,44 @@ type TrafficAttribution = {
 };
 
 function getTrafficAttribution(): TrafficAttribution {
-  if (typeof window === 'undefined') return {traffic_source:'Direto / desconhecido',referrer_host:null,utm_source:null,utm_medium:null,utm_campaign:null,session_id:null};
+  const empty: TrafficAttribution = {traffic_source:'Direto / desconhecido',referrer_host:null,utm_source:null,utm_medium:null,utm_campaign:null,session_id:null};
+  if (typeof window === 'undefined') return empty;
+  let sessionId: string | null = null;
+  let stored: Partial<TrafficAttribution> = {};
+  try {
+    const sessionKey = 'radar_analytics_session_id';
+    sessionId = window.sessionStorage.getItem(sessionKey);
+    if (!sessionId) { sessionId = crypto.randomUUID(); window.sessionStorage.setItem(sessionKey, sessionId); }
+    stored = JSON.parse(window.sessionStorage.getItem('radar_traffic_attribution') || '{}');
+  } catch {}
   const params = new URLSearchParams(window.location.search);
   const utmSource = params.get('utm_source')?.slice(0,120) || null;
   const utmMedium = params.get('utm_medium')?.slice(0,120) || null;
   const utmCampaign = params.get('utm_campaign')?.slice(0,160) || null;
   let referrerHost: string | null = null;
   try { if (document.referrer) referrerHost = new URL(document.referrer).hostname.replace(/^www\\./,'').slice(0,160); } catch {}
-  const source = utmSource || (referrerHost ? (
-    /instagram/.test(referrerHost) ? 'Instagram' :
-    /tiktok/.test(referrerHost) ? 'TikTok' :
-    /twitter|x\\.com/.test(referrerHost) ? 'X' :
-    /facebook|fb\\.watch/.test(referrerHost) ? 'Facebook' :
-    /whatsapp/.test(referrerHost) ? 'WhatsApp' :
-    /google|bing|duckduckgo|search/.test(referrerHost) ? 'Busca' : referrerHost
-  ) : 'Direto / desconhecido');
-  let sessionId: string | null = null;
-  try {
-    const key = 'radar_analytics_session_id';
-    sessionId = window.sessionStorage.getItem(key);
-    if (!sessionId) { sessionId = crypto.randomUUID(); window.sessionStorage.setItem(key, sessionId); }
-  } catch { sessionId = null; }
-  return {traffic_source:source,referrer_host:referrerHost,utm_source:utmSource,utm_medium:utmMedium,utm_campaign:utmCampaign,session_id:sessionId};
+  const externalReferrer = Boolean(referrerHost && referrerHost !== window.location.hostname && !referrerHost.endsWith('.'+window.location.hostname));
+  const isNewAttribution = Boolean(utmSource || utmMedium || utmCampaign || externalReferrer);
+  if (isNewAttribution) {
+    const source = utmSource || (referrerHost ? (
+      /instagram/.test(referrerHost) ? 'Instagram' :
+      /tiktok/.test(referrerHost) ? 'TikTok' :
+      /twitter|x\\.com/.test(referrerHost) ? 'X' :
+      /facebook|fb\\.watch/.test(referrerHost) ? 'Facebook' :
+      /whatsapp/.test(referrerHost) ? 'WhatsApp' :
+      /google|bing|duckduckgo|search/.test(referrerHost) ? 'Busca' : referrerHost
+    ) : 'Direto / desconhecido');
+    stored = {traffic_source:source,referrer_host:referrerHost,utm_source:utmSource,utm_medium:utmMedium,utm_campaign:utmCampaign};
+    try { window.sessionStorage.setItem('radar_traffic_attribution',JSON.stringify(stored)); } catch {}
+  }
+  return {
+    traffic_source:stored.traffic_source || 'Direto / desconhecido',
+    referrer_host:stored.referrer_host || null,
+    utm_source:stored.utm_source || null,
+    utm_medium:stored.utm_medium || null,
+    utm_campaign:stored.utm_campaign || null,
+    session_id:sessionId,
+  };
 }
 
 export async function recordAnalyticsEvent(eventName: 'signup_started'|'signup_completed'|'email_alert_opt_in'|'nearby_clicked'|'nearby_viewed'|'login_completed'|'digest_preferences_saved') {

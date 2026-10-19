@@ -233,7 +233,7 @@ function getAnalyticsAttribution() {
   };
   let referrerHost: string | null = null;
   try {
-    if (document.referrer) referrerHost = new URL(document.referrer).hostname.slice(0, 180);
+    if (document.referrer) { const host = new URL(document.referrer).hostname; if (host !== window.location.hostname) referrerHost = host.slice(0, 180); }
   } catch { /* Ignore malformed referrers. */ }
   let firstTouch: Record<string, unknown> = {};
   try {
@@ -244,13 +244,13 @@ function getAnalyticsAttribution() {
   if (!firstTouch.source && hasCampaign) {
     firstTouch = {
       source: campaign.source || referrerHost || 'direct',
-      medium: campaign.medium || (referrerHost ? 'referral' : null),
+      medium: campaign.medium || (referrerHost ? 'referral' : (typeof firstTouch.medium === 'string' ? firstTouch.medium : null)),
       campaign: campaign.campaign,
       captured_at: new Date().toISOString(),
     };
     try { window.localStorage.setItem(ANALYTICS_FIRST_TOUCH_KEY, JSON.stringify(firstTouch)); } catch { /* Storage may be disabled. */ }
   }
-  const source = campaign.source || referrerHost || 'direct';
+  const source = campaign.source || referrerHost || (typeof firstTouch.source === 'string' ? firstTouch.source : 'direct');
   return {
     source: source.slice(0, 180),
     referrer_host: referrerHost,

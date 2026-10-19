@@ -111,12 +111,30 @@ Deno.serve(async(request:Request)=>{
     checks.sender_domain_verified={ok:false,detail:"A verificação do domínio exige RESEND_API_KEY."};
   }
 
-  const testReady=Object.entries(checks).filter(([key])=>key!=="cron_secret").every(([,item])=>item.ok);
-  const automationPrerequisitesReady=testReady&&checks.cron_secret.ok;
-  if(action==="check")return reply({ok:true,ready:testReady,automation_prerequisites_ready:automationPrerequisitesReady,scheduler_verified:false,checks,from_domain:domain||null,admin_email:user.email||null});
+  const testReady=Object.entries(checks).filter(([key])=>key!=="cron_secret"&&key!=="scheduler_installed").every(([,item])=>item.ok);
+  const automationPrerequisitesReady=testReady&&checks.cron_secret.ok&&checks.scheduler_installed.ok;
+  const statePayload={ready:testReady,automation_prerequisites_ready:automationPrerequisitesReady,scheduler_verified:schedulerInstalled,scheduler_enabled:dispatchEnabled,last_test_at:lastTestAt,checks,from_domain:domain||null,admin_email:user.email||null};
+  if(action==="check")return reply({ok:true,...statePayload});
 
-  if(!testReady)return reply({ok:false,ready:false,error:"EMAIL_DIGEST_NOT_READY",checks,from_domain:domain||null},409);
-  if(!user.email||!user.email_confirmed_at)return reply({ok:false,error:"ADMIN_EMAIL_NOT_CONFIRMED"},409);
+  if(action==="enable_sending"||action==="disable_sending"){
+    if(action==="enable_sending"&&(!testReady||!automationPrerequisitesReady))return reply({ok:false,error:"EMAIL_DIGEST_NOT_READY",...statePayload},409);
+    if(action==="enable_sending"&&(!lastTestAt||Date.now()-new Date(lastTestAt).getTime()>24*60*60*1000))return reply({ok:false,error:"EMAIL_DIGEST_TEST_REQUIRED",detail:"Envie um teste bem-sucedido nas últimas 24 horas antes de ativar os boletins.",...statePayload},409);
+    try{
+      const response=await fetch(base+"/rest/v1/rpc/set_admin_city_digest_dispatch_enabled",{
+        method:"POST",
+        headers:{apikey:anon,Authorization:authorization,"Content-Type":"application/json",Accept:"application/json"},
+        body:JSON.stringify({p_enabled:action==="enable_sending"})
+      });
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)return reply({ok:false,error:"DIGEST_DISPATCH_UPDATE_FAILED",detail:"O banco recusou a alteração do envio automático.",...statePayload},response.status===401||response.status===403?403:502);
+      return reply({ok:true,...statePayload,scheduler_enabled:Boolean(data?.enabled),last_test_at:data?.last_test_at||lastTestAt});
+    }catch{
+      return reply({ok:false,error:"DIGEST_DISPATCH_UPDATE_FAILED",detail:"Não foi possível alterar o estado do envio automático.",...statePayload},502);
+    }
+  }
+
+  if(!testReady)return reply({ok:false,error:"EMAIL_DIGEST_NOT_READY",...statePayload},409);
+  if(!user.email||!user.email_confirmed_at)return reply({ok:false,error:"ADMIN_EMAIL_NOT_CONFIRMED",...statePayload},409);
 
   try {
     const response=await fetch("https://api.resend.com/emails",{
@@ -131,9 +149,18 @@ Deno.serve(async(request:Request)=>{
       })
     });
     const result=await response.json().catch(()=>({}));
-    if(!response.ok)return reply({ok:false,error:"TEST_EMAIL_REJECTED",provider_status:response.status,detail:"O provedor rejeitou o envio. Confira o domínio, remetente e os limites da conta."},502);
-    return reply({ok:true,sent:true,recipient:user.email,message_id:result.id||null});
+    if(!response.ok)return reply({ok:false,error:"TEST_EMAIL_REJECTED",provider_status:response.status,detail:"O provedor rejeitou o envio. Confira o domínio, remetente e os limites da conta.",...statePayload},502);
+    const testedAt=new Date().toISOString();
+    const controlUrl=new URL(base+"/rest/v1/city_email_digest_dispatch_control");
+    controlUrl.searchParams.set("id","eq.true");
+    const saved=await fetch(controlUrl,{
+      method:"PATCH",
+      headers:{apikey:service,Authorization:"Bearer "+service,"Content-Type":"application/json",Prefer:"return=representation"},
+      body:JSON.stringify({last_test_at:testedAt,last_test_by:user.id,updated_at:testedAt})
+    });
+    if(!saved.ok)return reply({ok:true,sent:true,test_recorded:false,recipient:user.email,message_id:result.id||null,detail:"O provedor aceitou o teste, mas o banco não registrou a confirmação. Verifique o painel antes de ativar os boletins.",...statePayload},200);
+    return reply({ok:true,sent:true,test_recorded:true,recipient:user.email,message_id:result.id||null,ready:testReady,automation_prerequisites_ready:automationPrerequisitesReady,scheduler_verified:schedulerInstalled,scheduler_enabled:dispatchEnabled,last_test_at:testedAt,checks,from_domain:domain||null,admin_email:user.email||null});
   } catch {
-    return reply({ok:false,error:"TEST_EMAIL_FAILED",detail:"Não foi possível conectar ao provedor de e-mail."},502);
+    return reply({ok:false,error:"TEST_EMAIL_FAILED",detail:"Não foi possível conectar ao provedor de e-mail.",...statePayload},502);
   }
 });

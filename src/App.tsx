@@ -812,14 +812,62 @@ function CalendarPage({events}:{events:MobilizationEvent[]}){
     {!groups.length&&<div className="empty calendar-empty"><Search/><h3>Nenhum evento encontrado</h3><p>{query||stateFilter||cityFilter||typeFilter?'Tente alterar ou limpar os filtros.':'Não há eventos públicos nesta data.'}</p>{(query||stateFilter||cityFilter||typeFilter||showAllDates)&&<button type="button" className="button ghost" onClick={clearFilters}><X size={15}/>Limpar filtros</button>}</div>}
   </div>
 }
-function MapPage({events}:{events:MobilizationEvent[]}){return <div className="container page"><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> MAPA DE MOBILIZAÇÕES</div><h1>Mobilizações no Brasil</h1><p className="page-lead">Visualize as mobilizações por data, estado ou cidade. Escolha um período ou um dia específico, explore os pontos disponíveis e abra cada evento para conferir horário, local e fontes.</p><MapView events={events.filter(e=>e.public)}/></div>}
+function MapPage({events}:{events:MobilizationEvent[]}){
+  return <div className="container page">
+    <div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> MAPA DE MOBILIZAÇÕES</div>
+    <h1>Mobilizações no Brasil</h1>
+    <p className="page-lead">Visualize as mobilizações por data, estado ou cidade. Escolha um período ou um dia específico, explore os pontos disponíveis e abra cada evento para conferir horário, local e fontes.</p>
+    <div className="callout info" style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:16,flexWrap:'wrap'}}>
+      <span><strong>Quer ver o que acontece perto de você?</strong><br/>Entre na sua conta e use a cidade cadastrada para filtrar o mapa.</span>
+      <Link className="button primary" to="/mapa-perto-de-mim" onClick={()=>void recordConversion('nearby_click','/mapa')}>Mobilizações perto de mim</Link>
+    </div>
+    <MapView events={events.filter(e=>e.public)}/>
+  </div>;
+}
+
+function NearbyMapPage({events}:{events:MobilizationEvent[]}){
+  const navigate=useNavigate();
+  const[user,setUser]=useState<any>(null);
+  const[city,setCity]=useState('');
+  const[state,setState]=useState('');
+  const[loadingNearby,setLoadingNearby]=useState(true);
+  const[error,setError]=useState('');
+  useEffect(()=>{
+    if(!supabase){setLoadingNearby(false);setError('O serviço de conta não está disponível.');return}
+    let active=true;
+    (async()=>{
+      const{data:{user:currentUser}}=await supabase.auth.getUser();
+      if(!active)return;
+      if(!currentUser){
+        void recordConversion('nearby_click','/mapa-perto-de-mim');
+        navigate('/entrar?next='+encodeURIComponent('/mapa-perto-de-mim'),{replace:true});
+        return;
+      }
+      setUser(currentUser);
+      const{data,error:preferenceError}=await supabase.from('city_email_digest_subscriptions').select('city,state').eq('user_id',currentUser.id).maybeSingle();
+      if(!active)return;
+      if(preferenceError)setError('Não foi possível carregar a cidade da sua conta.');
+      else if(data){setCity(data.city||'');setState(data.state||'');}
+      if(data?.city&&data?.state)void recordConversion('nearby_view','/mapa-perto-de-mim',currentUser.id);
+      setLoadingNearby(false);
+    })();
+    return()=>{active=false};
+  },[navigate]);
+  const normalized=(value:string)=>value.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim();
+  if(loadingNearby)return <div className="loading"><div className="spinner"/>Preparando o mapa da sua região…</div>;
+  if(error)return <div className="container page narrow"><div className="callout warning"><Info/><span>{error}</span></div></div>;
+  if(!user)return <div className="container page narrow"><h1>Entre para ver as mobilizações perto de você</h1><p className="page-lead">Depois do login, mostraremos no mapa os eventos da cidade que você cadastrou.</p></div>;
+  if(!city||!state)return <div className="container page narrow"><div className="eyebrow"><MapPinned size={15}/> MAPA PERSONALIZADO</div><h1>Cadastre sua cidade</h1><p className="page-lead">Para filtrar o mapa por região, escolha sua cidade e estado nas preferências. Você não precisa compartilhar a localização precisa do celular.</p><Link className="button primary" to="/preferencias-alertas">Configurar minha cidade</Link></div>;
+  const localEvents=events.filter(event=>event.public&&normalized(event.city)===normalized(city)&&normalized(event.state)===normalized(state));
+  return <div className="container page"><div className="eyebrow"><MapPinned size={15}/> MAPA PERSONALIZADO</div><h1>Mobilizações perto de você</h1><p className="page-lead">Eventos cadastrados em {city}, {state}. A busca usa a cidade escolhida na sua conta, não o GPS do dispositivo.</p>{localEvents.length?<MapView events={localEvents}/>:<div className="empty"><MapPinned/><h3>Ainda não encontramos mobilizações nessa cidade</h3><p>Você pode explorar o mapa completo enquanto novos eventos são cadastrados.</p><Link className="button ghost" to="/mapa">Ver mapa do Brasil</Link></div>}</div>;
+}
 function AboutPage(){return <div className="container page narrow"><div className="eyebrow"><Star className="red-star" size={15} fill="currentColor" aria-hidden="true"/> SOBRE A AGENDA</div><h1>Uma agenda pública de mobilizações eleitorais.</h1><p className="page-lead">A Agenda reúne eventos e mobilizações em apoio à candidatura de Luiz Inácio Lula da Silva no segundo turno das eleições de 2026, transformando informações espalhadas em uma agenda navegável, fácil de conferir e de atualizar.</p><div className="about-grid"><div><h2>Como funciona</h2><p>Cada evento tem data, horário, cidade, local, tipo e links para as fontes usadas na conferência.</p></div><div><h2>O que “verificado” significa</h2><p>Os campos essenciais foram comparados com uma ou mais publicações ou fontes identificáveis. Isso não substitui a checagem no dia do evento.</p></div><div><h2>Independente</h2><p>Este projeto não é oficial de campanha, partido, governo ou organização.</p></div><div><h2>Base editorial</h2><p>A primeira carga foi montada a partir das threads, pôsteres e fontes complementares identificadas na pesquisa.</p></div></div></div>}
 
 function AuthPage(){
   const location=useLocation();
   const params=new URLSearchParams(location.search);
   const next=params.get('next')||'/chat';
-  const digestSignup=EMAIL_DIGEST_ENABLED&&params.get('digest')==='1';
+  const digestSignup=params.get('digest')==='1';
   const[mode,setMode]=useState<'login'|'signup'|'recover'|'reset'>(()=>params.get('mode')==='signup'?'signup':'login');
   const[email,setEmail]=useState('');
   const[password,setPassword]=useState('');
@@ -924,6 +972,7 @@ function AuthPage(){
       {(mode==='login'||mode==='signup'||mode==='reset')&&<label className="auth-field"><span>Senha</span><input type="password" placeholder="Pelo menos 6 caracteres" value={password} onChange={e=>setPassword(e.target.value)} minLength={6} required autoComplete={mode==='reset'?'new-password':mode==='login'?'current-password':'new-password'}/></label>}
       {mode==='reset'&&<label className="auth-field"><span>Confirme a nova senha</span><input type="password" placeholder="Repita sua nova senha" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} minLength={6} required autoComplete="new-password"/></label>}
       {digestSignup&&mode==='signup'&&<section className="auth-digest-fields" aria-labelledby="auth-digest-title">
+        {!EMAIL_DIGEST_ENABLED&&<div className="callout info"><Info size={18}/><span>Você já pode registrar sua preferência, mas o envio automático por e-mail ainda não está ativo. A opção não é obrigatória e poderá ser alterada depois.</span></div>}
         <div><div className="eyebrow">OPCIONAL</div><h2 id="auth-digest-title">Alertas da sua cidade</h2><p>Receba às 8h, no horário de Brasília, um resumo dos eventos de hoje e dos próximos sete dias na região informada.</p></div>
         <label className="auth-field"><span>Cidade</span><input value={digestCity} onChange={e=>setDigestCity(e.target.value)} maxLength={100} autoComplete="address-level2" placeholder="Ex.: Fortaleza" required={digestOptIn} disabled={busy}/></label>
         <label className="auth-field"><span>Estado</span><select value={digestState} onChange={e=>setDigestState(e.target.value)} autoComplete="address-level1" required={digestOptIn} disabled={busy}><option value="">Selecione a UF</option>{BRAZILIAN_STATES.map(state=><option key={state.code} value={state.code}>{state.name} ({state.code})</option>)}</select></label>
@@ -1601,5 +1650,5 @@ export default function App(){
 
   if(loadError)return <div className="loading"><div className="empty"><Info/><h3>Não foi possível carregar os dados</h3><p>{loadError}</p><button className="button primary" onClick={()=>{setLoading(true);reload()}}><RefreshCw size={16}/>Tentar novamente</button></div></div>;
 
-  return <AppErrorBoundary><Layout><Routes><Route path="/" element={<Home events={events}/>}/><Route path="/evento/:id" element={<EventPage events={events} sources={sources}/>}/><Route path="/calendario" element={<CalendarPage events={events}/>}/><Route path="/mapa" element={<MapPage events={events}/>}/><Route path="/divulgar" element={<ShareBuilder events={events}/>}/><Route path="/sobre" element={<AboutPage/>}/><Route path="/chat" element={<ChatPage/>}/><Route path="/entrar" element={<AuthPage/>}/><Route path="/preferencias-alertas" element={<CityEmailDigestPreferences/>}/><Route path="/privacidade" element={<EmailPrivacyPage/>}/><Route path="/admin" element={<AdminPage/>}/><Route path="/admin/moderacao" element={<EventModerationPage/>}/></Routes></Layout></AppErrorBoundary>
+  return <AppErrorBoundary><Layout><Routes><Route path="/" element={<Home events={events}/>}/><Route path="/evento/:id" element={<EventPage events={events} sources={sources}/>}/><Route path="/calendario" element={<CalendarPage events={events}/>}/><Route path="/mapa" element={<MapPage events={events}/>}/><Route path="/mapa-perto-de-mim" element={<NearbyMapPage events={events}/>}/><Route path="/divulgar" element={<ShareBuilder events={events}/>}/><Route path="/sobre" element={<AboutPage/>}/><Route path="/chat" element={<ChatPage/>}/><Route path="/entrar" element={<AuthPage/>}/><Route path="/preferencias-alertas" element={<CityEmailDigestPreferences/>}/><Route path="/privacidade" element={<EmailPrivacyPage/>}/><Route path="/admin" element={<AdminPage/>}/><Route path="/admin/moderacao" element={<EventModerationPage/>}/></Routes></Layout></AppErrorBoundary>
 }

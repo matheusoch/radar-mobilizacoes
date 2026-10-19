@@ -1125,3 +1125,38 @@ body{background:var(--page);color:var(--ink)}
 .email-digest-check span{font-size:.82rem;line-height:1.45;color:var(--muted,#626262)}
 .email-digest-diagnostics .page-lead{max-width:850px}
 .email-digest-diagnostics .city-digest-actions{margin:14px 0}
+
+/* === UI-OVERRIDES-MAP-SHARE === */
+.share-filters-stack,
+.share-filters,
+.share-builder-filters,
+.share-controls {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 14px !important;
+  width: 100% !important;
+  margin-bottom: 18px !important;
+}
+
+.share-filters-stack > *,
+.share-filters > *,
+.share-builder-filters > *,
+.share-controls > * {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+}
+
+.share-filters-stack input,
+.share-filters-stack select,
+.share-filters input,
+.share-filters select,
+.share-builder-filters input,
+.share-builder-filters select {
+  width: 100% !important;
+  min-height: 44px !important;
+  box-sizing: border-box !important;
+}

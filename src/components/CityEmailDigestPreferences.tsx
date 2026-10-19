@@ -199,10 +199,10 @@ export default function CityEmailDigestPreferences(){
         <span><strong>Quero receber notificações dentro do site.</strong><small>O sino no topo mostrará novos eventos públicos da cidade e do estado escolhidos. Você pode desativar a qualquer momento.</small></span>
       </label>
       <label className="city-digest-consent">
-        <input type="checkbox" checked={settings.enabled} onChange={event=>setSettings(current=>({...current,enabled:event.target.checked}))} disabled={busy||!EMAIL_DIGEST_ENABLED}/>
+        <input type="checkbox" checked={settings.enabled} onChange={event=>setSettings(current=>({...current,enabled:event.target.checked}))} disabled={busy}/>
         <span><strong>Quero receber o resumo diário por e-mail.</strong><small>É um consentimento separado. Usaremos seu e-mail somente para estes avisos; você pode cancelar a qualquer momento.</small></span>
       </label>
-      {!EMAIL_DIGEST_ENABLED&&<div className="callout info"><Info size={18}/><span>O envio por e-mail ainda não foi ativado. Você já pode configurar notificações dentro do site; o e-mail só poderá ser habilitado depois que o remetente, os segredos e o agendamento forem testados.</span></div>}
+      {!settings.enabled&&<div className="callout info"><Info size={18}/><span>A autorização por e-mail é opcional e pode ser salva agora. Os boletins só serão enviados depois que a equipe administrativa validar o remetente e ativar o serviço.</span></div>}
       <p className="city-digest-privacy">Ao ativar, você confirma uma preferência de comunicação específica da Agenda. <Link to="/privacidade">Leia como os dados serão usados.</Link></p>
       {settings.in_app_enabled&&<div className="city-digest-status"><ShieldCheck size={16}/>Notificações dentro do site serão ativadas após salvar.</div>}
       {settings.enabled&&<div className="city-digest-status"><ShieldCheck size={16}/>Consentimento para e-mail ativo somente após salvar.</div>}

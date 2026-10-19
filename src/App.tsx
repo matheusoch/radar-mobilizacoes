@@ -853,7 +853,7 @@ function NearbyMapPage({events}:{events:MobilizationEvent[]}){
     })();
     return()=>{active=false};
   },[navigate]);
-  const normalized=(value:string)=>value.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim();
+  const normalized=(value:string)=>normalizedSearchText(value).trim();
   if(loadingNearby)return <div className="loading"><div className="spinner"/>Preparando o mapa da sua região…</div>;
   if(error)return <div className="container page narrow"><div className="callout warning"><Info/><span>{error}</span></div></div>;
   if(!user)return <div className="container page narrow"><h1>Entre para ver as mobilizações perto de você</h1><p className="page-lead">Depois do login, mostraremos no mapa os eventos da cidade que você cadastrou.</p></div>;

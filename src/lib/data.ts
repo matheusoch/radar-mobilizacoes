@@ -241,7 +241,7 @@ function getTrafficAttribution(): TrafficAttribution {
   const currentUtmMedium = params.get('utm_medium')?.slice(0,120) || null;
   const currentUtmCampaign = params.get('utm_campaign')?.slice(0,160) || null;
   let currentReferrer: string | null = null;
-  try { if (document.referrer) currentReferrer = new URL(document.referrer).hostname.replace(/^www\\./,'').slice(0,160); } catch {}
+  try { if (document.referrer) currentReferrer = new URL(document.referrer).hostname.replace(/^www\./,'').slice(0,160); } catch {}
   let sessionId: string | null = null;
   try {
     const key = 'radar_analytics_session_id';
@@ -262,8 +262,8 @@ function getTrafficAttribution(): TrafficAttribution {
   const source = utmSource || (referrerHost ? (
     /instagram/.test(referrerHost) ? 'Instagram' :
     /tiktok/.test(referrerHost) ? 'TikTok' :
-    /twitter|x\\.com/.test(referrerHost) ? 'X' :
-    /facebook|fb\\.watch/.test(referrerHost) ? 'Facebook' :
+    /twitter|x\.com/.test(referrerHost) ? 'X' :
+    /facebook|fb\.watch/.test(referrerHost) ? 'Facebook' :
     /whatsapp/.test(referrerHost) ? 'WhatsApp' :
     /google|bing|duckduckgo|search/.test(referrerHost) ? 'Busca' : referrerHost
   ) : (saved.traffic_source || 'Direto / desconhecido'));

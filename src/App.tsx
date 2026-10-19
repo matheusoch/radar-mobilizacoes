@@ -829,7 +829,10 @@ function NearbyPage({events}:{events:MobilizationEvent[]}){
       if(!current){navigate('/entrar?mode=signup&digest=1&next='+encodeURIComponent('/perto-de-mim'),{replace:true});return}
       setUser(current);
       const{data:preferences}=await supabase.from('city_email_digest_subscriptions').select('city,state').eq('user_id',current.id).maybeSingle();
-      if(preferences?.city&&preferences?.state){setCity(preferences.city);setState(preferences.state)}
+      const metadata=(current.user_metadata||{}) as Record<string,unknown>;
+      const savedCity=preferences?.city||(typeof metadata.digest_city==='string'?metadata.digest_city:(typeof metadata.city==='string'?metadata.city:''));
+      const savedState=preferences?.state||(typeof metadata.digest_state==='string'?metadata.digest_state:(typeof metadata.state==='string'?metadata.state:''));
+      if(savedCity&&savedState){setCity(savedCity);setState(savedState)}
       setLoading(false);
     });
   },[navigate]);

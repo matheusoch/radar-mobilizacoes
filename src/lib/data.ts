@@ -198,18 +198,69 @@ export async function toggleEventAttendance(eventId: string) {
 }
 
 const ANALYTICS_VISITOR_KEY = 'radar_analytics_visitor_id';
+const ANALYTICS_SESSION_KEY = 'radar_analytics_session_id';
+const ANALYTICS_FIRST_TOUCH_KEY = 'radar_analytics_first_touch';
 
-function getAnalyticsVisitorId() {
+function getAnalyticsIdentity() {
   if (typeof window === 'undefined') return null;
   try {
-    const existing = window.localStorage.getItem(ANALYTICS_VISITOR_KEY);
-    if (existing) return existing;
-    const created = crypto.randomUUID();
-    window.localStorage.setItem(ANALYTICS_VISITOR_KEY, created);
-    return created;
+    let visitorId = window.localStorage.getItem(ANALYTICS_VISITOR_KEY);
+    const isReturning = Boolean(visitorId);
+    if (!visitorId) {
+      visitorId = crypto.randomUUID();
+      window.localStorage.setItem(ANALYTICS_VISITOR_KEY, visitorId);
+    }
+    let sessionId = window.sessionStorage.getItem(ANALYTICS_SESSION_KEY);
+    if (!sessionId) {
+      sessionId = crypto.randomUUID();
+      window.sessionStorage.setItem(ANALYTICS_SESSION_KEY, sessionId);
+    }
+    return { visitorId, sessionId, isReturning };
   } catch {
-    return crypto.randomUUID();
+    return { visitorId: crypto.randomUUID(), sessionId: crypto.randomUUID(), isReturning: false };
   }
+}
+
+function getAnalyticsAttribution() {
+  if (typeof window === 'undefined') return {};
+  const params = new URLSearchParams(window.location.search);
+  const campaign = {
+    source: params.get('utm_source')?.slice(0, 120) || null,
+    medium: params.get('utm_medium')?.slice(0, 120) || null,
+    campaign: params.get('utm_campaign')?.slice(0, 160) || null,
+    content: params.get('utm_content')?.slice(0, 160) || null,
+  };
+  let referrerHost: string | null = null;
+  try {
+    if (document.referrer) referrerHost = new URL(document.referrer).hostname.slice(0, 180);
+  } catch { /* Ignore malformed referrers. */ }
+  let firstTouch: Record<string, unknown> = {};
+  try {
+    const saved = window.localStorage.getItem(ANALYTICS_FIRST_TOUCH_KEY);
+    if (saved) firstTouch = JSON.parse(saved) as Record<string, unknown>;
+  } catch { /* Ignore unavailable storage. */ }
+  const hasCampaign = Boolean(campaign.source || campaign.medium || campaign.campaign || referrerHost);
+  if (!firstTouch.source && hasCampaign) {
+    firstTouch = {
+      source: campaign.source || referrerHost || 'direct',
+      medium: campaign.medium || (referrerHost ? 'referral' : null),
+      campaign: campaign.campaign,
+      captured_at: new Date().toISOString(),
+    };
+    try { window.localStorage.setItem(ANALYTICS_FIRST_TOUCH_KEY, JSON.stringify(firstTouch)); } catch { /* Storage may be disabled. */ }
+  }
+  const source = campaign.source || referrerHost || 'direct';
+  return {
+    source: source.slice(0, 180),
+    referrer_host: referrerHost,
+    campaign_source: campaign.source,
+    campaign_medium: campaign.medium,
+    campaign_name: campaign.campaign,
+    campaign_content: campaign.content,
+    first_source: typeof firstTouch.source === 'string' ? firstTouch.source.slice(0, 180) : source,
+    first_medium: typeof firstTouch.medium === 'string' ? firstTouch.medium.slice(0, 120) : campaign.medium,
+    first_campaign: typeof firstTouch.campaign === 'string' ? firstTouch.campaign.slice(0, 160) : campaign.campaign,
+  };
 }
 
 export type EventAction = 'share' | 'copy_link' | 'calendar_download' | 'google_calendar' | 'directions';
@@ -223,13 +274,37 @@ export async function recordEventAction(eventId: string | undefined | null, acti
   }
 }
 
+export type ConversionEvent = 'signup_success' | 'login_success' | 'nearby_click' | 'nearby_view' | 'digest_opt_in' | 'event_detail_view';
+
+export async function recordConversion(eventName: ConversionEvent, path?: string, userId?: string | null) {
+  if (!supabase || typeof window === 'undefined') return;
+  const identity = getAnalyticsIdentity();
+  if (!identity) return;
+  try {
+    await supabase.from('conversion_events').insert({
+      visitor_id: identity.visitorId,
+      session_id: identity.sessionId,
+      event_name: eventName,
+      path: (path || window.location.pathname).slice(0, 300),
+      user_id: userId || null,
+      is_returning: identity.isReturning,
+      ...getAnalyticsAttribution(),
+    });
+  } catch {
+    // Analytics must never interrupt the user journey.
+  }
+}
+
 export async function recordPageView(path: string, eventId?: string | null) {
   if (!supabase || !path) return;
-  const visitorId = getAnalyticsVisitorId();
-  if (!visitorId) return;
+  const identity = getAnalyticsIdentity();
+  if (!identity) return;
   try {
     await supabase.from('page_views').insert({
-      visitor_id: visitorId,
+      visitor_id: identity.visitorId,
+      session_id: identity.sessionId,
+      is_returning: identity.isReturning,
+      ...getAnalyticsAttribution(),
       path,
       [EVENT_FK]: eventId ?? null,
     });

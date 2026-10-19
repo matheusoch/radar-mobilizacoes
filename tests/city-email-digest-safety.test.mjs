@@ -4,15 +4,19 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 
-test('city digest stays disabled until the sender and schedule are configured', async () => {
-  const env = await read('../.env.example');
-  const workflow = await read('../.github/workflows/deploy-cloudflare.yml');
+test('email consent can be recorded while global delivery remains gated by admin validation', async () => {
   const preferences = await read('../src/components/CityEmailDigestPreferences.tsx');
-  assert.match(env, /VITE_EMAIL_DIGEST_ENABLED=false/);
-  assert.match(workflow, /VITE_EMAIL_DIGEST_ENABLED:.*'false'/);
-  assert.match(preferences, /disabled=\{busy\|\|!EMAIL_DIGEST_ENABLED\}/);
-  assert.match(preferences, /Quero receber notificações dentro do site/);
+  const adminDiagnostics = await read('../src/components/EmailDigestAdminDiagnostics.tsx');
+  const dispatchMigration = await read('../supabase/migrations/20261019173000_secure_city_digest_scheduler.sql');
+  assert.match(preferences, /disabled=\{busy\}/);
+  assert.doesNotMatch(preferences, /disabled=\{busy\|\|!EMAIL_DIGEST_ENABLED\}/);
   assert.match(preferences, /p_email_enabled:settings.enabled/);
+  assert.match(preferences, /boletins só serão enviados depois que a equipe administrativa validar o remetente e ativar o serviço/);
+  assert.match(adminDiagnostics, /enable_sending/);
+  assert.match(adminDiagnostics, /send_test/);
+  assert.match(dispatchMigration, /enabled boolean not null default false/);
+  assert.match(dispatchMigration, /EMAIL_DIGEST_TEST_REQUIRED/);
+  assert.match(dispatchMigration, /cron\.schedule\(/);
 });
 
 test('digest signup has a separate, unchecked consent and only saves after a user action', async () => {

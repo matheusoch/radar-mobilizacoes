@@ -110,7 +110,7 @@ export function BulkCoordinateResolver({db,onComplete}:{db:any;onComplete:()=>Pr
           }
           const location=payload.location||{};
           const exact=placeFromLocation(location);
-          const sameCity=exact&&normalize(exact.city)===normalize(candidate.event.city)&&String(exact.state||'').toUpperCase()===String(candidate.event.state||'').toUpperCase();
+          const sameCity=Boolean(exact&&normalize(exact.city||'')===normalize(candidate.event.city)&&String(exact.state||'').toUpperCase()===String(candidate.event.state||'').toUpperCase());
           const rawOptions=(Array.isArray(location.geography_options)?location.geography_options:[]).filter((option:any)=>option&&typeof option.title==='string').map((option:any):PlaceOption=>({
             id:String(option.id||''),
             title:String(option.title||''),
@@ -123,7 +123,7 @@ export function BulkCoordinateResolver({db,onComplete}:{db:any;onComplete:()=>Pr
             maps_url:typeof option.maps_url==='string'&&option.maps_url.startsWith('https://')?option.maps_url:undefined,
             types:Array.isArray(option.types)?option.types.filter((x:unknown)=>typeof x==='string'):[]
           }));
-          const safeOptions=rawOptions.filter(option=>validBrazilCoords(option.lat,option.lng)&&normalize(option.city||'')===normalize(candidate.event.city)&&String(option.state||'').toUpperCase()===String(candidate.event.state||'').toUpperCase());
+          const safeOptions=rawOptions.filter((option:PlaceOption)=>validBrazilCoords(option.lat,option.lng)&&normalize(option.city||'')===normalize(candidate.event.city)&&String(option.state||'').toUpperCase()===String(candidate.event.state||'').toUpperCase());
           let next:ResolvedRow;
           const warnings=Array.isArray(location.geography_warnings)?location.geography_warnings.filter((x:unknown)=>typeof x==='string'):[];
           if(location.geography_status==='verified_place'&&exact&&sameCity){

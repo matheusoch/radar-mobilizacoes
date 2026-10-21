@@ -58,7 +58,6 @@ export function BulkCoordinateResolver({db,onComplete}:{db:any;onComplete:()=>Pr
   const[notice,setNotice]=useState('');
   const[expanded,setExpanded]=useState(false);
   const mapped=useMemo(()=>rows.filter(row=>row.state==='verified'||row.state==='saved').length,[rows]);
-  const chosen=useMemo(()=>rows.filter(row=>row.apply&&getChosenPlace(row)).length,[rows]);
   const ambiguous=useMemo(()=>rows.filter(row=>row.state==='options'&&!row.selectedOptionId).length,[rows]);
   const skipped=useMemo(()=>rows.filter(row=>row.state==='skipped').length,[rows]);
 

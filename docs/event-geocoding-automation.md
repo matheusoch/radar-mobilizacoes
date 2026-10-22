@@ -6,7 +6,7 @@ A geocodificação recorrente do Radar Mobilizações usa uma fila privada no Su
 
 - Eventos publicados sem latitude/longitude e com um local específico entram na fila automaticamente.
 - A fila também é preenchida na instalação para eventos publicados que já estão sem coordenadas.
-- A cada cinco minutos, o Worker processa no máximo dois eventos. Isso reduz a pressão sobre o Photon/OpenStreetMap.
+- A cada minuto, o Worker processa no máximo dois eventos. Isso reduz a pressão sobre o Photon/OpenStreetMap.
 - O fluxo usa a rotina comum de geografia do Worker, com consultas alternativas e verificação de município/UF.
 - Só grava latitude/longitude quando a rotina retorna `verified_place`, a cidade e a UF coincidem com o cadastro e as coordenadas estão dentro dos limites geográficos do Brasil.
 - As coordenadas só são gravadas se os dois campos continuam nulos no momento da gravação. Nunca substitui um ponto já existente.

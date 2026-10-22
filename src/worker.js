@@ -309,7 +309,7 @@ function osmPlaceComponents(address){
  return items;
 }
 async function searchOpenStreetMap(query,venue,city,state,municipalities){
- const params=new URLSearchParams({q:query,limit:"5",lang:"pt"});
+ const params=new URLSearchParams({q:query,limit:"5"});
  const url="https://photon.komoot.io/api/?"+params.toString();
  const cacheKey=new Request(url,{method:"GET"});
  let features=null;

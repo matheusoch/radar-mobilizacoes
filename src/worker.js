@@ -325,7 +325,11 @@ async function searchOpenStreetMap(query,venue,city,state,municipalities){
     headers:{"accept":"application/json","user-agent":"AgendaDeMobilizacoes/1.0 (+https://agenda-mobilizacoes.participa.workers.dev/; event-location-verification)"},
     signal:AbortSignal.timeout(8000)
    });
-   if(!response.ok)return {configured:true,items:[],source:"OpenStreetMap/Photon",error:"Photon respondeu HTTP "+response.status};
+   if(!response.ok){
+    const body=(await response.text().catch(()=> "")).replace(/\s+/g," ").trim().slice(0,300);
+    const detail=body?": "+body:"";
+    return {configured:true,items:[],source:"OpenStreetMap/Photon",error:"Photon respondeu HTTP "+response.status+detail};
+   }
    const data=await response.json();
    features=Array.isArray(data.features)?data.features:[];
    try{

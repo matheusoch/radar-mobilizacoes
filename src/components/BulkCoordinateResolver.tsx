@@ -50,6 +50,47 @@ function getChosenPlace(row:ResolvedRow):PlaceOption|null{
   if(!row.selectedOptionId)return null;
   return row.options.find(option=>option.id===row.selectedOptionId&&validBrazilCoords(option.lat,option.lng))||null;
 }
+const RETRYABLE_GEO_HTTP = new Set([408,425,429,500,502,503,504]);
+
+async function requestResolvedLocation(token:string,event:DbEvent):Promise<any>{
+  let lastError:Error=new Error('A consulta cartográfica não respondeu.');
+  for(let attempt=0;attempt<3;attempt++){
+    let response:Response;
+    try{
+      response=await fetch('/api/resolve-location',{
+        method:'POST',
+        headers:{'content-type':'application/json','authorization':'Bearer '+token},
+        body:JSON.stringify({
+          title:event.title||'',
+          description:event.description||'',
+          city:event.city||'',
+          state:event.state||'',
+          venue:event.venue||'',
+          address:event.address||'',
+          postText:event.notes||''
+        })
+      });
+    }catch(error){
+      lastError=new Error('Falha de rede ao consultar o serviço cartográfico'+(error instanceof Error&&error.message?': '+error.message:'.'));
+      if(attempt===2)throw lastError;
+      await new Promise(resolve=>setTimeout(resolve,750*Math.pow(2,attempt)));
+      continue;
+    }
+
+    const payload=await response.json().catch(()=>null);
+    if(response.ok)return payload||{};
+    if(response.status===403){
+      throw new Error('A sessão não foi reconhecida como administradora. Entre novamente e tente outra vez.');
+    }
+
+    const detail=payload&&typeof payload.error==='string'?payload.error:'O serviço não retornou uma resposta utilizável.';
+    lastError=new Error(detail+' (HTTP '+response.status+').');
+    if(!RETRYABLE_GEO_HTTP.has(response.status)||attempt===2)throw lastError;
+    await new Promise(resolve=>setTimeout(resolve,750*Math.pow(2,attempt)));
+  }
+  throw lastError;
+}
+
 export function BulkCoordinateResolver({db,onComplete}:{db:any;onComplete:()=>Promise<unknown>}){
   const[rows,setRows]=useState<ResolvedRow[]>([]);
   const[loading,setLoading]=useState(false);
@@ -90,24 +131,7 @@ export function BulkCoordinateResolver({db,onComplete}:{db:any;onComplete:()=>Pr
         completed++;
         setProgress('Validando pontos no mapa '+completed+'/'+candidates.length+'…');
         try{
-          const response=await fetch('/api/resolve-location',{
-            method:'POST',
-            headers:{'content-type':'application/json','authorization':'Bearer '+token},
-            body:JSON.stringify({
-              title:candidate.event.title||'',
-              description:candidate.event.description||'',
-              city:candidate.event.city||'',
-              state:candidate.event.state||'',
-              venue:candidate.event.venue||'',
-              address:candidate.event.address||'',
-              postText:candidate.event.notes||''
-            })
-          });
-          const payload=await response.json().catch(()=>({}));
-          if(!response.ok){
-            if(response.status===403)throw new Error('A sessão não foi reconhecida como administradora. Entre novamente e tente outra vez.');
-            throw new Error(typeof payload.error==='string'?payload.error:'A consulta cartográfica não respondeu.');
-          }
+          const payload=await requestResolvedLocation(token,candidate.event);
           const location=payload.location||{};
           const exact=placeFromLocation(location);
           const sameCity=Boolean(exact&&normalize(exact.city||'')===normalize(candidate.event.city)&&String(exact.state||'').toUpperCase()===String(candidate.event.state||'').toUpperCase());

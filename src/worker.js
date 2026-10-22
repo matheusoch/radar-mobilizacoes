@@ -1232,7 +1232,7 @@ async function geocodingQueueRpc(env, functionName, payload) {
   if (!env.SUPABASE_URL || !env.SUPABASE_PUBLISHABLE_KEY) {
     throw new Error("Supabase não está configurado para a fila de geocodificação.");
   }
-  const base = String(env.SUPABASE_URL).replace(/\\/+$/, "");
+  const base = String(env.SUPABASE_URL).replace(/\/+$/, "");
   const response = await fetch(base + "/rest/v1/rpc/" + encodeURIComponent(functionName), {
     method: "POST",
     headers: {
@@ -1255,7 +1255,7 @@ async function geocodingQueueRpc(env, functionName, payload) {
 function geocodingResultHasTransientError(location) {
   const warnings = Array.isArray(location?.geography_warnings) ? location.geography_warnings.join(" ") : "";
   return location?.geography_status === "ibge_unavailable"
-    || /não respondeu|nao respondeu|indispon[ií]vel|não foi possível consultar|nao foi possivel consultar|timed? ?out|timeout|HTTP\\s+(?:408|425|429|5\\d\\d)|serviço cartográfico/i.test(warnings);
+    || /não respondeu|nao respondeu|indispon[ií]vel|não foi possível consultar|nao foi possivel consultar|timed? ?out|timeout|HTTP\s+(?:408|425|429|5\d\d)|serviço cartográfico/i.test(warnings);
 }
 
 async function runScheduledEventGeocoding(env) {

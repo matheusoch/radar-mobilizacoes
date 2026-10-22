@@ -1265,19 +1265,40 @@ async function runScheduledEventGeocoding(env) {
     return;
   }
 
-  let municipalities;
-  try {
-    municipalities = await getIBGEMunicipalities();
-  } catch (error) {
-    console.error("[event-geocoding] A base municipal do IBGE está indisponível:", error instanceof Error ? error.message : String(error));
-    return;
-  }
-
   const claimed = await geocodingQueueRpc(env, "claim_event_geocoding_jobs", {
     p_token: token,
     p_limit: 2
   });
   if (!Array.isArray(claimed) || claimed.length === 0) return;
+
+  let municipalities;
+  try {
+    municipalities = await getIBGEMunicipalities();
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    const message = "A base municipal do IBGE está indisponível nesta tentativa: " + detail;
+    console.error("[event-geocoding]", message);
+    for (const row of claimed) {
+      try {
+        await geocodingQueueRpc(env, "finish_event_geocoding_job", {
+          p_token: token,
+          p_event_id: row.event_id,
+          p_outcome: "retry",
+          p_lat: null,
+          p_lng: null,
+          p_resolved_city: "",
+          p_resolved_state: "",
+          p_venue: clean(row.venue),
+          p_address: clean(row.address),
+          p_source: "IBGE",
+          p_error: message
+        });
+      } catch (finishError) {
+        console.error("[event-geocoding] Não foi possível reagendar " + row.event_id + " após falha do IBGE:", finishError instanceof Error ? finishError.message : String(finishError));
+      }
+    }
+    return;
+  }
 
   let saved = 0, reviewed = 0, retried = 0, failed = 0;
   for (const row of claimed) {

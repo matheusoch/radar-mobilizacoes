@@ -388,10 +388,32 @@ async function searchPlacesWithFallback(query,venue,city,state,env,municipalitie
  const google=await searchGooglePlaces(query,env);
  if(google.configured&&google.items.length)return {...google,source:"Google Maps / Places API"};
  if(!allowOSMFallback)return {...google,source:"Google Maps / Places API",items:[],error:google.error||"Busca secundária adiada para evitar consultas cartográficas excessivas."};
- const osm=await searchOpenStreetMap(query,venue,city,state,municipalities);
- if(osm.items.length)return osm;
- if(google.configured)return {...google,source:"Google Maps / Places API",fallbackError:osm.error||""};
- return {...osm,configured:true,googleMapsConfigured:false,source:"OpenStreetMap/Photon",error:osm.error||"Nenhum resultado correspondente foi encontrado no OpenStreetMap."};
+
+ // A consulta inicial pode falhar quando o endereço repete o nome do local ou quando
+ // o Photon indexa a praça pelo nome simplificado. Tente variantes específicas,
+ // sempre mantendo o local e o município/UF juntos (nunca geocodifique só a cidade).
+ const stateName=stateDirectory.find(([code])=>code===validState(state))?.[1]||clean(state);
+ const variants=[
+  query,
+  [venue,city,stateName,"Brasil"].filter(Boolean).join(", "),
+  [venue,city,"Brasil"].filter(Boolean).join(", ")
+ ].map(value=>clean(value)).filter(Boolean);
+ const uniqueQueries=[...new Set(variants)];
+ const allItems=[];
+ const errors=[];
+ for(const candidateQuery of uniqueQueries){
+  const osm=await searchOpenStreetMap(candidateQuery,venue,city,state,municipalities);
+  if(osm.error)errors.push(osm.error);
+  for(const item of osm.items||[]){
+   const key=clean(item.id)||[item.displayName?.text,item.formattedAddress,item.location?.latitude,item.location?.longitude].join("|");
+   if(!allItems.some(existing=>(clean(existing.id)||[existing.displayName?.text,existing.formattedAddress,existing.location?.latitude,existing.location?.longitude].join("|"))===key)){
+    allItems.push(item);
+   }
+  }
+ }
+ if(allItems.length)return {configured:true,items:allItems,source:"OpenStreetMap/Photon · consultas alternativas",error:""};
+ if(google.configured)return {...google,source:"Google Maps / Places API",fallbackError:errors[0]||""};
+ return {configured:true,googleMapsConfigured:false,items:[],source:"OpenStreetMap/Photon",error:errors[0]||"Nenhum resultado correspondente foi encontrado após consultas alternativas no OpenStreetMap."};
 }
 function scorePlaceResult(place,query,venue,city,state,municipalities){
  const queryKey=norm(query),venueKey=norm(venue),name=norm(place.displayName?.text||"");

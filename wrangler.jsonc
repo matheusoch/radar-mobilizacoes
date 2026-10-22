@@ -20,7 +20,7 @@
     "binding": "AI"
   },
   "triggers": {
-    "crons": ["*/5 * * * *"]
+    "crons": ["* * * * *"]
   },
   "vars": {
     "SUPABASE_URL": "https://yyyqwiauonyonnqvoozu.supabase.co",

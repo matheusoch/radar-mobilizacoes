@@ -1228,4 +1228,196 @@ async function socialPreviewHandler(request,env,url){
  rewritten.headers.set("cache-control","public, max-age=300");
  return rewritten;
 }
-export default {async fetch(request,env){const url=new URL(request.url);if(url.pathname==="/api/interpret-events")return handler(request,env);if(url.pathname==="/api/research-events")return researchHandler(request,env);if(url.pathname==="/api/resolve-location")return resolveLocationHandler(request,env);if((url.pathname==="/sitemap.xml"||url.pathname==="/robots.txt")&&(request.method==="GET"||request.method==="HEAD")){if(url.pathname==="/robots.txt")return robotsResponse(request,url);const events=await fetchPublicSitemapEvents(env);if(events)return sitemapResponse(request,url,events);return env.ASSETS.fetch(request)}if(url.pathname==="/feed.xml"&&(request.method==="GET"||request.method==="HEAD")){const feed=await fetchPublicFeedEvents(env,url);if(feed?.status)return new Response(feed.error,{status:feed.status,headers:{"content-type":"text/plain; charset=utf-8"}});if(feed)return rssFeedResponse(request,url,feed);return new Response("Feed temporariamente indisponível.",{status:503,headers:{"content-type":"text/plain; charset=utf-8","retry-after":"60"}})}const preview=await socialPreviewHandler(request,env,url);if(preview)return preview;return env.ASSETS.fetch(request)}};
+async function geocodingQueueRpc(env, functionName, payload) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_PUBLISHABLE_KEY) {
+    throw new Error("Supabase não está configurado para a fila de geocodificação.");
+  }
+  const base = String(env.SUPABASE_URL).replace(/\/+$/, "");
+  const response = await fetch(base + "/rest/v1/rpc/" + encodeURIComponent(functionName), {
+    method: "POST",
+    headers: {
+      apikey: env.SUPABASE_PUBLISHABLE_KEY,
+      "content-type": "application/json",
+      accept: "application/json"
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15000)
+  });
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(functionName + " respondeu HTTP " + response.status + ": " + raw.slice(0, 300));
+  }
+  if (!raw) return null;
+  try { return JSON.parse(raw); }
+  catch { throw new Error(functionName + " retornou JSON inválido."); }
+}
+
+function geocodingResultHasTransientError(location) {
+  const warnings = Array.isArray(location?.geography_warnings) ? location.geography_warnings.join(" ") : "";
+  return location?.geography_status === "ibge_unavailable"
+    || /não respondeu|nao respondeu|indispon[ií]vel|não foi possível consultar|nao foi possivel consultar|timed? ?out|timeout|HTTP\s+(?:408|425|429|5\d\d)|serviço cartográfico/i.test(warnings);
+}
+
+async function runScheduledEventGeocoding(env) {
+  const token = clean(env.GEOCODING_WORKER_TOKEN);
+  if (!token) {
+    console.error("[event-geocoding] GEOCODING_WORKER_TOKEN não está configurado; a fila foi preservada sem processamento.");
+    return;
+  }
+
+  let municipalities;
+  try {
+    municipalities = await getIBGEMunicipalities();
+  } catch (error) {
+    console.error("[event-geocoding] A base municipal do IBGE está indisponível:", error instanceof Error ? error.message : String(error));
+    return;
+  }
+
+  const claimed = await geocodingQueueRpc(env, "claim_event_geocoding_jobs", {
+    p_token: token,
+    p_limit: 2
+  });
+  if (!Array.isArray(claimed) || claimed.length === 0) return;
+
+  let saved = 0, reviewed = 0, retried = 0, failed = 0;
+  for (const row of claimed) {
+    const event = {
+      title: clean(row.title),
+      date: clean(row.event_date),
+      city: clean(row.city),
+      state: validState(row.state),
+      venue: clean(row.venue),
+      address: clean(row.address),
+      description: clean(row.description),
+      notes: clean(row.notes),
+      lat: null,
+      lng: null
+    };
+    let outcome = "retry";
+    let lat = null, lng = null;
+    let resolvedCity = "", resolvedState = "";
+    let venue = event.venue, address = event.address;
+    let source = "OpenStreetMap/Photon";
+    let reason = "Nenhum ponto único e compatível foi confirmado nesta tentativa.";
+
+    try {
+      const contextText = [
+        event.title, event.city, event.state, event.venue, event.address,
+        event.description, event.notes
+      ].filter(Boolean).join("\n");
+      const location = await resolveEventGeography(event, {
+        postText: contextText,
+        posterText: contextText,
+        title: event.title,
+        description: event.description,
+        city: event.city,
+        venue: event.venue,
+        address: event.address
+      }, env, municipalities, true);
+
+      source = clean(location.geography_source) || source;
+      reason = (Array.isArray(location.geography_warnings) ? location.geography_warnings : [])
+        .filter(Boolean).join(" ").slice(0, 900) || reason;
+
+      const options = Array.isArray(location.geography_options) ? location.geography_options : [];
+      const actualLat = Number(location.lat);
+      const actualLng = Number(location.lng);
+      const expectedState = validState(event.state);
+      const candidateState = validState(location.state);
+      const cityMatch = Boolean(event.city && location.city && geoNorm(event.city) === geoNorm(location.city));
+      const stateMatch = Boolean(expectedState && candidateState && expectedState === candidateState);
+      const validCoordinates = Number.isFinite(actualLat) && Number.isFinite(actualLng)
+        && actualLat >= -34 && actualLat <= 6.5 && actualLng >= -74 && actualLng <= -34;
+
+      if (location.geography_status === "verified_place" && validCoordinates && cityMatch && stateMatch) {
+        outcome = "verified";
+        lat = actualLat;
+        lng = actualLng;
+        resolvedCity = clean(location.city);
+        resolvedState = candidateState;
+        venue = clean(location.venue) || event.venue;
+        address = clean(location.address) || event.address;
+        reason = "";
+      } else if (options.length > 0) {
+        outcome = "needs_review";
+        const optionNames = options.slice(0, 4).map(option => clean(option.title || option.address)).filter(Boolean);
+        reason = "A busca retornou opções, mas não confirmou um único ponto; revisão manual necessária."
+          + (optionNames.length ? " Opções: " + optionNames.join(" | ") : "");
+      } else if (geocodingResultHasTransientError(location)) {
+        outcome = "retry";
+      } else if (location.geography_status === "verified_place" || location.geography_status === "needs_review"
+          || !event.city || !expectedState || !event.venue && !event.address) {
+        outcome = "needs_review";
+        if (location.geography_status === "verified_place" && (!cityMatch || !stateMatch || !validCoordinates)) {
+          reason = "O ponto proposto não passou na checagem final de cidade, UF e coordenadas; nada foi gravado.";
+        }
+      } else {
+        // A place not found in the map is retried with backoff; after six tries it remains for human review.
+        outcome = "retry";
+      }
+
+      if (outcome === "retry" && !reason) reason = "A consulta cartográfica não confirmou um ponto; haverá nova tentativa automática.";
+    } catch (error) {
+      outcome = "retry";
+      reason = error instanceof Error ? error.message : "Falha inesperada durante a geocodificação.";
+    }
+
+    try {
+      const result = await geocodingQueueRpc(env, "finish_event_geocoding_job", {
+        p_token: token,
+        p_event_id: row.event_id,
+        p_outcome: outcome,
+        p_lat: lat,
+        p_lng: lng,
+        p_resolved_city: resolvedCity,
+        p_resolved_state: resolvedState,
+        p_venue: venue,
+        p_address: address,
+        p_source: source,
+        p_error: reason
+      });
+      if (result?.saved === true) saved++;
+      else if (result?.status === "needs_review" || result?.status === "geography_mismatch" || result?.status === "invalid_coordinates") reviewed++;
+      else if (result?.status === "retry") retried++;
+      else if (result?.status === "done") saved++;
+    } catch (error) {
+      failed++;
+      console.error("[event-geocoding] Não foi possível finalizar o trabalho de " + row.event_id + ":", error instanceof Error ? error.message : String(error));
+      // Leave the lease to expire; the queue safely reclaims it after 15 minutes.
+    }
+  }
+
+  console.log("[event-geocoding] Lote concluído:", JSON.stringify({
+    inspected: claimed.length, saved, needsReview: reviewed, retriesScheduled: retried, finishErrors: failed
+  }));
+}
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname === "/api/interpret-events") return handler(request, env);
+    if (url.pathname === "/api/research-events") return researchHandler(request, env);
+    if (url.pathname === "/api/resolve-location") return resolveLocationHandler(request, env);
+    if ((url.pathname === "/sitemap.xml" || url.pathname === "/robots.txt") && (request.method === "GET" || request.method === "HEAD")) {
+      if (url.pathname === "/robots.txt") return robotsResponse(request, url);
+      const events = await fetchPublicSitemapEvents(env);
+      if (events) return sitemapResponse(request, url, events);
+      return env.ASSETS.fetch(request);
+    }
+    if (url.pathname === "/feed.xml" && (request.method === "GET" || request.method === "HEAD")) {
+      const feed = await fetchPublicFeedEvents(env, url);
+      if (feed?.status) return new Response(feed.error, { status: feed.status, headers: { "content-type": "text/plain; charset=utf-8" } });
+      if (feed) return rssFeedResponse(request, url, feed);
+      return new Response("Feed temporariamente indisponível.", { status: 503, headers: { "content-type": "text/plain; charset=utf-8", "retry-after": "60" } });
+    }
+    const preview = await socialPreviewHandler(request, env, url);
+    if (preview) return preview;
+    return env.ASSETS.fetch(request);
+  },
+  async scheduled(controller, env, ctx) {
+    const task = runScheduledEventGeocoding(env).catch(error => {
+      console.error("[event-geocoding] Falha no ciclo agendado:", error instanceof Error ? error.message : String(error));
+    });
+    ctx.waitUntil(task);
+  }
+};
